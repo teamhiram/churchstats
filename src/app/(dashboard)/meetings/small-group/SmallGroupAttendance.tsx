@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
-import { getMondayWeeksInYear, getDefaultMondayWeekStart, formatDateYmd } from "@/lib/weekUtils";
+import { formatDateYmd, getDaysInWeek } from "@/lib/weekUtils";
 import type { Category } from "@/types/database";
 
 type District = { id: string; name: string };
@@ -38,28 +38,20 @@ export function SmallGroupAttendance({
   defaultDistrictId,
   initialYear,
   initialWeekStartIso,
-  weekOptions: initialWeekOptions,
+  weekOptions,
 }: Props) {
   const router = useRouter();
-  const [year, setYear] = useState(initialYear);
-  const [weekStartIso, setWeekStartIso] = useState(initialWeekStartIso);
-  const [districtId, setDistrictId] = useState((defaultDistrictId || districts[0]?.id) ?? "");
-  const [weekOptions, setWeekOptions] = useState(initialWeekOptions);
+  const districtId = defaultDistrictId ?? "";
+  const weekStartIso = initialWeekStartIso;
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupId, setGroupId] = useState("");
-  const [meetingId, setMeetingId] = useState<string | null>(null);
+  const [recordId, setRecordId] = useState<string | null>(null);
+  const [eventDate, setEventDate] = useState<string>("");
   const [roster, setRoster] = useState<MemberRow[]>([]);
   const [attendanceMap, setAttendanceMap] = useState<Map<string, AttendanceRow>>(new Map());
   const [memos, setMemos] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    const weeks = getMondayWeeksInYear(year);
-    setWeekOptions(weeks.map((w) => ({ value: formatDateYmd(w.weekStart), label: w.label })));
-    const defaultStart = getDefaultMondayWeekStart(year);
-    setWeekStartIso(formatDateYmd(defaultStart));
-  }, [year]);
 
   useEffect(() => {
     if (!districtId) {
@@ -76,43 +68,46 @@ export function SmallGroupAttendance({
       .then(({ data }) => {
         setGroups(data ?? []);
         setGroupId((prev) => {
-          const stillValid = (data ?? []).some((g) => g.id === prev);
-          return stillValid ? prev : (data?.[0]?.id ?? "");
+          const list = data ?? [];
+          const stillValid = list.some((g) => g.id === prev);
+          return stillValid ? prev : (list[0]?.id ?? "");
         });
       });
   }, [districtId]);
 
-  const ensureMeeting = useCallback(async () => {
-    if (!groupId || !weekStartIso) return null;
-    const supabase = createClient();
-    const group = groups.find((g) => g.id === groupId);
-    const name = group?.name ?? "";
-    const { data: existing } = await supabase
-      .from("meetings")
-      .select("id")
-      .eq("event_date", weekStartIso)
-      .eq("meeting_type", "group")
-      .eq("group_id", groupId)
-      .maybeSingle();
-    if (existing) return existing.id;
-    const { data: created, error } = await supabase
-      .from("meetings")
-      .insert({
-        event_date: weekStartIso,
-        meeting_type: "group",
-        group_id: groupId,
-        district_id: null,
-        name: name || "小組集会",
-      })
-      .select("id")
-      .single();
-    if (error) return null;
-    return created?.id ?? null;
-  }, [groupId, weekStartIso, groups]);
+  const ensureGroupMeetingRecord = useCallback(
+    async (initialEventDate?: string | null) => {
+      if (!groupId || !weekStartIso) return null;
+      const supabase = createClient();
+      const group = groups.find((g) => g.id === groupId);
+      const name = group?.name ?? "小組集会";
+      const { data: existing } = await supabase
+        .from("group_meeting_records")
+        .select("id")
+        .eq("group_id", groupId)
+        .eq("week_start", weekStartIso)
+        .maybeSingle();
+      if (existing) return existing.id;
+      const { data: created, error } = await supabase
+        .from("group_meeting_records")
+        .insert({
+          group_id: groupId,
+          week_start: weekStartIso,
+          event_date: initialEventDate ?? null,
+          name: name || null,
+        })
+        .select("id")
+        .single();
+      if (error) return null;
+      return created?.id ?? null;
+    },
+    [groupId, weekStartIso, groups]
+  );
 
   useEffect(() => {
     if (!groupId || !weekStartIso) {
-      setMeetingId(null);
+      setRecordId(null);
+      setEventDate("");
       setRoster([]);
       setAttendanceMap(new Map());
       setMemos(new Map());
@@ -122,16 +117,17 @@ export function SmallGroupAttendance({
     setLoading(true);
     const supabase = createClient();
     supabase
-      .from("meetings")
-      .select("id")
-      .eq("event_date", weekStartIso)
-      .eq("meeting_type", "group")
+      .from("group_meeting_records")
+      .select("id, event_date")
       .eq("group_id", groupId)
+      .eq("week_start", weekStartIso)
       .maybeSingle()
-      .then(({ data: existingMeeting }) => {
+      .then(({ data: existingRecord }) => {
         if (cancelled) return;
-        const mid = existingMeeting?.id ?? null;
-        setMeetingId(mid);
+        const rid = existingRecord?.id ?? null;
+        const evDate = (existingRecord as { id: string; event_date?: string | null } | null)?.event_date ?? "";
+        setRecordId(rid);
+        setEventDate(evDate ?? "");
         return supabase
           .from("members")
           .select("id, name, district_id, group_id, age_group, is_baptized")
@@ -140,17 +136,18 @@ export function SmallGroupAttendance({
           .then((membersRes) => {
             if (cancelled) return;
             const districtMembers = (membersRes.data ?? []) as MemberRow[];
-            if (!mid) {
+            if (!rid) {
               setRoster(districtMembers);
               setAttendanceMap(new Map());
               setMemos(new Map());
+              setEventDate("");
               setLoading(false);
               return;
             }
             return supabase
-              .from("attendance_records")
+              .from("group_meeting_attendance")
               .select("id, member_id, memo")
-              .eq("meeting_id", mid)
+              .eq("group_meeting_record_id", rid)
               .then(async (attRes) => {
                 if (cancelled) return;
                 const records = (attRes.data ?? []) as AttendanceRow[];
@@ -187,7 +184,7 @@ export function SmallGroupAttendance({
     const supabase = createClient();
     const rec = attendanceMap.get(memberId);
     if (rec) {
-      await supabase.from("attendance_records").delete().eq("id", rec.id);
+      await supabase.from("group_meeting_attendance").delete().eq("id", rec.id);
       setAttendanceMap((prev) => {
         const next = new Map(prev);
         next.delete(memberId);
@@ -199,25 +196,21 @@ export function SmallGroupAttendance({
         return next;
       });
     } else {
-      let mid = meetingId;
-      if (!mid) {
-        mid = await ensureMeeting();
-        if (!mid) {
+      let rid = recordId;
+      if (!rid) {
+        rid = await ensureGroupMeetingRecord();
+        if (!rid) {
           setMessage("集会の登録に失敗しました。");
           return;
         }
-        setMeetingId(mid);
+        setRecordId(rid);
       }
       const { data: { user } } = await supabase.auth.getUser();
       const { data: inserted, error } = await supabase
-        .from("attendance_records")
+        .from("group_meeting_attendance")
         .insert({
-          meeting_id: mid,
+          group_meeting_record_id: rid,
           member_id: memberId,
-          recorded_category: member.age_group,
-          recorded_is_baptized: Boolean(member.is_baptized),
-          district_id: member.district_id,
-          group_id: member.group_id,
           memo: null,
           reported_by_user_id: user?.id ?? null,
         })
@@ -237,59 +230,35 @@ export function SmallGroupAttendance({
 
   const saveMemo = async (memberId: string) => {
     const rec = attendanceMap.get(memberId);
-    if (!rec || !meetingId) return;
+    if (!rec || !recordId) return;
     const memo = memos.get(memberId) ?? "";
     const supabase = createClient();
-    await supabase.from("attendance_records").update({ memo: memo || null }).eq("id", rec.id);
+    await supabase.from("group_meeting_attendance").update({ memo: memo || null }).eq("id", rec.id);
     router.refresh();
   };
 
-  const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+  const onEventDateChange = async (value: string) => {
+    setEventDate(value);
+    const supabase = createClient();
+    if (recordId) {
+      await supabase
+        .from("group_meeting_records")
+        .update({ event_date: value || null, updated_at: new Date().toISOString() })
+        .eq("id", recordId);
+    } else if (value) {
+      const rid = await ensureGroupMeetingRecord(value);
+      if (rid) setRecordId(rid);
+    }
+    router.refresh();
+  };
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">年</label>
-          <select
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
-          >
-            {years.map((y) => (
-              <option key={y} value={y}>{y}年</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">週</label>
-          <select
-            value={weekStartIso}
-            onChange={(e) => setWeekStartIso(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
-          >
-            {weekOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">地区</label>
-          <select
-            value={districtId}
-            onChange={(e) => {
-              setDistrictId(e.target.value);
-              setGroupId("");
-            }}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
-          >
-            <option value="">選択</option>
-            {districts.map((d) => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
-        </div>
+      {!districtId ? (
+        <p className="text-slate-500 text-sm">地区を選択してください（上記のフィルターで選択）。</p>
+      ) : (
+        <>
+      <div className="grid gap-4 sm:grid-cols-1 max-w-xs">
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">小組</label>
           <select
@@ -307,6 +276,27 @@ export function SmallGroupAttendance({
 
       {message && <p className="text-sm text-amber-600">{message}</p>}
 
+      {groupId && !loading && (
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="min-w-[200px]">
+            <label className="block text-sm font-medium text-slate-700 mb-1">実施日</label>
+            <select
+              value={eventDate}
+              onChange={(e) => onEventDateChange(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
+            >
+              <option value="">—</option>
+              {getDaysInWeek(weekStartIso).map((day) => (
+                <option key={day.value} value={day.value}>
+                  {day.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500 mt-0.5">選択した週の範囲内の日付のみ選択できます</p>
+          </div>
+        </div>
+      )}
+
       {groupId && (
         <div>
           <h2 className="font-semibold text-slate-800 mb-2">名簿（出欠・メモ）</h2>
@@ -317,15 +307,15 @@ export function SmallGroupAttendance({
               <table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">名前</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase w-24">出欠</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">メモ</th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">名前</th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-24">出欠</th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">メモ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {roster.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="px-4 py-6 text-center text-slate-500 text-sm">
+                      <td colSpan={3} className="px-3 py-4 text-center text-slate-500 text-sm">
                         名簿がありません
                       </td>
                     </tr>
@@ -335,32 +325,32 @@ export function SmallGroupAttendance({
                     const memo = memos.get(m.id) ?? "";
                     return (
                       <tr key={m.id} className="hover:bg-slate-50">
-                        <td className="px-4 py-2 text-slate-800">{m.name}</td>
-                        <td className="px-4 py-2">
+                        <td className="px-3 py-1.5 text-slate-800">{m.name}</td>
+                        <td className="px-3 py-1.5">
                           <button
                             type="button"
                             role="switch"
                             aria-checked={attended}
                             onClick={() => toggleAttendance(m.id, m)}
-                            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
+                            className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
                               attended ? "bg-primary-600" : "bg-slate-200"
                             }`}
                           >
                             <span
-                              className={`pointer-events-none absolute left-0.5 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow ring-0 transition ${
+                              className={`pointer-events-none absolute left-0.5 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow ring-0 transition ${
                                 attended ? "translate-x-4" : "translate-x-0"
                               }`}
                             />
                           </button>
                         </td>
-                        <td className="px-4 py-2">
+                        <td className="px-3 py-1.5">
                           <input
                             type="text"
                             value={memo}
                             onChange={(e) => setMemos((prev) => new Map(prev).set(m.id, e.target.value))}
                             onBlur={() => saveMemo(m.id)}
                             placeholder="欠席理由など"
-                            className="w-full max-w-xs px-2 py-1 text-sm border border-slate-300 rounded touch-target"
+                            className="w-full max-w-xs px-2 py-0.5 text-sm border border-slate-300 rounded touch-target"
                           />
                         </td>
                       </tr>
@@ -371,6 +361,8 @@ export function SmallGroupAttendance({
             </div>
           )}
         </div>
+      )}
+        </>
       )}
     </div>
   );

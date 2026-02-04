@@ -13,7 +13,7 @@ export default function BackupPage() {
     setLoading(true);
     setMessage("");
     const supabase = createClient();
-    const [localities, districts, groups, members, meetings, attendance, regularList] = await Promise.all([
+    const [localities, districts, groups, members, meetings, attendance, regularList, groupMeetingRecords, groupMeetingAttendance] = await Promise.all([
       supabase.from("localities").select("*"),
       supabase.from("districts").select("*"),
       supabase.from("groups").select("*"),
@@ -21,6 +21,8 @@ export default function BackupPage() {
       supabase.from("meetings").select("*"),
       supabase.from("attendance_records").select("*"),
       supabase.from("regular_member_list_items").select("*"),
+      supabase.from("group_meeting_records").select("*"),
+      supabase.from("group_meeting_attendance").select("*"),
     ]);
     const backup = {
       exported_at: new Date().toISOString(),
@@ -31,6 +33,8 @@ export default function BackupPage() {
       meetings: meetings.data ?? [],
       attendance_records: attendance.data ?? [],
       regular_member_list_items: regularList.data ?? [],
+      group_meeting_records: groupMeetingRecords.data ?? [],
+      group_meeting_attendance: groupMeetingAttendance.data ?? [],
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -61,6 +65,8 @@ export default function BackupPage() {
         meetings?: unknown[];
         attendance_records?: unknown[];
         regular_member_list_items?: unknown[];
+        group_meeting_records?: unknown[];
+        group_meeting_attendance?: unknown[];
       };
       const supabase = createClient();
       if (backup.localities?.length) {
@@ -84,6 +90,12 @@ export default function BackupPage() {
       if (backup.regular_member_list_items?.length) {
         await supabase.from("regular_member_list_items").upsert(backup.regular_member_list_items as never[], { onConflict: "id" });
       }
+      if (backup.group_meeting_records?.length) {
+        await supabase.from("group_meeting_records").upsert(backup.group_meeting_records as never[], { onConflict: "id" });
+      }
+      if (backup.group_meeting_attendance?.length) {
+        await supabase.from("group_meeting_attendance").upsert(backup.group_meeting_attendance as never[], { onConflict: "id" });
+      }
       setMessage("インポートしました。ページを再読み込みしてください。");
       setImportFile(null);
     } catch (err) {
@@ -98,7 +110,7 @@ export default function BackupPage() {
       <div className="bg-white rounded-lg border border-slate-200 p-4 space-y-4">
         <h2 className="font-semibold text-slate-800">エクスポート</h2>
         <p className="text-sm text-slate-600">
-          データをJSON形式でダウンロードします。地方・地区・小組・メンバー・集会・出席・レギュラーメンバーリストを含みます。
+          データをJSON形式でダウンロードします。地方・地区・小組・メンバー・集会・出席・レギュラーメンバーリスト・小組集会記録・小組集会出欠を含みます。
         </p>
         <button
           type="button"

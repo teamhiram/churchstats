@@ -18,6 +18,10 @@
 .DS_Store
 *.pem
 
+# docs / archives (do not push)
+_Archives
+_RealeaseNotes
+
 # debug
 npm-debug.log*
 yarn-debug.log*

@@ -101,6 +101,27 @@ export interface OrganicDispatchRecord {
   updated_at?: string;
 }
 
+/** 小組集会記録（小組・週ごと。週は月曜日を week_start とする） */
+export interface GroupMeetingRecord {
+  id: string;
+  group_id: string;
+  week_start: string;
+  event_date: string | null;
+  name: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** 小組集会出欠 */
+export interface GroupMeetingAttendance {
+  id: string;
+  group_meeting_record_id: string;
+  member_id: string;
+  memo: string | null;
+  reported_by_user_id: string | null;
+  created_at?: string;
+}
+
 export const DISPATCH_TYPE_LABELS: Record<DispatchType, string> = {
   message: "メッセージ",
   phone: "電話",

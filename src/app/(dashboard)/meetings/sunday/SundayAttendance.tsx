@@ -3,14 +3,12 @@
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
-import { getSundaysInYear, getDefaultSunday, formatDateYmd } from "@/lib/weekUtils";
+import { formatDateYmd } from "@/lib/weekUtils";
 import { CATEGORY_LABELS } from "@/types/database";
 import type { Category } from "@/types/database";
 
 type District = { id: string; name: string };
 type Group = { id: string; name: string; district_id: string };
-type SundayOption = { value: string; label: string };
-
 type SortOption = "furigana" | "district" | "group" | "age_group";
 type GroupOption = "district" | "group" | "age_group" | "believer";
 
@@ -53,24 +51,18 @@ type Props = {
   districts: District[];
   groups: Group[];
   defaultDistrictId: string;
-  initialYear: number;
   initialSundayIso: string;
-  sundayOptions: SundayOption[];
 };
 
 export function SundayAttendance({
   districts,
   groups,
   defaultDistrictId,
-  initialYear,
   initialSundayIso,
-  sundayOptions: initialSundayOptions,
 }: Props) {
   const router = useRouter();
-  const [year, setYear] = useState(initialYear);
-  const [sundayIso, setSundayIso] = useState(initialSundayIso);
-  const [districtId, setDistrictId] = useState((defaultDistrictId || districts[0]?.id) ?? "");
-  const [sundayOptions, setSundayOptions] = useState(initialSundayOptions);
+  const districtId = defaultDistrictId || (districts[0]?.id ?? "");
+  const sundayIso = initialSundayIso;
   const [meetingId, setMeetingId] = useState<string | null>(null);
   const [roster, setRoster] = useState<MemberRow[]>([]);
   const [attendanceMap, setAttendanceMap] = useState<Map<string, AttendanceRow>>(new Map());
@@ -84,18 +76,6 @@ export function SundayAttendance({
 
   const districtMap = useMemo(() => new Map(districts.map((d) => [d.id, d.name])), [districts]);
   const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
-
-  useEffect(() => {
-    const options = getSundaysInYear(year).map((s) => ({
-      value: formatDateYmd(s.date),
-      label: s.label,
-    }));
-    setSundayOptions(options);
-    setSundayIso((current) => {
-      const inYear = options.some((o) => o.value === current);
-      return inYear ? current : formatDateYmd(getDefaultSunday(year));
-    });
-  }, [year]);
 
   const ensureMeetingForDistrict = useCallback(async (did: string) => {
     if (!did || !sundayIso) return null;
@@ -514,52 +494,12 @@ const { data: guestData } = await supabase
     }));
   }, [sortedMembers, group1, districtMap, groupMap]);
 
-  const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
-
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">年</label>
-          <select
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
-          >
-            {years.map((y) => (
-              <option key={y} value={y}>{y}年</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">週</label>
-          <select
-            value={sundayIso}
-            onChange={(e) => setSundayIso(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
-          >
-            {sundayOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">地区名</label>
-          <select
-            value={districtId}
-            onChange={(e) => setDistrictId(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
-          >
-            <option value="">選択</option>
-            <option value="__all__">全ての地区</option>
-            {districts.map((d) => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
+      {!districtId ? (
+        <p className="text-slate-500 text-sm">地区を選択してください（上記のフィルターで選択）。</p>
+      ) : (
+      <>
       {districtId && (
         <>
           <div>
@@ -633,17 +573,17 @@ const { data: guestData } = await supabase
                   <table className="min-w-full divide-y divide-slate-200">
                     <thead className="bg-slate-50">
                       <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">名前</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase w-24">出欠（{attendanceMap.size}）</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase w-24">オンライン</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase w-24">他地方で出席</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">メモ</th>
+                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">名前</th>
+                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-24">出欠（{attendanceMap.size}）</th>
+                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-24">オンライン</th>
+                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-24">他地方で出席</th>
+                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">メモ</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                       {roster.length === 0 && (
                         <tr>
-                          <td colSpan={5} className="px-4 py-6 text-center text-slate-500 text-sm">
+                          <td colSpan={5} className="px-3 py-4 text-center text-slate-500 text-sm">
                             名簿がありません
                           </td>
                         </tr>
@@ -652,7 +592,7 @@ const { data: guestData } = await supabase
                         <Fragment key={`s-${section.group1Key}-${idx}`}>
                           {group1 && section.members.length > 0 && (
                             <tr className="bg-slate-100">
-                              <td colSpan={5} className="px-4 py-1.5 text-sm font-medium text-slate-700">
+                              <td colSpan={5} className="px-3 py-1 text-sm font-medium text-slate-700">
                                 {GROUP_LABELS[group1]}：{section.group1Label || "—"}
                               </td>
                             </tr>
@@ -666,37 +606,37 @@ const { data: guestData } = await supabase
                       const memoPlaceholder = isAway ? "出席した地方を記載してください" : "欠席理由など";
                       return (
                         <tr key={m.id} className="hover:bg-slate-50">
-                          <td className="px-4 py-2 text-slate-800">{m.name}</td>
-                          <td className="px-4 py-2">
+                          <td className="px-3 py-1.5 text-slate-800">{m.name}</td>
+                          <td className="px-3 py-1.5">
                             <button
                               type="button"
                               role="switch"
                               aria-checked={attended}
                               onClick={() => toggleAttendance(m.id, m)}
-                              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
+                              className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
                                 attended ? "bg-primary-600" : "bg-slate-200"
                               }`}
                             >
                               <span
-                                className={`pointer-events-none absolute left-0.5 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow ring-0 transition ${
+                                className={`pointer-events-none absolute left-0.5 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow ring-0 transition ${
                                   attended ? "translate-x-4" : "translate-x-0"
                                 }`}
                               />
                             </button>
                           </td>
-                          <td className="px-4 py-2">
+                          <td className="px-3 py-1.5">
                             {attended ? (
                               <button
                                 type="button"
                                 role="switch"
                                 aria-checked={isOnline}
                                 onClick={() => toggleOnline(m.id)}
-                                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
+                                className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
                                   isOnline ? "bg-primary-600" : "bg-slate-200"
                                 }`}
                               >
                                 <span
-                                  className={`pointer-events-none absolute left-0.5 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow ring-0 transition ${
+                                  className={`pointer-events-none absolute left-0.5 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow ring-0 transition ${
                                     isOnline ? "translate-x-4" : "translate-x-0"
                                   }`}
                                 />
@@ -705,19 +645,19 @@ const { data: guestData } = await supabase
                               <span className="text-slate-300">—</span>
                             )}
                           </td>
-                          <td className="px-4 py-2">
+                          <td className="px-3 py-1.5">
                             {attended ? (
                               <button
                                 type="button"
                                 role="switch"
                                 aria-checked={isAway}
                                 onClick={() => toggleIsAway(m.id)}
-                                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
+                                className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
                                   isAway ? "bg-primary-600" : "bg-slate-200"
                                 }`}
                               >
                                 <span
-                                  className={`pointer-events-none absolute left-0.5 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow ring-0 transition ${
+                                  className={`pointer-events-none absolute left-0.5 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow ring-0 transition ${
                                     isAway ? "translate-x-4" : "translate-x-0"
                                   }`}
                                 />
@@ -726,14 +666,14 @@ const { data: guestData } = await supabase
                               <span className="text-slate-300">—</span>
                             )}
                           </td>
-                          <td className="px-4 py-2">
+                          <td className="px-3 py-1.5">
                             <input
                               type="text"
                               value={memo}
                               onChange={(e) => setMemos((prev) => new Map(prev).set(m.id, e.target.value))}
                               onBlur={() => saveMemo(m.id)}
                               placeholder={memoPlaceholder}
-                              className={`w-full max-w-xs px-2 py-1 text-sm border rounded touch-target ${
+                              className={`w-full max-w-xs px-2 py-0.5 text-sm border rounded touch-target ${
                                 isAway ? "border-amber-400" : "border-slate-300"
                               }`}
                             />
@@ -750,6 +690,8 @@ const { data: guestData } = await supabase
             )}
           </div>
         </>
+      )}
+      </>
       )}
     </div>
   );

@@ -1,9 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { SmallGroupAttendance } from "./SmallGroupAttendance";
+import { PrayerMeetingAttendance } from "./PrayerMeetingAttendance";
 import { getMondayWeeksInYear, getDefaultMondayWeekStart, formatDateYmd } from "@/lib/weekUtils";
 
-export default async function SmallGroupAttendancePage({
+export default async function PrayerMeetingPage({
   searchParams,
 }: {
   searchParams: Promise<{ year?: string; week_start?: string; district_id?: string }>;
@@ -65,7 +65,7 @@ export default async function SmallGroupAttendancePage({
 
   return (
     <div className="space-y-6">
-      <SmallGroupAttendance
+      <PrayerMeetingAttendance
         districts={districts ?? []}
         defaultDistrictId={defaultDistrictId}
         initialYear={initialYear}
