@@ -3,6 +3,8 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 import LoginForm from "@/app/login/LoginForm";
 
+export const dynamic = "force-dynamic";
+
 export default async function RootPage() {
   try {
     const supabase = await createClient();
