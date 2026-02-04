@@ -71,12 +71,23 @@ export async function getListData(
   const yearStart = `${year}-01-01`;
   const yearEnd = `${year}-12-31`;
 
-  const [meetingsRes, dispatchRes] = await Promise.all([
+  const groupRecordsQuery =
+    filterGroupIds.length > 0
+      ? supabase
+          .from("group_meeting_records")
+          .select("id, week_start, group_id")
+          .gte("week_start", yearStart)
+          .lte("week_start", yearEnd)
+          .in("group_id", filterGroupIds)
+      : Promise.resolve({ data: [] as { id: string; week_start: string; group_id: string }[] });
+
+  const [meetingsRes, groupRecordsRes, dispatchRes] = await Promise.all([
     supabase
       .from("meetings")
       .select("id, event_date, meeting_type, district_id, group_id")
       .gte("event_date", yearStart)
       .lte("event_date", yearEnd),
+    groupRecordsQuery,
     supabase
       .from("organic_dispatch_records")
       .select("member_id, week_start, group_id")
@@ -91,6 +102,7 @@ export async function getListData(
     district_id: string | null;
     group_id: string | null;
   }[];
+  const groupRecords = (groupRecordsRes.data ?? []) as { id: string; week_start: string; group_id: string }[];
   const dispatches = (dispatchRes.data ?? []) as { member_id: string; week_start: string; group_id: string }[];
 
   const mainMeetingIds = new Set(
@@ -98,16 +110,14 @@ export async function getListData(
       .filter((m) => m.meeting_type === "main" && m.district_id && filterDistrictIds.includes(m.district_id))
       .map((m) => m.id)
   );
-  const groupMeetingIds = new Set(
-    meetings
-      .filter((m) => m.meeting_type === "group" && m.group_id && filterGroupIds.includes(m.group_id))
-      .map((m) => m.id)
-  );
+  const groupRecordIds = new Set(groupRecords.map((r) => r.id));
+  const groupRecordIdToWeekStart = new Map(groupRecords.map((r) => [r.id, r.week_start]));
 
   const meetingIdToDate = new Map(meetings.map((m) => [m.id, m.event_date]));
   const meetingIdToType = new Map(meetings.map((m) => [m.id, m.meeting_type]));
 
-  let attendance: { meeting_id: string; member_id: string }[] = [];
+  let mainAttendance: { meeting_id: string; member_id: string }[] = [];
+  let groupAttendance: { group_meeting_record_id: string; member_id: string }[] = [];
   let localMemberIds = new Set<string>();
   if (localOnly) {
     const { data: localMembers } = await supabase
@@ -121,7 +131,14 @@ export async function getListData(
       .from("attendance_records")
       .select("meeting_id, member_id")
       .in("meeting_id", meetings.map((m) => m.id));
-    attendance = (attData ?? []) as { meeting_id: string; member_id: string }[];
+    mainAttendance = (attData ?? []) as { meeting_id: string; member_id: string }[];
+  }
+  if (groupRecordIds.size > 0) {
+    const { data: groupAttData } = await supabase
+      .from("group_meeting_attendance")
+      .select("group_meeting_record_id, member_id")
+      .in("group_meeting_record_id", [...groupRecordIds]);
+    groupAttendance = (groupAttData ?? []) as { group_meeting_record_id: string; member_id: string }[];
   }
 
   const weekMainCount = new Map<string, number>();
@@ -141,7 +158,7 @@ export async function getListData(
     return format(monday, "yyyy-MM-dd");
   }
 
-  attendance.forEach((a) => {
+  mainAttendance.forEach((a) => {
     if (localOnly && !localMemberIds.has(a.member_id)) return;
     const meetingId = a.meeting_id;
     const eventDate = meetingIdToDate.get(meetingId);
@@ -152,9 +169,12 @@ export async function getListData(
     if (type === "main" && mainMeetingIds.has(meetingId)) {
       weekMainCount.set(weekStart, (weekMainCount.get(weekStart) ?? 0) + 1);
     }
-    if (type === "group" && groupMeetingIds.has(meetingId)) {
-      weekGroupCount.set(weekStart, (weekGroupCount.get(weekStart) ?? 0) + 1);
-    }
+  });
+  groupAttendance.forEach((a) => {
+    if (localOnly && !localMemberIds.has(a.member_id)) return;
+    const weekStart = groupRecordIdToWeekStart.get(a.group_meeting_record_id);
+    if (!weekStart || !weekStarts.includes(weekStart)) return;
+    weekGroupCount.set(weekStart, (weekGroupCount.get(weekStart) ?? 0) + 1);
   });
 
   dispatches.forEach((d) => {
@@ -219,11 +239,19 @@ export async function getWeekDetail(
       return { data: res.data };
     })();
   }
-  const [meetingsRes, dispatchRes, membersRes] = await Promise.all([
+  const [meetingsRes, groupRecordsRes, dispatchRes, membersRes] = await Promise.all([
     supabase
       .from("meetings")
       .select("id, event_date, meeting_type, district_id, group_id")
-      .or(`and(meeting_type.eq.main,event_date.eq.${weekEnd}),and(meeting_type.eq.group,event_date.gte.${weekStart},event_date.lte.${weekEnd})`),
+      .eq("meeting_type", "main")
+      .eq("event_date", weekEnd),
+    filterGroupIds.length > 0
+      ? supabase
+          .from("group_meeting_records")
+          .select("id")
+          .eq("week_start", weekStart)
+          .in("group_id", filterGroupIds)
+      : Promise.resolve({ data: [] as { id: string }[] }),
     dispatchPromise,
     supabase.from("members").select("id, name, is_local"),
   ]);
@@ -234,38 +262,46 @@ export async function getWeekDetail(
     : null;
   const memberMap = new Map(membersList.map((m) => [m.id, m.name]));
 
-  const meetings = (meetingsRes.data ?? []) as {
+  const mainMeetings = (meetingsRes.data ?? []) as {
     id: string;
     event_date: string;
     meeting_type: string;
     district_id: string | null;
     group_id: string | null;
   }[];
+  const groupRecordIdsThisWeek = new Set(
+    ((groupRecordsRes.data ?? []) as { id: string }[]).map((r) => r.id)
+  );
   const dispatchMemberIds = new Set(
     ((dispatchRes.data ?? []) as { member_id: string }[]).map((d) => d.member_id)
   );
 
-  const mainMeetings = meetings.filter(
-    (m) => m.meeting_type === "main" && m.district_id && filterDistrictIds.includes(m.district_id)
+  const mainMeetingIds = new Set(
+    mainMeetings
+      .filter((m) => m.district_id && filterDistrictIds.includes(m.district_id))
+      .map((m) => m.id)
   );
-  const groupMeetings = meetings.filter(
-    (m) => m.meeting_type === "group" && m.group_id && filterGroupIds.includes(m.group_id)
-  );
-
-  const mainMeetingIds = new Set(mainMeetings.map((m) => m.id));
-  const groupMeetingIds = new Set(groupMeetings.map((m) => m.id));
 
   let mainAttendedThisWeek = new Set<string>();
   let groupAttendedThisWeek = new Set<string>();
-  if (meetings.length > 0) {
-    const { data: attData } = await supabase
+  if (mainMeetingIds.size > 0) {
+    const { data: mainAttData } = await supabase
       .from("attendance_records")
       .select("meeting_id, member_id")
-      .in("meeting_id", meetings.map((m) => m.id));
-    (attData ?? []).forEach((a: { meeting_id: string; member_id: string }) => {
+      .in("meeting_id", [...mainMeetingIds]);
+    (mainAttData ?? []).forEach((a: { meeting_id: string; member_id: string }) => {
       if (localOnly && localMemberIds && !localMemberIds.has(a.member_id)) return;
       if (mainMeetingIds.has(a.meeting_id)) mainAttendedThisWeek.add(a.member_id);
-      if (groupMeetingIds.has(a.meeting_id)) groupAttendedThisWeek.add(a.member_id);
+    });
+  }
+  if (groupRecordIdsThisWeek.size > 0) {
+    const { data: groupAttData } = await supabase
+      .from("group_meeting_attendance")
+      .select("member_id")
+      .in("group_meeting_record_id", [...groupRecordIdsThisWeek]);
+    (groupAttData ?? []).forEach((a: { member_id: string }) => {
+      if (localOnly && localMemberIds && !localMemberIds.has(a.member_id)) return;
+      groupAttendedThisWeek.add(a.member_id);
     });
   }
 
@@ -282,6 +318,7 @@ export async function getWeekDetail(
   const { data: pastMeetings } = await supabase
     .from("meetings")
     .select("id, event_date, meeting_type, district_id, group_id")
+    .eq("meeting_type", "main")
     .gte("event_date", pastStart)
     .lt("event_date", weekStart);
   const pastM = (pastMeetings ?? []) as {
@@ -293,24 +330,37 @@ export async function getWeekDetail(
   }[];
   const pastMainIds = new Set(
     pastM
-      .filter((m) => m.meeting_type === "main" && m.district_id && filterDistrictIds.includes(m.district_id))
+      .filter((m) => m.district_id && filterDistrictIds.includes(m.district_id))
       .map((m) => m.id)
   );
-  const pastGroupIds = new Set(
-    pastM
-      .filter((m) => m.meeting_type === "group" && m.group_id && filterGroupIds.includes(m.group_id))
-      .map((m) => m.id)
-  );
-  const allPastIds = [...pastMainIds, ...pastGroupIds];
-  if (allPastIds.length > 0) {
-    const { data: pastAtt } = await supabase
+  let pastGroupRecordIds = new Set<string>();
+  if (filterGroupIds.length > 0) {
+    const { data: pastGroupRecords } = await supabase
+      .from("group_meeting_records")
+      .select("id")
+      .gte("week_start", pastStart)
+      .lt("week_start", weekStart)
+      .in("group_id", filterGroupIds);
+    pastGroupRecordIds = new Set(((pastGroupRecords ?? []) as { id: string }[]).map((r) => r.id));
+  }
+  if (pastMainIds.size > 0) {
+    const { data: pastMainAtt } = await supabase
       .from("attendance_records")
       .select("meeting_id, member_id")
-      .in("meeting_id", allPastIds);
-    (pastAtt ?? []).forEach((a: { meeting_id: string; member_id: string }) => {
+      .in("meeting_id", [...pastMainIds]);
+    (pastMainAtt ?? []).forEach((a: { meeting_id: string; member_id: string }) => {
       if (localOnly && localMemberIds && !localMemberIds.has(a.member_id)) return;
       if (pastMainIds.has(a.meeting_id)) mainAttendedPastX.add(a.member_id);
-      if (pastGroupIds.has(a.meeting_id)) groupAttendedPastX.add(a.member_id);
+    });
+  }
+  if (pastGroupRecordIds.size > 0) {
+    const { data: pastGroupAtt } = await supabase
+      .from("group_meeting_attendance")
+      .select("member_id")
+      .in("group_meeting_record_id", [...pastGroupRecordIds]);
+    (pastGroupAtt ?? []).forEach((a: { member_id: string }) => {
+      if (localOnly && localMemberIds && !localMemberIds.has(a.member_id)) return;
+      groupAttendedPastX.add(a.member_id);
     });
   }
 

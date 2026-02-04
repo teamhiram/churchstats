@@ -31,15 +31,28 @@ export function getDefaultSunday(year: number): Date {
   return prevSun <= today ? prevSun : addDays(prevSun, -7);
 }
 
-/** 年の月曜始まり週（月曜日を week_start とする）。表示: n週目（yyyy/MM/dd - yyyy/MM/dd） */
+/**
+ * 年の月曜始まり週（月曜日を week_start とする）。
+ * 第1週＝その年の最初の日曜日を含む週（例: 2026年1週目 2025/12/29 - 2026/01/04）。
+ * その週の日曜が翌年になる週は含めない（例: 2025/12/29-2026/01/04 は2025年の週には含めず、2026年1週目となる）。
+ * 表示: n週目（yyyy/MM/dd - yyyy/MM/dd）
+ */
 export function getMondayWeeksInYear(year: number): { weekNumber: number; weekStart: Date; weekEnd: Date; label: string }[] {
   const result: { weekNumber: number; weekStart: Date; weekEnd: Date; label: string }[] = [];
-  const jan1 = new Date(year, 0, 1);
-  const daysUntilMonday = (8 - getDay(jan1)) % 7;
-  let d = addDays(jan1, daysUntilMonday);
+  const startOfYear = new Date(year, 0, 1);
+  let firstSunday = new Date(startOfYear);
+  while (getDay(firstSunday) !== 0) {
+    firstSunday = addDays(firstSunday, 1);
+  }
+  let d = addDays(firstSunday, -6);
   let n = 1;
-  while (d.getFullYear() === year) {
+  while (true) {
     const end = addDays(d, 6);
+    if (end.getFullYear() > year) break;
+    if (end.getFullYear() < year) {
+      d = addDays(d, 7);
+      continue;
+    }
     result.push({
       weekNumber: n,
       weekStart: new Date(d),
@@ -79,4 +92,36 @@ export function getDefaultMondayWeekStart(year: number): Date {
 
 export function formatDateYmd(d: Date): string {
   return format(d, "yyyy-MM-dd");
+}
+
+/** 週の月曜日（yyyy-MM-dd）から、その週の日曜日を yyyy/MM/dd で返す。主日表示用。 */
+export function getSundayFromWeekStart(weekStartIso: string): string {
+  const [y, m, d] = weekStartIso.split("-").map(Number);
+  const monday = new Date(y, m - 1, d);
+  const sunday = addDays(monday, 6);
+  return format(sunday, "yyyy/MM/dd");
+}
+
+/** 週の月曜日（yyyy-MM-dd）から、その週の日曜日を yyyy-MM-dd で返す。API用。 */
+export function getSundayIsoFromWeekStart(weekStartIso: string): string {
+  const [y, m, d] = weekStartIso.split("-").map(Number);
+  const monday = new Date(y, m - 1, d);
+  const sunday = addDays(monday, 6);
+  return format(sunday, "yyyy-MM-dd");
+}
+
+/** 週の月曜日（yyyy-MM-dd）から、その週の7日間の選択肢を返す。実施日ドロップダウン用。 */
+export function getDaysInWeek(weekStartIso: string): { value: string; label: string }[] {
+  const [y, m, d] = weekStartIso.split("-").map(Number);
+  const monday = new Date(y, m - 1, d);
+  const weekDays: { value: string; label: string }[] = [];
+  const dayLabels = ["日", "月", "火", "水", "木", "金", "土"];
+  for (let i = 0; i < 7; i++) {
+    const date = addDays(monday, i);
+    weekDays.push({
+      value: format(date, "yyyy-MM-dd"),
+      label: `${format(date, "M/d", { locale: ja })} (${dayLabels[date.getDay()]})`,
+    });
+  }
+  return weekDays;
 }
