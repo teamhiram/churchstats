@@ -4,6 +4,8 @@ import { Nav } from "@/components/Nav";
 import { ROLE_LABELS } from "@/types/database";
 import type { Role } from "@/types/database";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardLayout({
   children,
 }: {
