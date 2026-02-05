@@ -288,7 +288,6 @@ export function PrayerMeetingAttendance({
 
           {districtId && (
             <div>
-              <h2 className="font-semibold text-slate-800 mb-2">名簿（出欠・オンライン・他地方・メモ）</h2>
               {loading ? (
                 <p className="text-slate-500 text-sm">読み込み中…</p>
               ) : (

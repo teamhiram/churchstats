@@ -14,6 +14,7 @@ type WeekOption = { value: string; label: string };
 type MemberRow = {
   id: string;
   name: string;
+  group_id?: string;
 };
 
 type DispatchRow = {
@@ -77,8 +78,8 @@ export function OrganicDispatchForm({
         setGroups(data ?? []);
         setGroupId((prev) => {
           const list = data ?? [];
-          const stillValid = list.some((g) => g.id === prev);
-          return stillValid ? prev : (list[0]?.id ?? "");
+          const stillValid = list.some((g) => g.id === prev) || prev === "__all__";
+          return stillValid ? prev : "__all__";
         });
       });
   }, [districtId]);
@@ -92,19 +93,36 @@ export function OrganicDispatchForm({
       setLocalMemo(new Map());
       return;
     }
+    if (groupId === "__all__" && groups.length === 0) return;
     let cancelled = false;
     setLoading(true);
     const supabase = createClient();
+    const groupIds = groupId === "__all__" ? groups.map((g) => g.id) : [groupId];
+    if (groupIds.length === 0) {
+      setRoster([]);
+      setDispatchMap(new Map());
+      setLocalType(new Map());
+      setLocalDate(new Map());
+      setLocalMemo(new Map());
+      setLoading(false);
+      return;
+    }
     Promise.all([
-      supabase
-        .from("members")
-        .select("id, name")
-        .eq("group_id", groupId)
-        .order("name"),
+      groupId === "__all__"
+        ? supabase
+            .from("members")
+            .select("id, name, group_id")
+            .in("group_id", groupIds)
+            .order("name")
+        : supabase
+            .from("members")
+            .select("id, name, group_id")
+            .eq("group_id", groupId)
+            .order("name"),
       supabase
         .from("organic_dispatch_records")
         .select("id, member_id, group_id, week_start, dispatch_type, dispatch_date, dispatch_memo")
-        .eq("group_id", groupId)
+        .in("group_id", groupIds)
         .eq("week_start", weekStartIso),
     ]).then(([membersRes, dispatchRes]) => {
       if (cancelled) return;
@@ -132,11 +150,13 @@ export function OrganicDispatchForm({
     return () => {
       cancelled = true;
     };
-  }, [groupId, weekStartIso]);
+  }, [groupId, weekStartIso, groups]);
 
   const upsertDispatch = useCallback(
     async (memberId: string, payload: { dispatch_type?: DispatchType | null; dispatch_date?: string | null; dispatch_memo?: string | null }) => {
       if (!groupId || !weekStartIso) return;
+      const effectiveGroupId = groupId === "__all__" ? roster.find((m) => m.id === memberId)?.group_id : groupId;
+      if (!effectiveGroupId) return;
       setSaveError(null);
       const supabase = createClient();
       const existing = dispatchMap.get(memberId);
@@ -158,7 +178,7 @@ export function OrganicDispatchForm({
           .from("organic_dispatch_records")
           .insert({
             member_id: memberId,
-            group_id: groupId,
+            group_id: effectiveGroupId,
             week_start: weekStartIso,
             ...payload,
           })
@@ -175,7 +195,7 @@ export function OrganicDispatchForm({
       }
       router.refresh();
     },
-    [groupId, weekStartIso, dispatchMap]
+    [groupId, weekStartIso, dispatchMap, roster]
   );
 
   const onTypeChange = (memberId: string, value: "" | DispatchType) => {
@@ -201,13 +221,12 @@ export function OrganicDispatchForm({
         <>
       <div className="grid gap-4 sm:grid-cols-1 max-w-xs">
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">小組</label>
           <select
             value={groupId}
             onChange={(e) => setGroupId(e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
           >
-            <option value="">選択</option>
+            <option value="__all__">すべて</option>
             {groups.map((g) => (
               <option key={g.id} value={g.id}>{g.name}</option>
             ))}
@@ -223,7 +242,6 @@ export function OrganicDispatchForm({
 
       {groupId && (
         <div>
-          <h2 className="font-semibold text-slate-800 mb-2">名簿（派遣記録・そのまま編集）</h2>
           {loading ? (
             <p className="text-slate-500 text-sm">読み込み中…</p>
           ) : (

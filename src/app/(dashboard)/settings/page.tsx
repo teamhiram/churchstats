@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { BackupSection } from "./BackupSection";
 import { UserManagement } from "./UserManagement";
 
 export default async function SettingsPage() {
@@ -19,6 +20,7 @@ export default async function SettingsPage() {
           <UserManagement />
         </section>
       )}
+      <BackupSection />
       {!canManageUsers && (
         <p className="text-slate-500 text-sm">システム設定の変更権限がありません。</p>
       )}

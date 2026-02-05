@@ -73,6 +73,7 @@ export function SundayAttendance({
   const [message, setMessage] = useState("");
   const [sortOrder, setSortOrder] = useState<SortOption>("furigana");
   const [group1, setGroup1] = useState<GroupOption | "">("");
+  const [accordionOpen, setAccordionOpen] = useState(false);
 
   const districtMap = useMemo(() => new Map(districts.map((d) => [d.id, d.name])), [districts]);
   const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
@@ -502,47 +503,58 @@ const { data: guestData } = await supabase
       <>
       {districtId && (
         <>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">フリー検索（名前）</label>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="名前で検索（他地区・他地方も可）"
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
-            />
-            {searchResults.length > 0 && (
-              <ul className="mt-1 border border-slate-200 rounded-lg divide-y divide-slate-100 bg-white shadow-lg max-h-60 overflow-auto">
-                {searchResults
-                  .filter((m) => !attendanceMap.has(m.id))
-                  .map((m) => (
-                    <li key={m.id}>
-                      <button
-                        type="button"
-                        onClick={() => addFromSearch(m)}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 touch-target"
-                      >
-                        <span className="font-medium">{m.name}</span>
-                        <span className="ml-2 text-slate-500 text-xs">
-                          {[m.locality_name, m.district_name, m.group_name, m.age_group ? CATEGORY_LABELS[m.age_group] : ""]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-              </ul>
-            )}
-          </div>
-          {message && <p className="text-sm text-amber-600">{message}</p>}
-
-          <div>
-            <h2 className="font-semibold text-slate-800 mb-2">名簿（出欠・メモ）</h2>
-            {loading ? (
-              <p className="text-slate-500 text-sm">読み込み中…</p>
-            ) : (
-              <>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap mb-3">
+          <div className="border border-slate-200 rounded-lg bg-white overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setAccordionOpen((o) => !o)}
+              className="w-full flex items-center justify-between px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 touch-target"
+              aria-expanded={accordionOpen}
+            >
+              <span>フリー検索・並び順・グルーピング</span>
+              <svg
+                className={`w-5 h-5 text-slate-500 transition-transform ${accordionOpen ? "rotate-180" : ""}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {accordionOpen && (
+              <div className="border-t border-slate-200 px-4 pb-4 pt-2 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">フリー検索（名前）</label>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="名前で検索（他地区・他地方も可）"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
+                  />
+                  {searchResults.length > 0 && (
+                    <ul className="mt-1 border border-slate-200 rounded-lg divide-y divide-slate-100 bg-white shadow-lg max-h-60 overflow-auto">
+                      {searchResults
+                        .filter((m) => !attendanceMap.has(m.id))
+                        .map((m) => (
+                          <li key={m.id}>
+                            <button
+                              type="button"
+                              onClick={() => addFromSearch(m)}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 touch-target"
+                            >
+                              <span className="font-medium">{m.name}</span>
+                              <span className="ml-2 text-slate-500 text-xs">
+                                {[m.locality_name, m.district_name, m.group_name, m.age_group ? CATEGORY_LABELS[m.age_group] : ""]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
                   <div className="flex items-center gap-2">
                     <label className="text-sm font-medium text-slate-700">並び順</label>
                     <select
@@ -569,6 +581,16 @@ const { data: guestData } = await supabase
                     </select>
                   </div>
                 </div>
+              </div>
+            )}
+          </div>
+          {message && <p className="text-sm text-amber-600">{message}</p>}
+
+          <div>
+            {loading ? (
+              <p className="text-slate-500 text-sm">読み込み中…</p>
+            ) : (
+              <>
                 <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
                   <table className="min-w-full divide-y divide-slate-200">
                     <thead className="bg-slate-50">

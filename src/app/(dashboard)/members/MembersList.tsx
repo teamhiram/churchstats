@@ -5,6 +5,46 @@ import { Fragment, useState, useMemo } from "react";
 import { CATEGORY_LABELS } from "@/types/database";
 import type { Category } from "@/types/database";
 
+function Modal({
+  open,
+  onClose,
+  title,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  if (!open) return null;
+  return (
+    <>
+      <div className="fixed inset-0 z-50 bg-black/50" aria-hidden onClick={onClose} />
+      <div
+        className="fixed inset-x-4 top-1/2 z-50 -translate-y-1/2 max-h-[85vh] overflow-y-auto rounded-lg bg-white shadow-xl border border-slate-200"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
+        <div className="sticky top-0 flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white rounded-t-lg">
+          <h2 className="text-sm font-semibold text-slate-800">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-full text-slate-500 hover:bg-slate-100 touch-target"
+            aria-label="閉じる"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="p-4">{children}</div>
+      </div>
+    </>
+  );
+}
+
 type SortOption = "furigana" | "district" | "group" | "age_group";
 type GroupOption = "district" | "group" | "age_group" | "believer";
 
@@ -66,6 +106,9 @@ export function MembersList({
   const [filterGroup, setFilterGroup] = useState<string>("");
   const [filterAgeGroup, setFilterAgeGroup] = useState<string>("");
   const [filterBeliever, setFilterBeliever] = useState<string>("");
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [sortModalOpen, setSortModalOpen] = useState(false);
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
 
   const groupOptionsForFilter = useMemo(() => {
     if (filterDistrict) {
@@ -198,22 +241,213 @@ export function MembersList({
     return `/members${q}`;
   };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap p-3 bg-slate-50 rounded-lg border border-slate-200">
+  const hasActiveFilter = !!(filterDistrict || filterGroup || filterAgeGroup || filterBeliever);
+
+  const filterContent = (
+    <div className="flex flex-col gap-3">
+      <div>
+        <label className="block text-xs font-medium text-slate-500 mb-1">ローカル/ゲスト</label>
         <select
           aria-label="ローカル/ゲスト"
-            value={memberType}
-            onChange={(e) => {
-              const t = e.target.value as "local" | "guest" | "all";
-              window.location.href = buildMembersUrl(t);
-            }}
-            className="px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
-          >
-            <option value="local">ローカル</option>
-            <option value="guest">ゲスト</option>
-            <option value="all">ローカル+ゲスト</option>
-          </select>
+          value={memberType}
+          onChange={(e) => {
+            const t = e.target.value as "local" | "guest" | "all";
+            window.location.href = buildMembersUrl(t);
+          }}
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+        >
+          <option value="local">ローカル</option>
+          <option value="guest">ゲスト</option>
+          <option value="all">ローカル+ゲスト</option>
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-500 mb-1">地区</label>
+        <select
+          aria-label="地区"
+          value={filterDistrict}
+          onChange={(e) => {
+            setFilterDistrict(e.target.value);
+            setFilterGroup("");
+          }}
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+        >
+          <option value="">地区を選択</option>
+          {districts.map((d) => (
+            <option key={d.id} value={d.id}>{d.name}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-500 mb-1">小組</label>
+        <select
+          aria-label="小組"
+          value={filterGroup}
+          onChange={(e) => setFilterGroup(e.target.value)}
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+        >
+          <option value="">小組を選択</option>
+          {groupOptionsForFilter.map((g) => (
+            <option key={g.id} value={g.id}>{g.name}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-500 mb-1">年齢層</label>
+        <select
+          aria-label="年齢層"
+          value={filterAgeGroup}
+          onChange={(e) => setFilterAgeGroup(e.target.value)}
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+        >
+          <option value="">年齢層を選択</option>
+          {(Object.keys(CATEGORY_LABELS) as Category[]).map((k) => (
+            <option key={k} value={k}>{CATEGORY_LABELS[k]}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-500 mb-1">聖徒/友人</label>
+        <select
+          aria-label="聖徒/友人"
+          value={filterBeliever}
+          onChange={(e) => setFilterBeliever(e.target.value)}
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+        >
+          <option value="">聖徒/友人を選択</option>
+          <option value="believer">聖徒</option>
+          <option value="friend">友人</option>
+        </select>
+      </div>
+      {hasActiveFilter && (
+        <button
+          type="button"
+          onClick={() => {
+            setFilterDistrict("");
+            setFilterGroup("");
+            setFilterAgeGroup("");
+            setFilterBeliever("");
+          }}
+          className="text-sm text-primary-600 hover:underline touch-target"
+        >
+          フィルター解除
+        </button>
+      )}
+    </div>
+  );
+
+  const sortContent = (
+    <div>
+      <label className="block text-xs font-medium text-slate-500 mb-1">並び順</label>
+      <select
+        value={sortOrder}
+        onChange={(e) => setSortOrder(e.target.value as SortOption)}
+        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+      >
+        {(Object.keys(SORT_LABELS) as SortOption[]).map((k) => (
+          <option key={k} value={k}>{SORT_LABELS[k]}</option>
+        ))}
+      </select>
+    </div>
+  );
+
+  const groupContent = (
+    <div className="flex flex-col gap-3">
+      <div>
+        <label className="block text-xs font-medium text-slate-500 mb-1">グルーピング1層目</label>
+        <select
+          value={group1}
+          onChange={(e) => {
+            setGroup1(e.target.value as GroupOption | "");
+            setGroup2("");
+          }}
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+        >
+          <option value="">なし</option>
+          {(Object.keys(GROUP_LABELS) as GroupOption[]).map((k) => (
+            <option key={k} value={k}>{GROUP_LABELS[k]}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-500 mb-1">グルーピング2層目</label>
+        <select
+          value={group2}
+          onChange={(e) => setGroup2(e.target.value as GroupOption | "")}
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+        >
+          <option value="">なし</option>
+          {group2Options.map((k) => (
+            <option key={k} value={k}>{GROUP_LABELS[k]}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* モバイル: アイコンボタンでモーダルを開く */}
+      <div className="flex items-center gap-2 md:hidden">
+        <button
+          type="button"
+          onClick={() => setFilterModalOpen(true)}
+          className={`flex items-center justify-center w-10 h-10 rounded-lg border touch-target ${
+            hasActiveFilter
+              ? "border-primary-500 bg-primary-50 text-primary-600"
+              : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+          }`}
+          aria-label="フィルター"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={() => setSortModalOpen(true)}
+          className="flex items-center justify-center w-10 h-10 rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 touch-target"
+          aria-label="並び順"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={() => setGroupModalOpen(true)}
+          className={`flex items-center justify-center w-10 h-10 rounded-lg border touch-target ${
+            group1 || group2 ? "border-primary-500 bg-primary-50 text-primary-600" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+          }`}
+          aria-label="グルーピング"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+        </button>
+        <Link
+          href="/members/new"
+          className="inline-flex items-center justify-center px-3 py-2 bg-slate-600 text-white text-sm font-medium rounded-lg touch-target ml-auto hover:bg-slate-700"
+        >
+          追加
+        </Link>
+      </div>
+
+      {/* デスクトップ: フィルター（モバイルでは非表示） */}
+      <div className="hidden md:flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap p-3 bg-slate-50 rounded-lg border border-slate-200">
+        <select
+          aria-label="ローカル/ゲスト"
+          value={memberType}
+          onChange={(e) => {
+            const t = e.target.value as "local" | "guest" | "all";
+            window.location.href = buildMembersUrl(t);
+          }}
+          className="px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+        >
+          <option value="local">ローカル</option>
+          <option value="guest">ゲスト</option>
+          <option value="all">ローカル+ゲスト</option>
+        </select>
         <select
           aria-label="地区"
           value={filterDistrict}
@@ -260,7 +494,7 @@ export function MembersList({
           <option value="believer">聖徒</option>
           <option value="friend">友人</option>
         </select>
-        {(filterDistrict || filterGroup || filterAgeGroup || filterBeliever) && (
+        {hasActiveFilter && (
           <button
             type="button"
             onClick={() => {
@@ -275,7 +509,8 @@ export function MembersList({
           </button>
         )}
       </div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
+      {/* デスクトップ: 並び順・グルーピング（モバイルでは非表示） */}
+      <div className="hidden md:flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
         <div className="flex items-center gap-2">
           <label className="text-sm font-medium text-slate-700">並び順</label>
           <select
@@ -325,18 +560,29 @@ export function MembersList({
         </Link>
       </div>
 
+      {/* モバイル用モーダル */}
+      <Modal open={filterModalOpen} onClose={() => setFilterModalOpen(false)} title="フィルター">
+        {filterContent}
+      </Modal>
+      <Modal open={sortModalOpen} onClose={() => setSortModalOpen(false)} title="並び順">
+        {sortContent}
+      </Modal>
+      <Modal open={groupModalOpen} onClose={() => setGroupModalOpen(false)} title="グルーピング">
+        {groupContent}
+      </Modal>
+
       <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-2 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-8" />
-                <th className="px-2 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">氏名</th>
-                <th className="px-2 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">フリガナ</th>
-                <th className="px-2 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">地区</th>
-                <th className="px-2 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">小組</th>
-                <th className="px-2 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">年齢層</th>
-                <th className="px-2 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">聖徒/友人</th>
+                <th className="px-1.5 py-1 text-left text-xs font-medium text-slate-500 uppercase w-8" />
+                <th className="px-1.5 py-1 text-left text-xs font-medium text-slate-500 uppercase">氏名</th>
+                <th className="hidden md:table-cell px-1.5 py-1 text-left text-xs font-medium text-slate-500 uppercase">フリガナ</th>
+                <th className="px-1.5 py-1 text-left text-xs font-medium text-slate-500 uppercase">地区</th>
+                <th className="px-1.5 py-1 text-left text-xs font-medium text-slate-500 uppercase">小組</th>
+                <th className="px-1.5 py-1 text-left text-xs font-medium text-slate-500 uppercase">年齢層</th>
+                <th className="px-1.5 py-1 text-left text-xs font-medium text-slate-500 uppercase">聖徒/友人</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -348,14 +594,14 @@ export function MembersList({
                   <Fragment key={`${section.group1Key}-${section.group2Key}-${idx}`}>
                     {showGroup1 && (
                       <tr className="bg-slate-100">
-                        <td colSpan={7} className="px-2 py-1.5 text-sm font-medium text-slate-700">
+                        <td colSpan={7} className="px-1.5 py-1 text-sm font-medium text-slate-700">
                           {GROUP_LABELS[group1 as GroupOption]}：{section.group1Label || "—"}
                         </td>
                       </tr>
                     )}
                     {showGroup2 && (
                       <tr className="bg-slate-50">
-                        <td colSpan={7} className="px-2 py-1 pl-4 text-sm font-medium text-slate-600">
+                        <td colSpan={7} className="px-1.5 py-1 pl-3 text-sm font-medium text-slate-600">
                           {GROUP_LABELS[group2 as GroupOption]}：{section.group2Label || "—"}
                         </td>
                       </tr>
@@ -368,8 +614,8 @@ export function MembersList({
                           onClick={() => setExpandedId(isExpanded ? null : m.id)}
                           className="hover:bg-slate-50 cursor-pointer touch-target"
                         >
-                          <td className="px-2 py-1.5 text-slate-400">{isExpanded ? "▼" : "▶"}</td>
-                          <td className="px-2 py-1.5">
+                          <td className="px-1.5 py-1 text-slate-400">{isExpanded ? "▼" : "▶"}</td>
+                          <td className="px-1.5 py-1">
                             <Link
                               href={`/members/${m.id}/edit`}
                               onClick={(e) => e.stopPropagation()}
@@ -378,16 +624,18 @@ export function MembersList({
                               {m.name}
                             </Link>
                           </td>
-                          <td className="px-2 py-1.5 text-sm text-slate-600">{m.furigana ?? "—"}</td>
-                          <td className="px-2 py-1.5 text-sm text-slate-600">{districtMap.get(m.district_id ?? "") ?? "—"}</td>
-                          <td className="px-2 py-1.5 text-sm text-slate-600">{groupMap.get(m.group_id ?? "") ?? (m.is_local ? "未所属" : "—")}</td>
-                          <td className="px-2 py-1.5 text-sm text-slate-600">{m.age_group ? CATEGORY_LABELS[m.age_group] : "—"}</td>
-                          <td className="px-2 py-1.5 text-sm text-slate-600">{m.is_baptized ? "聖徒" : "友人"}</td>
+                          <td className="hidden md:table-cell px-1.5 py-1 text-sm text-slate-600 whitespace-nowrap">{m.furigana ?? "—"}</td>
+                          <td className="px-1.5 py-1 text-sm text-slate-600 whitespace-nowrap">{districtMap.get(m.district_id ?? "") ?? "—"}</td>
+                          <td className="px-1.5 py-1 text-sm text-slate-600 whitespace-nowrap">{groupMap.get(m.group_id ?? "") ?? (m.is_local ? "未所属" : "—")}</td>
+                          <td className="px-1.5 py-1 text-sm text-slate-600 whitespace-nowrap">{m.age_group ? CATEGORY_LABELS[m.age_group] : "—"}</td>
+                          <td className="px-1.5 py-1 text-sm text-slate-600 whitespace-nowrap">{m.is_baptized ? "聖徒" : "友人"}</td>
                         </tr>
                         {isExpanded && (
                           <tr key={`${m.id}-detail`}>
-                            <td colSpan={7} className="px-2 py-2 bg-slate-50 border-b border-slate-200">
+                            <td colSpan={7} className="px-1.5 py-1.5 bg-slate-50 border-b border-slate-200">
                               <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                <span className="text-slate-500 md:hidden">フリガナ</span>
+                                <span className="text-slate-800 md:hidden">{m.furigana ?? "—"}</span>
                                 <span className="text-slate-500">性別</span>
                                 <span className="text-slate-800">{m.gender === "male" ? "男" : "女"}</span>
                                 <span className="text-slate-500">ローカル/ゲスト</span>
@@ -406,7 +654,7 @@ export function MembersList({
           </table>
         </div>
         {filteredMembers.length === 0 && (
-          <div className="px-2 py-6 text-center text-slate-500 text-sm">
+          <div className="px-1.5 py-6 text-center text-slate-500 text-sm">
             {members.length === 0
               ? "メンバーがいません"
               : "条件に一致するメンバーがいません"}

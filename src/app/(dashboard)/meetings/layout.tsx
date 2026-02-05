@@ -45,7 +45,7 @@ export default async function MeetingsLayout({
 
   return (
     <div className="space-y-0">
-      <div className="-mx-4 -mt-4 md:-mx-6 md:-mt-6">
+      <div className="-mx-4 md:-mx-6">
         <MeetingsFilterBar
           districts={districts ?? []}
           defaultDistrictId={profile?.main_district_id ?? districts?.[0]?.id ?? ""}

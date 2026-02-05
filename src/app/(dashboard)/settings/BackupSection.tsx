@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useState } from "react";
 import { format } from "date-fns";
 
-export default function BackupPage() {
+export function BackupSection() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -105,10 +105,10 @@ export default function BackupPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-bold text-slate-800">バックアップ・リストア</h1>
+    <section className="space-y-4">
+      <h2 className="font-semibold text-slate-800">バックアップ・リストア</h2>
       <div className="bg-white rounded-lg border border-slate-200 p-4 space-y-4">
-        <h2 className="font-semibold text-slate-800">エクスポート</h2>
+        <h3 className="font-medium text-slate-800">エクスポート</h3>
         <p className="text-sm text-slate-600">
           データをJSON形式でダウンロードします。地方・地区・小組・メンバー・集会・出席・レギュラーメンバーリスト・小組集会記録・小組集会出欠を含みます。
         </p>
@@ -122,7 +122,7 @@ export default function BackupPage() {
         </button>
       </div>
       <div className="bg-white rounded-lg border border-slate-200 p-4 space-y-4">
-        <h2 className="font-semibold text-slate-800">インポート</h2>
+        <h3 className="font-medium text-slate-800">インポート</h3>
         <p className="text-sm text-slate-600">
           エクスポートしたJSONをアップロードしてデータを復元します。既存の同じIDは上書きされます。
         </p>
@@ -143,6 +143,6 @@ export default function BackupPage() {
         </form>
       </div>
       {message && <p className="text-sm text-slate-600">{message}</p>}
-    </div>
+    </section>
   );
 }
