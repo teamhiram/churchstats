@@ -69,19 +69,19 @@ export function OrganicDispatchForm({
       return;
     }
     const supabase = createClient();
-    supabase
+    const isAllDistricts = districtId === "__all__";
+    const query = supabase
       .from("groups")
       .select("id, name, district_id")
-      .eq("district_id", districtId)
-      .order("name")
-      .then(({ data }) => {
-        setGroups(data ?? []);
-        setGroupId((prev) => {
-          const list = data ?? [];
-          const stillValid = list.some((g) => g.id === prev) || prev === "__all__";
-          return stillValid ? prev : "__all__";
-        });
+      .order("name");
+    (isAllDistricts ? query : query.eq("district_id", districtId)).then(({ data }) => {
+      setGroups(data ?? []);
+      setGroupId((prev) => {
+        const list = data ?? [];
+        const stillValid = list.some((g) => g.id === prev) || prev === "__all__";
+        return stillValid ? prev : "__all__";
       });
+    });
   }, [districtId]);
 
   useEffect(() => {
@@ -152,66 +152,117 @@ export function OrganicDispatchForm({
     };
   }, [groupId, weekStartIso, groups]);
 
-  const upsertDispatch = useCallback(
-    async (memberId: string, payload: { dispatch_type?: DispatchType | null; dispatch_date?: string | null; dispatch_memo?: string | null }) => {
+  const syncOne = useCallback(
+    async (
+      memberId: string,
+      overrides?: { type?: "" | DispatchType; date?: string; memo?: string }
+    ) => {
       if (!groupId || !weekStartIso) return;
       const effectiveGroupId = groupId === "__all__" ? roster.find((m) => m.id === memberId)?.group_id : groupId;
       if (!effectiveGroupId) return;
       setSaveError(null);
+      const type = ((overrides?.type !== undefined ? overrides.type : localType.get(memberId)) ?? "") as DispatchType | "";
+      const date = (overrides?.date !== undefined ? overrides.date : localDate.get(memberId) ?? "").trim();
+      const memo = (overrides?.memo !== undefined ? overrides.memo : localMemo.get(memberId) ?? "").trim();
+      const allFilled = type !== "" && date !== "" && memo !== "";
       const supabase = createClient();
       const existing = dispatchMap.get(memberId);
-      if (existing) {
-        const { error } = await supabase
-          .from("organic_dispatch_records")
-          .update({
-            ...payload,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existing.id);
+
+      if (allFilled) {
+        const payload = {
+          dispatch_type: type as DispatchType,
+          dispatch_date: date,
+          dispatch_memo: memo,
+        };
+        if (existing) {
+          const { error } = await supabase
+            .from("organic_dispatch_records")
+            .update({
+              ...payload,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", existing.id);
+          if (error) {
+            const isRls = /row-level security|RLS/i.test(error.message ?? "");
+            setSaveError(isRls ? "保存する権限がありません。報告者以上のロールが必要です。" : `保存に失敗しました: ${error.message}`);
+            return;
+          }
+        } else {
+          const { data: inserted, error } = await supabase
+            .from("organic_dispatch_records")
+            .insert({
+              member_id: memberId,
+              group_id: effectiveGroupId,
+              week_start: weekStartIso,
+              ...payload,
+            })
+            .select("id, member_id, group_id, week_start, dispatch_type, dispatch_date, dispatch_memo")
+            .single();
+          if (error) {
+            const isRls = /row-level security|RLS/i.test(error.message ?? "");
+            setSaveError(isRls ? "保存する権限がありません。報告者以上のロールが必要です。" : `保存に失敗しました: ${error.message}`);
+            return;
+          }
+          if (inserted) {
+            setDispatchMap((prev) => new Map(prev).set(memberId, inserted as DispatchRow));
+          }
+        }
+        router.refresh();
+      } else if (existing) {
+        const { error } = await supabase.from("organic_dispatch_records").delete().eq("id", existing.id);
         if (error) {
           const isRls = /row-level security|RLS/i.test(error.message ?? "");
-          setSaveError(isRls ? "保存する権限がありません。報告者以上のロールが必要です。" : `保存に失敗しました: ${error.message}`);
+          setSaveError(isRls ? "削除する権限がありません。" : `削除に失敗しました: ${error.message}`);
           return;
         }
-      } else {
-        const { data: inserted, error } = await supabase
-          .from("organic_dispatch_records")
-          .insert({
-            member_id: memberId,
-            group_id: effectiveGroupId,
-            week_start: weekStartIso,
-            ...payload,
-          })
-          .select("id, member_id, group_id, week_start, dispatch_type, dispatch_date, dispatch_memo")
-          .single();
-        if (error) {
-          const isRls = /row-level security|RLS/i.test(error.message ?? "");
-          setSaveError(isRls ? "保存する権限がありません。報告者以上のロールが必要です。" : `保存に失敗しました: ${error.message}`);
-          return;
-        }
-        if (inserted) {
-          setDispatchMap((prev) => new Map(prev).set(memberId, inserted as DispatchRow));
-        }
+        setDispatchMap((prev) => {
+          const next = new Map(prev);
+          next.delete(memberId);
+          return next;
+        });
+        router.refresh();
       }
-      router.refresh();
     },
-    [groupId, weekStartIso, dispatchMap, roster]
+    [groupId, weekStartIso, dispatchMap, roster, localType, localDate, localMemo]
   );
 
   const onTypeChange = (memberId: string, value: "" | DispatchType) => {
     setLocalType((prev) => new Map(prev).set(memberId, value));
-    upsertDispatch(memberId, { dispatch_type: value || null });
+    syncOne(memberId, { type: value });
   };
 
   const onDateChange = (memberId: string, value: string) => {
     setLocalDate((prev) => new Map(prev).set(memberId, value));
-    upsertDispatch(memberId, { dispatch_date: value || null });
+    syncOne(memberId, { date: value });
   };
 
-  const onMemoBlur = (memberId: string) => {
-    const memo = localMemo.get(memberId) ?? "";
-    upsertDispatch(memberId, { dispatch_memo: memo || null });
+  const onMemoBlur = (memberId: string, memoValue?: string) => {
+    if (memoValue !== undefined) {
+      setLocalMemo((prev) => new Map(prev).set(memberId, memoValue));
+      syncOne(memberId, { memo: memoValue });
+    } else {
+      syncOne(memberId);
+    }
   };
+
+  useEffect(() => {
+    const hasIncomplete = roster.some((m) => {
+      const t = (localType.get(m.id) ?? "") as string;
+      const d = (localDate.get(m.id) ?? "").trim();
+      const me = (localMemo.get(m.id) ?? "").trim();
+      const hasAny = t !== "" || d !== "" || me !== "";
+      const hasAll = t !== "" && d !== "" && me !== "";
+      return hasAny && !hasAll;
+    });
+    if (!hasIncomplete) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "種類・日付・メモの3項目をすべて入力しないと保存されません。";
+      return "種類・日付・メモの3項目をすべて入力しないと保存されません。";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [roster, localType, localDate, localMemo]);
 
   return (
     <div className="space-y-4">
@@ -221,12 +272,13 @@ export function OrganicDispatchForm({
         <>
       <div className="grid gap-4 sm:grid-cols-1 max-w-xs">
         <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">小組</label>
           <select
             value={groupId}
             onChange={(e) => setGroupId(e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
           >
-            <option value="__all__">すべて</option>
+            <option value="__all__">すべての小組</option>
             {groups.map((g) => (
               <option key={g.id} value={g.id}>{g.name}</option>
             ))}
@@ -242,6 +294,9 @@ export function OrganicDispatchForm({
 
       {groupId && (
         <div>
+          <p className="text-slate-600 text-sm mb-2">
+            種類・日付・メモの3項目をすべて入力すると保存されます。3項目入力しないままページを移動すると保存されません。
+          </p>
           {loading ? (
             <p className="text-slate-500 text-sm">読み込み中…</p>
           ) : (
@@ -263,8 +318,16 @@ export function OrganicDispatchForm({
                       </td>
                     </tr>
                   )}
-                  {roster.map((m) => (
-                    <tr key={m.id} className="hover:bg-slate-50">
+                  {roster.map((m) => {
+                    const hasType = (localType.get(m.id) ?? "") !== "";
+                    const hasDate = (localDate.get(m.id) ?? "") !== "";
+                    const hasMemo = (localMemo.get(m.id) ?? "").trim() !== "";
+                    const hasInput = hasType || hasDate || hasMemo;
+                    return (
+                    <tr
+                      key={m.id}
+                      className={hasInput ? "bg-primary-50/70 hover:bg-primary-100/70 border-l-2 border-l-primary-500" : "hover:bg-slate-50"}
+                    >
                       <td className="px-3 py-1.5 text-slate-800">{m.name}</td>
                       <td className="px-3 py-1.5">
                         <select
@@ -298,13 +361,14 @@ export function OrganicDispatchForm({
                           type="text"
                           value={localMemo.get(m.id) ?? ""}
                           onChange={(e) => setLocalMemo((prev) => new Map(prev).set(m.id, e.target.value))}
-                          onBlur={() => onMemoBlur(m.id)}
+                          onBlur={(e) => onMemoBlur(m.id, e.target.value)}
                           placeholder="メモ"
                           className="w-full min-w-[120px] max-w-xs px-2 py-0.5 text-sm border border-slate-300 rounded touch-target"
                         />
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

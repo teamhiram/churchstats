@@ -1,7 +1,7 @@
-import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { SmallGroupAttendance } from "./SmallGroupAttendance";
 import { getMondayWeeksInYear, getDefaultMondayWeekStart, formatDateYmd } from "@/lib/weekUtils";
+import { getMeetingsLayoutData } from "@/lib/cachedData";
 
 export default async function SmallGroupAttendancePage({
   searchParams,
@@ -25,48 +25,26 @@ export default async function SmallGroupAttendancePage({
           ? defaultWeekStart
           : formatDateYmd(mondayWeeks[0]?.weekStart ?? new Date(initialYear, 0, 1)));
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, profile, districts } = await getMeetingsLayoutData();
   if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("main_district_id, role")
-    .eq("id", user.id)
-    .single();
 
   const role = profile?.role ?? "viewer";
   const canSeeAllDistricts = role === "admin" || role === "co_admin" || role === "reporter";
-
-  let districtIds: string[] = [];
-  if (!canSeeAllDistricts) {
-    const { data: reporterDistricts } = await supabase
-      .from("reporter_districts")
-      .select("district_id")
-      .eq("user_id", user.id);
-    districtIds = [
-      ...(profile?.main_district_id ? [profile.main_district_id] : []),
-      ...(reporterDistricts ?? []).map((r) => r.district_id),
-    ].filter((id, i, arr) => arr.indexOf(id) === i);
-  }
-
-  const { data: districts } = canSeeAllDistricts
-    ? await supabase.from("districts").select("id, name").order("name")
-    : await supabase
-        .from("districts")
-        .select("id, name")
-        .in("id", districtIds.length > 0 ? districtIds : ["__none__"])
-        .order("name");
-
   const defaultDistrictId =
-    params.district_id ?? (profile?.main_district_id ?? districts?.[0]?.id ?? "");
+    params.district_id ?? (canSeeAllDistricts ? "__all__" : (profile?.main_district_id ?? districts[0]?.id ?? ""));
+
+  if (canSeeAllDistricts && params.district_id == null) {
+    const q = new URLSearchParams();
+    q.set("district_id", "__all__");
+    if (params.year != null) q.set("year", params.year);
+    if (params.week_start != null) q.set("week_start", params.week_start);
+    redirect(`/meetings/small-group?${q.toString()}`);
+  }
 
   return (
     <div className="space-y-6">
       <SmallGroupAttendance
-        districts={districts ?? []}
+        districts={districts}
         defaultDistrictId={defaultDistrictId}
         initialYear={initialYear}
         initialWeekStartIso={weekStartIso}

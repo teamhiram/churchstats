@@ -50,7 +50,7 @@ export function PrayerMeetingAttendance({
 
   const ensurePrayerMeetingRecord = useCallback(
     async (initialEventDate?: string | null) => {
-      if (!districtId || !weekStartIso) return null;
+      if (!districtId || !weekStartIso || districtId === "__all__") return null;
       const supabase = createClient();
       const district = districts.find((d) => d.id === districtId);
       const name = district ? `${district.name}祈りの集会` : "祈りの集会";
@@ -89,6 +89,80 @@ export function PrayerMeetingAttendance({
     let cancelled = false;
     setLoading(true);
     const supabase = createClient();
+    const isAllDistricts = districtId === "__all__";
+
+    if (isAllDistricts) {
+      const districtIdsToLoad = districts.map((d) => d.id).filter((id) => id !== "__all__");
+      if (districtIdsToLoad.length === 0) {
+        setRecordId(null);
+        setEventDate("");
+        setRoster([]);
+        setAttendanceMap(new Map());
+        setMemos(new Map());
+        setLoading(false);
+        return;
+      }
+      (async () => {
+        const { data: recordsData } = await supabase
+          .from("prayer_meeting_records")
+          .select("id, event_date")
+          .in("district_id", districtIdsToLoad)
+          .eq("week_start", weekStartIso);
+        if (cancelled) return;
+        const recordIds = (recordsData ?? []).map((r) => r.id);
+
+        const { data: membersData } = await supabase
+          .from("members")
+          .select("id, name, district_id")
+          .in("district_id", districtIdsToLoad)
+          .order("name");
+        if (cancelled) return;
+        const districtMembers = (membersData ?? []) as MemberRow[];
+
+        if (recordIds.length === 0) {
+          setRecordId(null);
+          setEventDate("");
+          setRoster(districtMembers);
+          setAttendanceMap(new Map());
+          setMemos(new Map());
+          setLoading(false);
+          return;
+        }
+
+        const { data: attData } = await supabase
+          .from("prayer_meeting_attendance")
+          .select("id, member_id, memo, is_online, is_away")
+          .in("prayer_meeting_record_id", recordIds);
+        if (cancelled) return;
+        const records = (attData ?? []) as AttendanceRow[];
+        const map = new Map<string, AttendanceRow>();
+        const memoMap = new Map<string, string>();
+        records.forEach((r) => {
+          map.set(r.member_id, r);
+          memoMap.set(r.member_id, r.memo ?? "");
+        });
+        const districtMemberIds = new Set(districtMembers.map((m) => m.id));
+        const guestIds = records.map((r) => r.member_id).filter((id) => !districtMemberIds.has(id));
+        let guests: MemberRow[] = [];
+        if (guestIds.length > 0) {
+          const { data: guestData } = await supabase
+            .from("members")
+            .select("id, name, district_id")
+            .in("id", guestIds);
+          guests = (guestData ?? []) as MemberRow[];
+        }
+        setRecordId(null);
+        setEventDate("");
+        setRoster([...districtMembers, ...guests]);
+        setAttendanceMap(map);
+        setMemos(memoMap);
+        setLoading(false);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
     supabase
       .from("prayer_meeting_records")
       .select("id, event_date")
@@ -150,7 +224,7 @@ export function PrayerMeetingAttendance({
     return () => {
       cancelled = true;
     };
-  }, [districtId, weekStartIso]);
+  }, [districtId, weekStartIso, districts]);
 
   const toggleAttendance = async (memberId: string, member: MemberRow) => {
     setMessage("");
@@ -257,6 +331,8 @@ export function PrayerMeetingAttendance({
     router.refresh();
   };
 
+  const isAllDistricts = districtId === "__all__";
+
   return (
     <div className="space-y-4">
       {!districtId ? (
@@ -264,8 +340,11 @@ export function PrayerMeetingAttendance({
       ) : (
         <>
           {message && <p className="text-sm text-amber-600">{message}</p>}
+          {isAllDistricts && (
+            <p className="text-slate-600 text-sm">全ての地区を表示しています。出欠の登録・変更は地区を選択してから行ってください。</p>
+          )}
 
-          {districtId && !loading && (
+          {districtId && !loading && !isAllDistricts && (
             <div className="flex flex-wrap items-end gap-4">
               <div className="min-w-[200px]">
                 <label className="block text-sm font-medium text-slate-700 mb-1">実施日</label>
@@ -325,10 +404,11 @@ export function PrayerMeetingAttendance({
                                 type="button"
                                 role="switch"
                                 aria-checked={attended}
+                                disabled={isAllDistricts}
                                 onClick={() => toggleAttendance(m.id, m)}
-                                className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
-                                  attended ? "bg-primary-600" : "bg-slate-200"
-                                }`}
+                                className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
+                                  isAllDistricts ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                                } ${attended ? "bg-primary-600" : "bg-slate-200"}`}
                               >
                                 <span
                                   className={`pointer-events-none absolute left-0.5 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow ring-0 transition ${
@@ -343,10 +423,11 @@ export function PrayerMeetingAttendance({
                                   type="button"
                                   role="switch"
                                   aria-checked={isOnline}
+                                  disabled={isAllDistricts}
                                   onClick={() => toggleOnline(m.id)}
-                                  className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
-                                    isOnline ? "bg-primary-600" : "bg-slate-200"
-                                  }`}
+                                  className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
+                                    isAllDistricts ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                                  } ${isOnline ? "bg-primary-600" : "bg-slate-200"}`}
                                 >
                                   <span
                                     className={`pointer-events-none absolute left-0.5 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow ring-0 transition ${
@@ -364,10 +445,11 @@ export function PrayerMeetingAttendance({
                                   type="button"
                                   role="switch"
                                   aria-checked={isAway}
+                                  disabled={isAllDistricts}
                                   onClick={() => toggleIsAway(m.id)}
-                                  className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
-                                    isAway ? "bg-primary-600" : "bg-slate-200"
-                                  }`}
+                                  className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
+                                    isAllDistricts ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                                  } ${isAway ? "bg-primary-600" : "bg-slate-200"}`}
                                 >
                                   <span
                                     className={`pointer-events-none absolute left-0.5 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow ring-0 transition ${
@@ -383,12 +465,13 @@ export function PrayerMeetingAttendance({
                               <input
                                 type="text"
                                 value={memo}
+                                readOnly={isAllDistricts}
                                 onChange={(e) => setMemos((prev) => new Map(prev).set(m.id, e.target.value))}
                                 onBlur={() => saveMemo(m.id)}
                                 placeholder={memoPlaceholder}
                                 className={`w-full max-w-xs px-2 py-0.5 text-sm border rounded touch-target ${
                                   isAway ? "border-amber-400" : "border-slate-300"
-                                }`}
+                                } ${isAllDistricts ? "bg-slate-100 cursor-not-allowed" : ""}`}
                               />
                             </td>
                           </tr>
