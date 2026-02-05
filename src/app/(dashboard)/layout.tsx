@@ -65,13 +65,13 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-slate-50" style={{ minHeight: "100vh", backgroundColor: "#f8fafc" }}>
+    <div className="min-h-screen flex flex-col bg-slate-50" style={{ minHeight: "100vh", backgroundColor: "#f8fafc" }}>
       <Nav
         displayName={displayName}
         roleLabel={roleLabel}
         localityName={localityName}
       />
-      <main className="flex-1 p-4 md:p-6 overflow-auto">{children}</main>
+      <main className="flex-1 pt-0 md:pt-12 p-4 md:p-6 overflow-auto">{children}</main>
     </div>
   );
 }

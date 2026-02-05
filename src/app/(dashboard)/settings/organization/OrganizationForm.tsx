@@ -36,8 +36,9 @@ export function OrganizationForm({
   const [absenceWeeks, setAbsenceWeeks] = useState(initialAbsenceWeeks);
   const [absenceWeeksSaving, setAbsenceWeeksSaving] = useState(false);
   const [absenceWeeksMessage, setAbsenceWeeksMessage] = useState("");
-  const [selectedLocalityId, setSelectedLocalityId] = useState<string>(() =>
-    userLocalities.length === 1 ? (userLocalities[0]?.id ?? "") : (userLocalities[0]?.id ?? "")
+  const userLocalityIds = userLocalities.map((l) => l.id ?? "");
+  const [selectedLocalityIdForAdd, setSelectedLocalityIdForAdd] = useState<string>(() =>
+    userLocalities[0]?.id ?? ""
   );
   const showDistrictModal = addFromUrl === "district";
   const showGroupModal = addFromUrl === "group";
@@ -46,7 +47,7 @@ export function OrganizationForm({
   const editingDistrictId = editDistrictIdFromUrl ?? null;
 
   const districtsForLocality = districtsList
-    .filter((d) => (d.locality_id ?? "") === selectedLocalityId)
+    .filter((d) => userLocalityIds.includes(d.locality_id ?? ""))
     .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
   const groupsByDistrict = districtsForLocality.map((d) => ({
     district: d,
@@ -56,10 +57,8 @@ export function OrganizationForm({
   }));
 
   useEffect(() => {
-    if (userLocalities.length === 1 && userLocalities[0]?.id) {
-      setSelectedLocalityId(userLocalities[0].id);
-    } else if (!selectedLocalityId && userLocalities[0]?.id) {
-      setSelectedLocalityId(userLocalities[0].id);
+    if (userLocalities[0]?.id && !selectedLocalityIdForAdd) {
+      setSelectedLocalityIdForAdd(userLocalities[0].id);
     }
   }, [userLocalities]);
 
@@ -91,8 +90,8 @@ export function OrganizationForm({
     setTimeout(() => setAbsenceWeeksMessage(""), 2500);
   };
 
-  const selectedLocality = localities.find((l) => l.id === selectedLocalityId);
-  const showLocalityDropdown = userLocalities.length > 1;
+  const accountLocalityNames = userLocalities.map((l) => l.name ?? "").filter(Boolean).join("、") || "—";
+  const selectedLocalityForAdd = localities.find((l) => l.id === selectedLocalityIdForAdd);
 
   return (
     <div className="space-y-8 max-w-2xl">
@@ -123,32 +122,17 @@ export function OrganizationForm({
         </div>
       </section>
 
-      {/* 地方 */}
+      {/* アカウントの所属地方（表示のみ・変更不可） */}
       <section>
-        <h2 className="font-semibold text-slate-800 mb-2">地方</h2>
-        {showLocalityDropdown ? (
-          <select
-            value={selectedLocalityId}
-            onChange={(e) => setSelectedLocalityId(e.target.value)}
-            className="px-3 py-2 border border-slate-300 rounded-lg touch-target min-w-[200px]"
-          >
-            <option value="">地方を選択</option>
-            {userLocalities.map((l) => (
-              <option key={l.id ?? ""} value={l.id ?? ""}>
-                {l.name ?? ""}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <p className="text-slate-700">{selectedLocality?.name ?? "—"}</p>
-        )}
+        <h2 className="font-semibold text-slate-800 mb-2">アカウントの所属地方</h2>
+        <p className="text-slate-700">{accountLocalityNames}</p>
       </section>
 
       {/* 地区 */}
       <section>
         <div className="flex items-center justify-between gap-2 mb-2">
           <h2 className="font-semibold text-slate-800">地区</h2>
-          {selectedLocalityId ? (
+          {userLocalityIds.length > 0 ? (
             <a
               href="/settings/organization?add=district"
               className="flex items-center justify-center w-10 h-10 rounded-full bg-red-600 text-white hover:bg-red-700 touch-target shrink-0 no-underline"
@@ -159,7 +143,7 @@ export function OrganizationForm({
           ) : (
             <span
               className="flex items-center justify-center w-10 h-10 rounded-full bg-red-600 text-white opacity-50 cursor-not-allowed shrink-0"
-              title="地方を選択すると追加できます"
+              title="所属地方に地区を追加できます"
             >
               +
             </span>
@@ -324,10 +308,29 @@ export function OrganizationForm({
           <div className="bg-white rounded-lg shadow-lg max-w-sm w-full p-6">
             <h3 className="font-semibold text-slate-800 mb-4">地区を追加</h3>
             <p className="text-sm text-slate-600 mb-2">
-              「{selectedLocality?.name ?? ""}」に紐づく地区を追加します。
+              「{selectedLocalityForAdd?.name ?? ""}」に紐づく地区を追加します。
             </p>
             <form action={addDistrictAction} className="space-y-4">
-              <input type="hidden" name="localityId" value={selectedLocalityId} />
+              {userLocalities.length === 1 ? (
+                <input type="hidden" name="localityId" value={selectedLocalityIdForAdd} />
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">追加先の地方</label>
+                  <select
+                    name="localityId"
+                    value={selectedLocalityIdForAdd}
+                    onChange={(e) => setSelectedLocalityIdForAdd(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
+                    required
+                  >
+                    {userLocalities.map((l) => (
+                      <option key={l.id ?? ""} value={l.id ?? ""}>
+                        {l.name ?? ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {errorFromUrl && addFromUrl === "district" && (
                 <p className="text-sm text-red-600">{decodeURIComponent(errorFromUrl)}</p>
               )}

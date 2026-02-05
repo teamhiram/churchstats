@@ -29,26 +29,26 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-slate-800">ダッシュボード</h1>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <p className="text-sm text-slate-500">地方</p>
-          <p className="text-2xl font-semibold text-slate-800">{localities?.length ?? 0}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+        <div className="bg-white rounded-lg border border-slate-200 px-3 py-2.5">
+          <p className="text-xs text-slate-500">地方</p>
+          <p className="text-lg font-semibold text-slate-800 tabular-nums">{localities?.length ?? 0}</p>
         </div>
-        <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <p className="text-sm text-slate-500">地区</p>
-          <p className="text-2xl font-semibold text-slate-800">{districtsCount ?? 0}</p>
+        <div className="bg-white rounded-lg border border-slate-200 px-3 py-2.5">
+          <p className="text-xs text-slate-500">地区</p>
+          <p className="text-lg font-semibold text-slate-800 tabular-nums">{districtsCount ?? 0}</p>
         </div>
-        <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <p className="text-sm text-slate-500">小組</p>
-          <p className="text-2xl font-semibold text-slate-800">{groupsCount ?? 0}</p>
+        <div className="bg-white rounded-lg border border-slate-200 px-3 py-2.5">
+          <p className="text-xs text-slate-500">小組</p>
+          <p className="text-lg font-semibold text-slate-800 tabular-nums">{groupsCount ?? 0}</p>
         </div>
-        <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <p className="text-sm text-slate-500">メンバー登録数</p>
-          <p className="text-2xl font-semibold text-slate-800">{membersCount ?? 0}</p>
+        <div className="bg-white rounded-lg border border-slate-200 px-3 py-2.5">
+          <p className="text-xs text-slate-500">メンバー登録数</p>
+          <p className="text-lg font-semibold text-slate-800 tabular-nums">{membersCount ?? 0}</p>
         </div>
-        <div className="bg-white rounded-lg border border-slate-200 p-4">
-          <p className="text-sm text-slate-500">集会登録数</p>
-          <p className="text-2xl font-semibold text-slate-800">{meetingsCount ?? 0}</p>
+        <div className="bg-white rounded-lg border border-slate-200 px-3 py-2.5">
+          <p className="text-xs text-slate-500">集会登録数</p>
+          <p className="text-lg font-semibold text-slate-800 tabular-nums">{meetingsCount ?? 0}</p>
         </div>
       </div>
 
