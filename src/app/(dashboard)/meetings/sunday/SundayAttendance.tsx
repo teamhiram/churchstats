@@ -6,6 +6,7 @@ import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
 import { formatDateYmd } from "@/lib/weekUtils";
 import { CATEGORY_LABELS } from "@/types/database";
 import type { Category } from "@/types/database";
+import { ensureSundayMeetingsBatch } from "./actions";
 
 type District = { id: string; name: string };
 type Group = { id: string; name: string; district_id: string };
@@ -134,11 +135,8 @@ export function SundayAttendance({
         return;
       }
       (async () => {
-        const meetingIds: string[] = [];
-        for (const did of districtIdsToLoad) {
-          const mid = await ensureMeetingForDistrict(did);
-          if (mid) meetingIds.push(mid);
-        }
+        const meetingIdMap = await ensureSundayMeetingsBatch(sundayIso, districts);
+        const meetingIds = districtIdsToLoad.map((did) => meetingIdMap[did]).filter(Boolean);
         if (cancelled) return;
         setMeetingId(null);
 

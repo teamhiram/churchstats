@@ -25,17 +25,16 @@ function parseYmd(s: string): Date {
   return new Date(y, m - 1, d);
 }
 
-export async function getListData(
+async function getListDataUncached(
   year: number,
   localityId: string | null,
-  localOnly: boolean = true
+  localOnly: boolean
 ): Promise<{ weeks: WeekRow[]; absenceAlertWeeks: number }> {
   const supabase = await createClient();
-  // 主日集会と同じ「日曜基準」: n週目 = その年の第n日曜の週（月曜〜日曜）
   const sundays = getSundaysInYear(year);
   const weeks = sundays.map((s) => {
-    const weekStart = addDays(s.date, -6); // その週の月曜
-    const weekEnd = s.date; // 日曜
+    const weekStart = addDays(s.date, -6);
+    const weekEnd = s.date;
     return {
       weekNumber: s.weekNumber,
       weekStart,
@@ -90,7 +89,7 @@ export async function getListData(
     groupRecordsQuery,
     supabase
       .from("organic_dispatch_records")
-      .select("member_id, week_start, group_id")
+      .select("member_id, week_start, group_id, dispatch_type, dispatch_date, dispatch_memo")
       .gte("week_start", yearStart)
       .lte("week_start", yearEnd),
   ]);
@@ -103,7 +102,23 @@ export async function getListData(
     group_id: string | null;
   }[];
   const groupRecords = (groupRecordsRes.data ?? []) as { id: string; week_start: string; group_id: string }[];
-  const dispatches = (dispatchRes.data ?? []) as { member_id: string; week_start: string; group_id: string }[];
+  const dispatchRows = (dispatchRes.data ?? []) as {
+    member_id: string;
+    week_start: string;
+    group_id: string;
+    dispatch_type: string | null;
+    dispatch_date: string | null;
+    dispatch_memo: string | null;
+  }[];
+  const dispatches = dispatchRows.filter(
+    (d) =>
+      d.dispatch_type != null &&
+      d.dispatch_type !== "" &&
+      d.dispatch_date != null &&
+      (d.dispatch_date as string) !== "" &&
+      d.dispatch_memo != null &&
+      (d.dispatch_memo as string).trim() !== ""
+  );
 
   const mainMeetingIds = new Set(
     meetings
@@ -201,6 +216,14 @@ export async function getListData(
   return { weeks: weekRows, absenceAlertWeeks };
 }
 
+export async function getListData(
+  year: number,
+  localityId: string | null,
+  localOnly: boolean = true
+): Promise<{ weeks: WeekRow[]; absenceAlertWeeks: number }> {
+  return getListDataUncached(year, localityId, localOnly);
+}
+
 export async function getWeekDetail(
   weekStart: string,
   localityId: string | null,
@@ -231,7 +254,7 @@ export async function getWeekDetail(
   } else {
     const dq = supabase
       .from("organic_dispatch_records")
-      .select("member_id, group_id")
+      .select("member_id, group_id, dispatch_type, dispatch_date, dispatch_memo")
       .eq("week_start", weekStart);
     if (filterGroupIds.length > 0) dq.in("group_id", filterGroupIds);
     dispatchPromise = (async () => {
@@ -272,9 +295,23 @@ export async function getWeekDetail(
   const groupRecordIdsThisWeek = new Set(
     ((groupRecordsRes.data ?? []) as { id: string }[]).map((r) => r.id)
   );
-  const dispatchMemberIds = new Set(
-    ((dispatchRes.data ?? []) as { member_id: string }[]).map((d) => d.member_id)
+  const dispatchRowsDetail = (dispatchRes.data ?? []) as {
+    member_id: string;
+    group_id: string;
+    dispatch_type: string | null;
+    dispatch_date: string | null;
+    dispatch_memo: string | null;
+  }[];
+  const completeDispatches = dispatchRowsDetail.filter(
+    (d) =>
+      d.dispatch_type != null &&
+      d.dispatch_type !== "" &&
+      d.dispatch_date != null &&
+      (d.dispatch_date as string) !== "" &&
+      d.dispatch_memo != null &&
+      (d.dispatch_memo as string).trim() !== ""
   );
+  const dispatchMemberIds = new Set(completeDispatches.map((d) => d.member_id));
 
   const mainMeetingIds = new Set(
     mainMeetings

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { SundayAttendance } from "./SundayAttendance";
 import { getMondayWeeksInYear, getDefaultMondayWeekStart, formatDateYmd, getSundayFromWeekStart, getSundayIsoFromWeekStart } from "@/lib/weekUtils";
+import { getMeetingsLayoutData } from "@/lib/cachedData";
 
 export default async function SundayAttendancePage({
   searchParams,
@@ -27,51 +28,20 @@ export default async function SundayAttendancePage({
   const sundayDisplay = getSundayFromWeekStart(weekStartIso);
   const initialSundayIso = getSundayIsoFromWeekStart(weekStartIso);
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, profile, districts } = await getMeetingsLayoutData();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("main_district_id, role")
-    .eq("id", user.id)
-    .single();
-
-  const role = profile?.role ?? "viewer";
-  const canSeeAllDistricts = role === "admin" || role === "co_admin" || role === "reporter";
-
-  let districtIds: string[] = [];
-  if (!canSeeAllDistricts) {
-    const { data: reporterDistricts } = await supabase
-      .from("reporter_districts")
-      .select("district_id")
-      .eq("user_id", user.id);
-    districtIds = [
-      ...(profile?.main_district_id ? [profile.main_district_id] : []),
-      ...(reporterDistricts ?? []).map((r) => r.district_id),
-    ].filter((id, i, arr) => arr.indexOf(id) === i);
-  }
-
-  const { data: districts } = canSeeAllDistricts
-    ? await supabase.from("districts").select("id, name").order("name")
-    : await supabase
-        .from("districts")
-        .select("id, name")
-        .in("id", districtIds.length > 0 ? districtIds : ["__none__"])
-        .order("name");
-
+  const supabase = await createClient();
   const { data: groups } = await supabase.from("groups").select("id, name, district_id").order("name");
 
   const defaultDistrictId =
-    params.district_id ?? (profile?.main_district_id ?? districts?.[0]?.id ?? "");
+    params.district_id ?? (profile?.main_district_id ?? districts[0]?.id ?? "");
 
   return (
     <div className="space-y-6">
       <p className="text-lg font-medium text-slate-800">主日：{sundayDisplay}</p>
       <SundayAttendance
-        districts={districts ?? []}
+        districts={districts}
         groups={groups ?? []}
         defaultDistrictId={defaultDistrictId}
         initialSundayIso={initialSundayIso}

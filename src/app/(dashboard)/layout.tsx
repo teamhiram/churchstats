@@ -1,8 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Nav } from "@/components/Nav";
-import { ROLE_LABELS } from "@/types/database";
-import type { Role } from "@/types/database";
+import { getCurrentUserWithProfile } from "@/lib/cachedData";
 
 export const dynamic = "force-dynamic";
 
@@ -11,11 +9,9 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  let user: { id: string } | null = null;
+  let data: Awaited<ReturnType<typeof getCurrentUserWithProfile>>;
   try {
-    const supabase = await createClient();
-    const { data: { user: u } } = await supabase.auth.getUser();
-    user = u;
+    data = await getCurrentUserWithProfile();
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return (
@@ -29,47 +25,16 @@ export default async function DashboardLayout({
       </div>
     );
   }
-  if (!user) {
+  if (!data.user) {
     redirect("/");
-  }
-
-  let displayName: string | null = null;
-  let roleLabel: string = "閲覧者";
-  let localityName: string | null = null;
-
-  const supabase = await createClient();
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, role, main_district_id")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (profile) {
-    displayName = profile.full_name ?? null;
-    roleLabel = ROLE_LABELS[(profile.role as Role) ?? "viewer"];
-    if (profile.main_district_id) {
-      const { data: district } = await supabase
-        .from("districts")
-        .select("locality_id")
-        .eq("id", profile.main_district_id)
-        .maybeSingle();
-      if (district?.locality_id) {
-        const { data: locality } = await supabase
-          .from("localities")
-          .select("name")
-          .eq("id", district.locality_id)
-          .maybeSingle();
-        localityName = locality?.name ?? null;
-      }
-    }
   }
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50" style={{ minHeight: "100vh", backgroundColor: "#f8fafc" }}>
       <Nav
-        displayName={displayName}
-        roleLabel={roleLabel}
-        localityName={localityName}
+        displayName={data.displayName}
+        roleLabel={data.roleLabel}
+        localityName={data.localityName}
       />
       <main className="flex-1 pt-0 md:pt-12 p-4 md:p-6 overflow-auto">{children}</main>
     </div>

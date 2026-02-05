@@ -1,13 +1,12 @@
-import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { BackupSection } from "./BackupSection";
+import { CacheSection } from "./CacheSection";
 import { UserManagement } from "./UserManagement";
+import { getCurrentUserWithProfile } from "@/lib/cachedData";
 
 export default async function SettingsPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, profile } = await getCurrentUserWithProfile();
   if (!user) redirect("/login");
-  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   const role = profile?.role ?? "viewer";
   const canManageUsers = role === "admin" || role === "co_admin";
 
@@ -20,6 +19,7 @@ export default async function SettingsPage() {
           <UserManagement />
         </section>
       )}
+      <CacheSection />
       <BackupSection />
       {!canManageUsers && (
         <p className="text-slate-500 text-sm">システム設定の変更権限がありません。</p>
