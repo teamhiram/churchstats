@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -7,6 +8,8 @@ import { useEffect, useState } from "react";
 import { hiraganaToKatakana } from "@/lib/furigana";
 import { CATEGORY_LABELS } from "@/types/database";
 import type { Category } from "@/types/database";
+import { addDistrictRegularMember, addGroupRegularMember } from "@/app/(dashboard)/settings/organization/actions";
+import { QUERY_KEYS } from "@/lib/queryClient";
 
 const CATEGORIES: Category[] = ["adult", "university", "high_school", "junior_high", "elementary", "preschool"];
 
@@ -77,6 +80,7 @@ function ButtonGroup<T extends string>({
 
 export default function NewMemberPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [districts, setDistricts] = useState<{ id: string; name: string }[]>([]);
   const [groups, setGroups] = useState<{ id: string; name: string; district_id: string }[]>([]);
   const [localities, setLocalities] = useState<{ id: string; name: string }[]>([]);
@@ -86,6 +90,8 @@ export default function NewMemberPage() {
   const [isLocal, setIsLocal] = useState(true);
   const [districtId, setDistrictId] = useState("");
   const [groupId, setGroupId] = useState<string | null>(null);
+  const [isDistrictRegular, setIsDistrictRegular] = useState(false);
+  const [isGroupRegular, setIsGroupRegular] = useState(false);
   const [localityId, setLocalityId] = useState("");
   const [ageGroup, setAgeGroup] = useState<Category | null>(null);
   const [isBaptized, setIsBaptized] = useState(true);
@@ -116,7 +122,7 @@ export default function NewMemberPage() {
     setLoading(true);
     const supabase = createClient();
     const furiganaValue = furigana.trim() || null;
-    const { error: err } = await supabase
+    const { data: inserted, error: err } = await supabase
       .from("members")
       .insert({
         name: name.trim(),
@@ -128,12 +134,20 @@ export default function NewMemberPage() {
         locality_id: !isLocal ? (localityId || null) : null,
         age_group: ageGroup,
         is_baptized: isBaptized,
-      });
+      })
+      .select("id")
+      .single();
     setLoading(false);
     if (err) {
       setError(err.message);
       return;
     }
+    const newId = (inserted as { id: string } | null)?.id;
+    if (newId && isLocal) {
+      if (districtId && isDistrictRegular) await addDistrictRegularMember(districtId, newId);
+      if (groupId && isGroupRegular) await addGroupRegularMember(groupId, newId);
+    }
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.members });
     router.push("/members");
     router.refresh();
   };
@@ -206,47 +220,71 @@ export default function NewMemberPage() {
           <>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">地区</label>
-              <ButtonGroup
-                value={districtId}
-                onChange={(v) => {
-                  setDistrictId(v);
-                  setGroupId(null);
-                }}
-                options={["", ...districts.map((d) => d.id)]}
-                getLabel={(v) => (v ? districts.find((d) => d.id === v)?.name ?? "" : "選択")}
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                <ButtonGroup
+                  value={districtId}
+                  onChange={(v) => {
+                    setDistrictId(v);
+                    setGroupId(null);
+                  }}
+                  options={["", ...districts.map((d) => d.id)]}
+                  getLabel={(v) => (v ? districts.find((d) => d.id === v)?.name ?? "" : "選択")}
+                />
+                {districtId ? (
+                  <>
+                    <span className="text-slate-500 text-sm">レギュラー</span>
+                    <Toggle
+                      checked={isDistrictRegular}
+                      onChange={() => setIsDistrictRegular((b) => !b)}
+                      ariaLabel="地区レギュラー"
+                    />
+                  </>
+                ) : null}
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">小組</label>
               {!districtId ? (
                 <p className="text-sm text-slate-500 py-1 min-h-12 flex items-center">地区を選ぶと選択肢が表示されます</p>
               ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setGroupId(null)}
-                    className={`rounded-lg px-2 py-[0.5em] text-sm font-medium transition-colors ${
-                      groupId === null
-                        ? "bg-primary-600 text-white"
-                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                    }`}
-                  >
-                    無所属
-                  </button>
-                  {filteredGroups.map((g) => (
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                     <button
-                      key={g.id}
                       type="button"
-                      onClick={() => setGroupId(g.id)}
+                      onClick={() => setGroupId(null)}
                       className={`rounded-lg px-2 py-[0.5em] text-sm font-medium transition-colors ${
-                        groupId === g.id
+                        groupId === null
                           ? "bg-primary-600 text-white"
                           : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                       }`}
                     >
-                      {g.name}
+                      無所属
                     </button>
-                  ))}
+                    {filteredGroups.map((g) => (
+                      <button
+                        key={g.id}
+                        type="button"
+                        onClick={() => setGroupId(g.id)}
+                        className={`rounded-lg px-2 py-[0.5em] text-sm font-medium transition-colors ${
+                          groupId === g.id
+                            ? "bg-primary-600 text-white"
+                            : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                        }`}
+                      >
+                        {g.name}
+                      </button>
+                    ))}
+                  </div>
+                  {groupId ? (
+                    <>
+                      <span className="text-slate-500 text-sm">レギュラー</span>
+                      <Toggle
+                        checked={isGroupRegular}
+                        onChange={() => setIsGroupRegular((b) => !b)}
+                        ariaLabel="小組レギュラー"
+                      />
+                    </>
+                  ) : null}
                 </div>
               )}
             </div>

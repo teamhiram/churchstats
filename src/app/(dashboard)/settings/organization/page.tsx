@@ -38,7 +38,7 @@ export default async function OrganizationPage() {
       : (localities ?? []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <h1 className="text-xl font-bold text-slate-800">枠組設定</h1>
       <Suspense fallback={<div className="text-slate-500">読み込み中…</div>}>
         <OrganizationForm

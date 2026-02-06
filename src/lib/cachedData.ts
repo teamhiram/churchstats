@@ -14,7 +14,17 @@ export type CurrentUserWithProfile = {
   localityName: string | null;
 };
 
-/** 同一リクエスト内で 1 回だけ取得。レイアウト・ページ間で共有 */
+type ProfileWithDistrictLocality = {
+  full_name: string | null;
+  role: string;
+  main_district_id: string | null;
+  districts: {
+    locality_id: string | null;
+    localities: { name: string } | null;
+  } | null;
+} | null;
+
+/** 同一リクエスト内で 1 回だけ取得。レイアウト・ページ間で共有。profile + district + locality を 1 クエリで取得。 */
 export const getCurrentUserWithProfile = cache(async (): Promise<CurrentUserWithProfile> => {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -24,33 +34,18 @@ export const getCurrentUserWithProfile = cache(async (): Promise<CurrentUserWith
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, role, main_district_id")
+    .select("full_name, role, main_district_id, districts!main_district_id(locality_id, localities(name))")
     .eq("id", user.id)
     .maybeSingle();
 
-  let displayName: string | null = profile?.full_name ?? null;
-  const roleLabel = ROLE_LABELS[(profile?.role as Role) ?? "viewer"];
-  let localityName: string | null = null;
-
-  if (profile?.main_district_id) {
-    const { data: district } = await supabase
-      .from("districts")
-      .select("locality_id")
-      .eq("id", profile.main_district_id)
-      .maybeSingle();
-    if (district?.locality_id) {
-      const { data: locality } = await supabase
-        .from("localities")
-        .select("name")
-        .eq("id", district.locality_id)
-        .maybeSingle();
-      localityName = locality?.name ?? null;
-    }
-  }
+  const row = profile as ProfileWithDistrictLocality;
+  const displayName = row?.full_name ?? null;
+  const roleLabel = ROLE_LABELS[(row?.role as Role) ?? "viewer"];
+  const localityName = row?.districts?.localities?.name ?? null;
 
   return {
     user: { id: user.id },
-    profile: profile ? { role: (profile.role as Role) ?? "viewer", main_district_id: profile.main_district_id } : null,
+    profile: row ? { role: (row.role as Role) ?? "viewer", main_district_id: row.main_district_id } : null,
     displayName,
     roleLabel,
     localityName,

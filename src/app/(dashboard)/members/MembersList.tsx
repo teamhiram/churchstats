@@ -617,7 +617,7 @@ export function MembersList({
                           <td className="px-1.5 py-1 text-slate-400">{isExpanded ? "▼" : "▶"}</td>
                           <td className="px-1.5 py-1">
                             <Link
-                              href={`/members/${m.id}/edit`}
+                              href={`/members/${m.id}/edit${buildMembersUrl(memberType).replace("/members", "")}`}
                               onClick={(e) => e.stopPropagation()}
                               className="font-medium text-primary-600 hover:underline"
                             >

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { Nav } from "@/components/Nav";
+import { QueryProvider } from "@/components/QueryProvider";
 import { getCurrentUserWithProfile } from "@/lib/cachedData";
 
 export const dynamic = "force-dynamic";
@@ -30,13 +31,15 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50" style={{ minHeight: "100vh", backgroundColor: "#f8fafc" }}>
-      <Nav
-        displayName={data.displayName}
-        roleLabel={data.roleLabel}
-        localityName={data.localityName}
-      />
-      <main className="flex-1 pt-0 md:pt-12 p-4 md:p-6 overflow-auto">{children}</main>
-    </div>
+    <QueryProvider>
+      <div className="min-h-screen flex flex-col bg-slate-50" style={{ minHeight: "100vh", backgroundColor: "#f8fafc" }}>
+        <Nav
+          displayName={data.displayName}
+          roleLabel={data.roleLabel}
+          localityName={data.localityName}
+        />
+        <main className="flex-1 pt-[calc(1rem+0.5em)] md:pt-[calc(3.5rem+0.5em)] p-4 md:p-6 overflow-auto">{children}</main>
+      </div>
+    </QueryProvider>
   );
 }

@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { StatisticsChartsDynamic } from "../statistics/StatisticsChartsDynamic";
+import { DispatchMonitor } from "./DispatchMonitor";
+import { getDispatchMonitorData } from "./actions";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -52,6 +54,13 @@ export default async function DashboardPage() {
   const districtsCount = districtsCountRes.count ?? 0;
   const groupsCount = groupsCountRes.count ?? 0;
 
+  let dispatchData: Awaited<ReturnType<typeof getDispatchMonitorData>>;
+  try {
+    dispatchData = await getDispatchMonitorData();
+  } catch {
+    dispatchData = { weekLabel: "—", mainAbsent: [], groupAbsent: [] };
+  }
+
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-slate-800">ダッシュボード</h1>
@@ -77,6 +86,8 @@ export default async function DashboardPage() {
           <p className="text-lg font-semibold text-slate-800 tabular-nums">{meetingsCount}</p>
         </div>
       </div>
+
+      <DispatchMonitor {...dispatchData} />
 
       <StatisticsChartsDynamic
         attendance={attendance}

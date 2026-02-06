@@ -1,9 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import Link from "next/link";
-import { Suspense } from "react";
 import { getListData } from "./actions";
-import { MeetingsListFilters } from "./MeetingsListFilters";
-import { MeetingsListTable } from "./MeetingsListTable";
+import { MeetingsListPageClient } from "./MeetingsListPageClient";
 
 export default async function MeetingsListPage({
   searchParams,
@@ -44,41 +41,18 @@ export default async function MeetingsListPage({
 
   const { weeks, absenceAlertWeeks } = await getListData(year, localityId, localOnly);
 
-  const years = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i);
-
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-xl font-bold text-slate-800">週別集計</h1>
-        <Link
-          href={`/meetings/sunday?year=${year}`}
-          className="inline-flex items-center justify-center px-4 py-2 bg-slate-600 text-white text-sm font-medium rounded-lg touch-target hover:bg-slate-700"
-        >
-          ← 出欠登録
-        </Link>
-      </div>
-
-      <Suspense fallback={<div className="h-10 w-48 rounded-lg bg-slate-100 animate-pulse" />}>
-        <MeetingsListFilters
-          year={year}
-          localityId={localityId}
-          localOnly={localOnly}
-          years={years}
-          localities={localities ?? []}
-        />
-      </Suspense>
-
-      <p className="text-xs text-slate-500">
-        欠席アラート: 過去{absenceAlertWeeks}週間の出席者で今週欠席した方を表示。派遣先にある名前は青、ない名前は赤。
-      </p>
-
-      <MeetingsListTable
-        weeks={weeks}
-        year={year}
-        localityId={localityId}
-        localOnly={localOnly}
-        absenceAlertWeeks={absenceAlertWeeks}
-      />
-    </div>
+    <MeetingsListPageClient
+      searchParams={{ year: params.year, locality: params.locality, localOnly: params.localOnly }}
+      initialData={{
+        year,
+        localOnly,
+        localityId,
+        localities: localities ?? [],
+        weeks,
+        absenceAlertWeeks,
+        currentYear,
+      }}
+    />
   );
 }
