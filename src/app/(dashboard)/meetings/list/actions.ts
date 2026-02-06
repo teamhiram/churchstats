@@ -20,9 +20,17 @@ export type WeekDetail = {
   dispatchNames: { memberId: string; name: string }[];
 };
 
+const CHUNK_SIZE = 200;
+
 function parseYmd(s: string): Date {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
 }
 
 async function getListDataUncached(
@@ -142,18 +150,29 @@ async function getListDataUncached(
     localMemberIds = new Set(((localMembers ?? []) as { id: string }[]).map((m) => m.id));
   }
   if (meetings.length > 0) {
-    const { data: attData } = await supabase
-      .from("attendance_records")
-      .select("meeting_id, member_id")
-      .in("meeting_id", meetings.map((m) => m.id));
-    mainAttendance = (attData ?? []) as { meeting_id: string; member_id: string }[];
+    const meetingIds = meetings.map((m) => m.id);
+    const meetingChunks = chunk(meetingIds, CHUNK_SIZE);
+    const attResults = await Promise.all(
+      meetingChunks.map((ids) =>
+        supabase.from("attendance_records").select("meeting_id, member_id").in("meeting_id", ids)
+      )
+    );
+    mainAttendance = attResults.flatMap((r) => (r.data ?? []) as { meeting_id: string; member_id: string }[]);
   }
   if (groupRecordIds.size > 0) {
-    const { data: groupAttData } = await supabase
-      .from("group_meeting_attendance")
-      .select("group_meeting_record_id, member_id")
-      .in("group_meeting_record_id", [...groupRecordIds]);
-    groupAttendance = (groupAttData ?? []) as { group_meeting_record_id: string; member_id: string }[];
+    const recordIds = [...groupRecordIds];
+    const recordChunks = chunk(recordIds, CHUNK_SIZE);
+    const groupAttResults = await Promise.all(
+      recordChunks.map((ids) =>
+        supabase
+          .from("group_meeting_attendance")
+          .select("group_meeting_record_id, member_id")
+          .in("group_meeting_record_id", ids)
+      )
+    );
+    groupAttendance = groupAttResults.flatMap(
+      (r) => (r.data ?? []) as { group_meeting_record_id: string; member_id: string }[]
+    );
   }
 
   const weekMainCount = new Map<string, number>();
@@ -271,10 +290,10 @@ export async function getWeekDetail(
     filterGroupIds.length > 0
       ? supabase
           .from("group_meeting_records")
-          .select("id")
+          .select("id, group_id")
           .eq("week_start", weekStart)
           .in("group_id", filterGroupIds)
-      : Promise.resolve({ data: [] as { id: string }[] }),
+      : Promise.resolve({ data: [] as { id: string; group_id: string }[] }),
     dispatchPromise,
     supabase.from("members").select("id, name, is_local"),
   ]);
@@ -292,9 +311,9 @@ export async function getWeekDetail(
     district_id: string | null;
     group_id: string | null;
   }[];
-  const groupRecordIdsThisWeek = new Set(
-    ((groupRecordsRes.data ?? []) as { id: string }[]).map((r) => r.id)
-  );
+  const groupRecordsThisWeek = (groupRecordsRes.data ?? []) as { id: string; group_id: string }[];
+  const groupRecordIdsThisWeek = new Set(groupRecordsThisWeek.map((r) => r.id));
+  const groupIdsThisWeek = new Set(groupRecordsThisWeek.map((r) => r.group_id));
   const dispatchRowsDetail = (dispatchRes.data ?? []) as {
     member_id: string;
     group_id: string;
@@ -401,9 +420,33 @@ export async function getWeekDetail(
     });
   }
 
+  const mainMeetingDistrictIds = [...new Set(mainMeetings.map((m) => m.district_id).filter(Boolean))] as string[];
+  let mainRegularMemberIds = new Set<string>();
+  if (mainMeetingDistrictIds.length > 0) {
+    const { data: districtRegularRows } = await supabase
+      .from("district_regular_list")
+      .select("member_id")
+      .in("district_id", mainMeetingDistrictIds);
+    (districtRegularRows ?? []).forEach((r: { member_id: string }) => mainRegularMemberIds.add(r.member_id));
+  }
+  const useMainRegular = mainRegularMemberIds.size > 0;
+  const mainSourceIds = useMainRegular ? mainRegularMemberIds : mainAttendedPastX;
+
+  let groupRegularMemberIds = new Set<string>();
+  if (groupIdsThisWeek.size > 0) {
+    const { data: groupRegularRows } = await supabase
+      .from("group_regular_list")
+      .select("member_id")
+      .in("group_id", [...groupIdsThisWeek]);
+    (groupRegularRows ?? []).forEach((r: { member_id: string }) => groupRegularMemberIds.add(r.member_id));
+  }
+  const useGroupRegular = groupRegularMemberIds.size > 0;
+  const groupSourceIds = useGroupRegular ? groupRegularMemberIds : groupAttendedPastX;
+
   const mainAbsent: { memberId: string; name: string; inDispatch: boolean }[] = [];
   const groupAbsent: { memberId: string; name: string; inDispatch: boolean }[] = [];
-  mainAttendedPastX.forEach((memberId) => {
+  mainSourceIds.forEach((memberId) => {
+    if (localOnly && localMemberIds && !localMemberIds.has(memberId)) return;
     if (!mainAttendedThisWeek.has(memberId)) {
       mainAbsent.push({
         memberId,
@@ -412,7 +455,8 @@ export async function getWeekDetail(
       });
     }
   });
-  groupAttendedPastX.forEach((memberId) => {
+  groupSourceIds.forEach((memberId) => {
+    if (localOnly && localMemberIds && !localMemberIds.has(memberId)) return;
     if (!groupAttendedThisWeek.has(memberId)) {
       groupAbsent.push({
         memberId,

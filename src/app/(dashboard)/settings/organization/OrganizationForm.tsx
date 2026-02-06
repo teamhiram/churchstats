@@ -1,10 +1,21 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { addDistrictAction, addGroupAction, saveEditGroupAction, deleteGroupAction, updateDistrictAction } from "./actions";
+import {
+  addDistrictAction,
+  addGroupAction,
+  saveEditGroupAction,
+  deleteGroupAction,
+  updateDistrictAction,
+  getDistrictRegularList,
+  getMembersByDistrict,
+  getGroupRegularList,
+  getMembersByGroup,
+} from "./actions";
+import { RegularListModal } from "./RegularListModal";
 
 type Locality = { id: string; name: string };
 type District = { id: string; locality_id: string; name: string };
@@ -31,6 +42,7 @@ export function OrganizationForm({
   const addFromUrl = searchParams.get("add");
   const errorFromUrl = searchParams.get("error");
 
+  const router = useRouter();
   const [districtsList, setDistrictsList] = useState(districts);
   const [groupsList, setGroupsList] = useState(initialGroups);
   const [absenceWeeks, setAbsenceWeeks] = useState(initialAbsenceWeeks);
@@ -42,9 +54,30 @@ export function OrganizationForm({
   );
   const showDistrictModal = addFromUrl === "district";
   const showGroupModal = addFromUrl === "group";
+  const [renameDistrictId, setRenameDistrictId] = useState<string | null>(null);
+  const [renameGroup, setRenameGroup] = useState<Group | null>(null);
+  const [deleteConfirmGroup, setDeleteConfirmGroup] = useState<Group | null>(null);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const [listModal, setListModal] = useState<{ kind: "district" | "group"; id: string; name: string } | null>(null);
+  const [expandedDistrictIds, setExpandedDistrictIds] = useState<Set<string>>(() => new Set());
+  const [districtListCache, setDistrictListCache] = useState<
+    Record<string, { regularNames: string[]; nonRegularNames: string[] }>
+  >({});
+  const [districtListLoading, setDistrictListLoading] = useState<Set<string>>(new Set());
+  const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(() => new Set());
+  const [groupListCache, setGroupListCache] = useState<
+    Record<string, { regularNames: string[]; nonRegularNames: string[] }>
+  >({});
+  const [groupListLoading, setGroupListLoading] = useState<Set<string>>(new Set());
 
-  const editingGroupId = editIdFromUrl ?? null;
-  const editingDistrictId = editDistrictIdFromUrl ?? null;
+  const showRenameDistrictModal = renameDistrictId !== null || editDistrictIdFromUrl !== null;
+  const renameDistrict = showRenameDistrictModal
+    ? districtsList.find((d) => d.id === renameDistrictId || d.id === editDistrictIdFromUrl)
+    : null;
+  const showRenameGroupModal = renameGroup !== null || editIdFromUrl !== null;
+  const renameGroupData = showRenameGroupModal
+    ? (renameGroup ?? groupsList.find((g) => g.id === editIdFromUrl) ?? null)
+    : null;
 
   const districtsForLocality = districtsList
     .filter((d) => userLocalityIds.includes(d.locality_id ?? ""))
@@ -74,6 +107,94 @@ export function OrganizationForm({
     setAbsenceWeeks(initialAbsenceWeeks);
   }, [initialAbsenceWeeks]);
 
+  // 枠組設定を開いたときに地区・小組のリストを1リクエストで一括取得し、キャッシュに流し込む
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/organization-lists")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed"))))
+      .then(
+        (data: { districts: Record<string, { regularNames: string[]; nonRegularNames: string[] }>; groups: Record<string, { regularNames: string[]; nonRegularNames: string[] }> }) => {
+          if (cancelled) return;
+          setDistrictListCache((prev) => ({ ...prev, ...data.districts }));
+          setGroupListCache((prev) => ({ ...prev, ...data.groups }));
+          setDistrictListLoading(() => new Set());
+          setGroupListLoading(() => new Set());
+        }
+      )
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const toLoad = [...expandedGroupIds].filter((id) => id && !groupListCache[id]);
+    if (toLoad.length === 0) return;
+    setGroupListLoading((prev) => new Set([...prev, ...toLoad]));
+    Promise.all(
+      toLoad.map((gid) =>
+        Promise.all([getMembersByGroup(gid), getGroupRegularList(gid)]).then(([members, regularList]) => {
+          const regularIds = new Set(regularList.map((r) => r.member_id));
+          const regularNames: string[] = [];
+          const nonRegularNames: string[] = [];
+          members.forEach((m) => {
+            if (regularIds.has(m.id)) regularNames.push(m.name);
+            else nonRegularNames.push(m.name);
+          });
+          return { gid, regularNames, nonRegularNames };
+        })
+      )
+    )
+      .then((results) => {
+        setGroupListCache((prev) => {
+          const next = { ...prev };
+          results.forEach(({ gid, regularNames, nonRegularNames }) => {
+            next[gid] = { regularNames, nonRegularNames };
+          });
+          return next;
+        });
+      })
+      .finally(() => setGroupListLoading((prev) => {
+        const next = new Set(prev);
+        toLoad.forEach((id) => next.delete(id));
+        return next;
+      }));
+  }, [expandedGroupIds, groupListCache]);
+
+  useEffect(() => {
+    const toLoad = [...expandedDistrictIds].filter((id) => id && !districtListCache[id]);
+    if (toLoad.length === 0) return;
+    setDistrictListLoading((prev) => new Set([...prev, ...toLoad]));
+    Promise.all(
+      toLoad.map((did) =>
+        Promise.all([getMembersByDistrict(did), getDistrictRegularList(did)]).then(([members, regularList]) => {
+          const regularIds = new Set(regularList.map((r) => r.member_id));
+          const regularNames: string[] = [];
+          const nonRegularNames: string[] = [];
+          members.forEach((m) => {
+            if (regularIds.has(m.id)) regularNames.push(m.name);
+            else nonRegularNames.push(m.name);
+          });
+          return { did, regularNames, nonRegularNames };
+        })
+      )
+    )
+      .then((results) => {
+        setDistrictListCache((prev) => {
+          const next = { ...prev };
+          results.forEach(({ did, regularNames, nonRegularNames }) => {
+            next[did] = { regularNames, nonRegularNames };
+          });
+          return next;
+        });
+      })
+      .finally(() => setDistrictListLoading((prev) => {
+        const next = new Set(prev);
+        toLoad.forEach((id) => next.delete(id));
+        return next;
+      }));
+  }, [expandedDistrictIds, districtListCache]);
+
   const saveAbsenceWeeks = async (value: number) => {
     setAbsenceWeeksSaving(true);
     setAbsenceWeeksMessage("");
@@ -94,9 +215,9 @@ export function OrganizationForm({
   const selectedLocalityForAdd = localities.find((l) => l.id === selectedLocalityIdForAdd);
 
   return (
-    <div className="space-y-8 max-w-2xl">
+    <div className="space-y-8">
       {/* 欠席アラートの週数 */}
-      <section>
+      <section className="bg-white rounded-lg border border-slate-200 p-4">
         <h2 className="font-semibold text-slate-800 mb-2">欠席アラートの週数（1〜52）</h2>
         <div className="space-y-2 max-w-xs">
           <select
@@ -123,174 +244,225 @@ export function OrganizationForm({
       </section>
 
       {/* アカウントの所属地方（表示のみ・変更不可） */}
-      <section>
+      <section className="bg-white rounded-lg border border-slate-200 p-4">
         <h2 className="font-semibold text-slate-800 mb-2">アカウントの所属地方</h2>
         <p className="text-slate-700">{accountLocalityNames}</p>
       </section>
 
-      {/* 地区 */}
-      <section>
+      {/* 地区の設定 */}
+      <section className="bg-white rounded-lg border border-slate-200 p-4">
         <div className="flex items-center justify-between gap-2 mb-2">
-          <h2 className="font-semibold text-slate-800">地区</h2>
+          <h2 className="font-semibold text-slate-800">地区の設定</h2>
           {userLocalityIds.length > 0 ? (
             <a
               href="/settings/organization?add=district"
-              className="flex items-center justify-center w-10 h-10 rounded-full bg-red-600 text-white hover:bg-red-700 touch-target shrink-0 no-underline"
-              title="地区を追加"
+              className="text-primary-600 hover:text-primary-700 hover:underline text-sm font-medium no-underline"
             >
-              +
+              地区を追加する
             </a>
           ) : (
-            <span
-              className="flex items-center justify-center w-10 h-10 rounded-full bg-red-600 text-white opacity-50 cursor-not-allowed shrink-0"
-              title="所属地方に地区を追加できます"
-            >
-              +
+            <span className="text-slate-400 text-sm cursor-not-allowed">
+              地区を追加する
             </span>
           )}
         </div>
-        <p className="text-sm text-slate-500 mb-2">
-          一覧の「編集」で地区名を変更できます。
+        <p className="text-sm text-slate-500 mb-3">
+          一覧の「リネーム」で地区名を変更できます。
         </p>
-        <ul className="list-disc list-inside text-sm text-slate-700 space-y-2">
-          {districtsForLocality.map((d) => (
-            <li key={d.id ?? ""} className="flex flex-wrap items-center gap-2">
-              {editingDistrictId === String(d.id ?? "") ? (
-                <form action={updateDistrictAction} className="flex flex-wrap items-center gap-2 flex-1">
-                  <input type="hidden" name="districtId" value={d.id ?? ""} />
-                  {errorFromUrl && editDistrictIdFromUrl === String(d.id ?? "") && (
-                    <p className="w-full text-sm text-red-600">{decodeURIComponent(errorFromUrl)}</p>
-                  )}
-                  <input
-                    type="text"
-                    name="name"
-                    defaultValue={d.name ?? ""}
-                    required
-                    className="flex-1 min-w-[120px] px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                  />
-                  <button type="submit" className="px-3 py-2 bg-slate-600 text-white text-sm rounded-lg hover:bg-slate-700">
-                    保存
+        {districtsForLocality.map((d) => {
+          const did = d.id ?? "";
+          const isExpanded = expandedDistrictIds.has(did);
+          const cache = districtListCache[did];
+          const loading = districtListLoading.has(did);
+          return (
+            <div
+              key={did}
+              className="mb-4 rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden"
+            >
+              <div className="bg-slate-100 border-b border-slate-200 py-2 px-4">
+                <h3 className="font-semibold text-white rounded-md px-2 py-1 inline-block bg-gradient-to-r from-fuchsia-600 via-indigo-600 to-sky-600 shadow-sm">
+                  {d.name ?? ""}
+                </h3>
+              </div>
+              <div className="p-3">
+                <div className="flex flex-wrap items-center gap-2 py-2 w-full">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedDistrictIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(did)) next.delete(did);
+                        else next.add(did);
+                        return next;
+                      })
+                    }
+                    className="w-10 h-10 shrink-0 rounded-lg touch-target flex items-center justify-center text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 font-mono"
+                    aria-expanded={isExpanded}
+                  >
+                    {isExpanded ? "−" : "+"}
                   </button>
-                  <Link
-                    href="/settings/organization"
-                    className="px-3 py-2 bg-slate-200 text-slate-700 text-sm rounded-lg inline-block"
+                  <button
+                    type="button"
+                    onClick={() => setRenameDistrictId(did)}
+                    className="text-primary-600 text-sm hover:underline touch-target bg-transparent border-0 cursor-pointer p-0 shrink-0"
                   >
-                    キャンセル
-                  </Link>
-                </form>
-              ) : (
-                <>
-                  <span>{d.name ?? ""}</span>
-                  <a
-                    href={`/settings/organization?edit_district=${encodeURIComponent(String(d.id ?? ""))}`}
-                    className="text-primary-600 text-sm hover:underline touch-target no-underline"
-                  >
-                    編集
-                  </a>
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
+                    リネーム
+                  </button>
+                </div>
+                {isExpanded && (
+                  <div className="pl-2 pb-3 pr-2 text-sm text-slate-700 border-l-2 border-slate-200 ml-2 mt-1">
+                    {loading ? (
+                      <p className="text-slate-500">読み込み中…</p>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                          <div>
+                            <p className="text-xs font-bold text-slate-700 mb-0.5">レギュラーメンバー</p>
+                            <p className="text-slate-600">{cache?.regularNames?.length ? cache.regularNames.join("、") : "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-700 mb-0.5">非レギュラーメンバー</p>
+                            <p className="text-slate-600">{cache?.nonRegularNames?.length ? cache.nonRegularNames.join("、") : "—"}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setListModal({ kind: "district", id: did, name: d.name ?? "" })}
+                          className="text-primary-600 text-sm hover:underline mt-2"
+                        >
+                          リストを編集
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
         {districtsForLocality.length === 0 && (
           <p className="text-slate-500 text-sm">地区がありません。＋ボタンで追加できます。</p>
         )}
       </section>
 
-      {/* 小組（地区セクション順） */}
-      <section>
+      {/* 小組の設定（地区セクション順） */}
+      <section className="bg-white rounded-lg border border-slate-200 p-4">
         <div className="flex items-center justify-between gap-2 mb-2">
-          <h2 className="font-semibold text-slate-800">小組</h2>
+          <h2 className="font-semibold text-slate-800">小組の設定</h2>
           {districtsForLocality.length > 0 ? (
             <a
               href="/settings/organization?add=group"
-              className="flex items-center justify-center w-10 h-10 rounded-full bg-red-600 text-white hover:bg-red-700 touch-target shrink-0 no-underline"
-              title="小組を追加"
+              className="text-primary-600 hover:text-primary-700 hover:underline text-sm font-medium no-underline"
             >
-              +
+              小組を追加する
             </a>
           ) : (
-            <span
-              className="flex items-center justify-center w-10 h-10 rounded-full bg-red-600 text-white opacity-50 cursor-not-allowed shrink-0"
-              title="地区を追加すると小組を登録できます"
-            >
-              +
+            <span className="text-slate-400 text-sm cursor-not-allowed">
+              小組を追加する
             </span>
           )}
         </div>
         <p className="text-sm text-slate-500 mb-3">
-          一覧の「編集」で名前・所属地区を変更、「削除」で小組を削除できます（メンバーは無所属に移ります）。
+          一覧の「リネーム」で名前・所属地区を変更、「削除」で小組を削除できます（メンバーは無所属に移ります）。
         </p>
         {groupsByDistrict.map(({ district, groups: districtGroups }) => (
-          <div key={district.id ?? ""} className="mb-6">
-            <h3 className="font-medium text-slate-700 mb-2 border-b border-slate-200 pb-1">
-              {district.name ?? ""}
-            </h3>
-            <ul className="space-y-1 text-sm text-slate-700">
-              {districtGroups.map((g) => (
-                <li key={g.id ?? ""} className="flex flex-wrap items-center gap-2 py-1">
-                  {editingGroupId === String(g.id ?? "") ? (
-                    <form action={saveEditGroupAction} className="flex flex-wrap items-center gap-2 flex-1">
-                      <input type="hidden" name="groupId" value={g.id ?? ""} />
-                      {errorFromUrl && editIdFromUrl === String(g.id ?? "") && (
-                        <p className="w-full text-sm text-red-600">{decodeURIComponent(errorFromUrl)}</p>
-                      )}
-                      <input
-                        type="text"
-                        name="name"
-                        defaultValue={g.name ?? ""}
-                        required
-                        className="flex-1 min-w-[100px] px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                      />
-                      <select
-                        name="districtId"
-                        className="px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                        defaultValue={g.district_id ?? ""}
+          <div
+            key={district.id ?? ""}
+            className="mb-4 rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden"
+          >
+            <div className="bg-slate-100 border-b border-slate-200 py-2 px-4">
+              <h3 className="font-semibold text-white rounded-md px-2 py-1 inline-block bg-gradient-to-r from-fuchsia-600 via-indigo-600 to-sky-600 shadow-sm">
+                {district.name ?? ""}
+              </h3>
+            </div>
+            <div className="p-3">
+              <ul className="space-y-1 text-sm text-slate-700">
+              {districtGroups.map((g) => {
+                const gid = g.id ?? "";
+                const isExpanded = expandedGroupIds.has(gid);
+                const cache = groupListCache[gid];
+                const loading = groupListLoading.has(gid);
+                return (
+                  <li key={gid} className="border-b border-slate-100 last:border-b-0">
+                    <div className="flex flex-wrap items-center gap-2 py-2 w-full">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedGroupIds((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(gid)) next.delete(gid);
+                            else next.add(gid);
+                            return next;
+                          })
+                        }
+                        className="flex-1 min-w-0 text-left px-3 py-3 min-h-[44px] rounded-lg touch-target flex items-center gap-2 text-white bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 shadow-sm hover:brightness-110 active:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-400"
                       >
-                        <option value="">地区を選択</option>
-                        {districtsList.map((d) => (
-                          <option key={d.id ?? ""} value={d.id ?? ""}>
-                            {d.name ?? ""}
-                          </option>
-                        ))}
-                      </select>
-                      <button type="submit" className="px-3 py-2 bg-slate-600 text-white text-sm rounded-lg hover:bg-slate-700">
-                        保存
+                        <span className="w-5 shrink-0 text-center font-mono text-white/90" aria-hidden>
+                          {isExpanded ? "−" : "+"}
+                        </span>
+                        <span className="min-w-0 truncate font-semibold text-white">{g.name ?? ""}</span>
                       </button>
-                      <Link
-                        href="/settings/organization"
-                        className="px-3 py-2 bg-slate-200 text-slate-700 text-sm rounded-lg inline-block"
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRenameGroup(g);
+                        }}
+                        className="text-primary-600 text-sm hover:underline touch-target bg-transparent border-0 cursor-pointer p-0 shrink-0"
                       >
-                        キャンセル
-                      </Link>
-                    </form>
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-2 w-full">
-                      <a
-                        href={`/settings/organization?edit=${encodeURIComponent(String(g.id ?? ""))}`}
-                        className="flex-1 min-w-0 text-left px-3 py-3 min-h-[44px] rounded-lg hover:bg-primary-50 text-slate-700 hover:text-primary-700 touch-target flex items-center gap-2 no-underline"
+                        リネーム
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteConfirmGroup(g);
+                          setDeleteConfirmName("");
+                        }}
+                        className="px-3 py-3 min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-red-600 hover:bg-red-50 rounded-lg text-sm touch-target shrink-0"
+                        title={`「${g.name ?? ""}」を削除（メンバーは無所属に移ります）`}
                       >
-                        <span className="min-w-0 truncate">{g.name ?? ""}</span>
-                        <span className="text-primary-600 text-sm shrink-0">編集</span>
-                      </a>
-                      <form action={deleteGroupAction} className="inline-block">
-                        <input type="hidden" name="groupId" value={g.id ?? ""} />
-                        <button
-                          type="submit"
-                          className="px-3 py-3 min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-red-600 hover:bg-red-50 rounded-lg text-sm touch-target shrink-0"
-                          title={`「${g.name ?? ""}」を削除（メンバーは無所属に移ります）`}
-                        >
-                          削除
-                        </button>
-                      </form>
+                        削除
+                      </button>
                     </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-            {districtGroups.length === 0 && (
-              <p className="text-slate-500 text-sm pl-2">小組がありません。</p>
-            )}
+                    {isExpanded && (
+                      <div className="pl-4 pb-3 pr-2 text-sm text-slate-700 border-l-2 border-slate-200 ml-2">
+                        {loading ? (
+                          <p className="text-slate-500">読み込み中…</p>
+                        ) : (
+                          <>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                              <div>
+                                <p className="text-xs font-bold text-slate-700 mb-0.5">レギュラーメンバー</p>
+                                <p className="text-slate-600">{cache?.regularNames?.length ? cache.regularNames.join("、") : "—"}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-slate-700 mb-0.5">非レギュラーメンバー</p>
+                                <p className="text-slate-600">{cache?.nonRegularNames?.length ? cache.nonRegularNames.join("、") : "—"}</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setListModal({ kind: "group", id: gid, name: g.name ?? "" });
+                              }}
+                              className="text-primary-600 text-sm hover:underline mt-2"
+                            >
+                              リストを編集
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+              </ul>
+              {districtGroups.length === 0 && (
+                <p className="text-slate-500 text-sm">小組がありません。</p>
+              )}
+            </div>
           </div>
         ))}
         {groupsByDistrict.length === 0 && (
@@ -406,6 +578,200 @@ export function OrganizationForm({
             </form>
           </div>
         </div>
+      )}
+
+      {/* 地区リネームモーダル */}
+      {showRenameDistrictModal && renameDistrict && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => {
+            setRenameDistrictId(null);
+            if (editDistrictIdFromUrl) router.replace("/settings/organization");
+          }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="bg-white rounded-lg shadow-lg max-w-sm w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-semibold text-slate-800 mb-4">地区名を変更</h3>
+            <form action={updateDistrictAction} className="space-y-4">
+              <input type="hidden" name="districtId" value={renameDistrict.id ?? ""} />
+              {errorFromUrl && editDistrictIdFromUrl === String(renameDistrict.id ?? "") && (
+                <p className="text-sm text-red-600">{decodeURIComponent(errorFromUrl ?? "")}</p>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">地区名</label>
+                <input
+                  type="text"
+                  name="name"
+                  defaultValue={renameDistrict.name ?? ""}
+                  required
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target text-sm"
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRenameDistrictId(null);
+                    if (editDistrictIdFromUrl) router.replace("/settings/organization");
+                  }}
+                  className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm"
+                >
+                  キャンセル
+                </button>
+                <button type="submit" className="px-4 py-2 bg-slate-600 text-white rounded-lg text-sm hover:bg-slate-700">
+                  保存
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 小組リネームモーダル */}
+      {showRenameGroupModal && renameGroupData && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => {
+            setRenameGroup(null);
+            if (editIdFromUrl) router.replace("/settings/organization");
+          }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="bg-white rounded-lg shadow-lg max-w-sm w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-semibold text-slate-800 mb-4">小組名・所属地区を変更</h3>
+            <form action={saveEditGroupAction} className="space-y-4">
+              <input type="hidden" name="groupId" value={renameGroupData.id ?? ""} />
+              {errorFromUrl && editIdFromUrl === String(renameGroupData.id ?? "") && (
+                <p className="text-sm text-red-600">{decodeURIComponent(errorFromUrl ?? "")}</p>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">小組名</label>
+                <input
+                  type="text"
+                  name="name"
+                  defaultValue={renameGroupData.name ?? ""}
+                  required
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">所属地区</label>
+                <select
+                  name="districtId"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target text-sm"
+                  defaultValue={renameGroupData.district_id ?? ""}
+                >
+                  <option value="">地区を選択</option>
+                  {districtsList.map((d) => (
+                    <option key={d.id ?? ""} value={d.id ?? ""}>
+                      {d.name ?? ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRenameGroup(null);
+                    if (editIdFromUrl) router.replace("/settings/organization");
+                  }}
+                  className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm"
+                >
+                  キャンセル
+                </button>
+                <button type="submit" className="px-4 py-2 bg-slate-600 text-white rounded-lg text-sm hover:bg-slate-700">
+                  保存
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 小組削除確認モーダル */}
+      {deleteConfirmGroup && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setDeleteConfirmGroup(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-group-title"
+        >
+          <div
+            className="bg-white rounded-lg shadow-lg max-w-sm w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="delete-group-title" className="font-semibold text-slate-800 mb-3">小組を削除</h3>
+            <p className="text-sm text-slate-700 mb-4">
+              本当に削除しますか？メンバーが無所属になります。
+              <br />
+              削除する場合は、枠内に小組の名前を入力した上で削除ボタンを押してください。
+            </p>
+            <form action={deleteGroupAction} className="space-y-4">
+              <input type="hidden" name="groupId" value={deleteConfirmGroup.id ?? ""} />
+              <div>
+                <label htmlFor="delete-confirm-name" className="block text-sm font-medium text-slate-700 mb-1">
+                  小組の名前（確認用）
+                </label>
+                <input
+                  id="delete-confirm-name"
+                  type="text"
+                  name="confirmName"
+                  value={deleteConfirmName}
+                  onChange={(e) => setDeleteConfirmName(e.target.value)}
+                  placeholder={deleteConfirmGroup.name ?? ""}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target text-sm"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmGroup(null)}
+                  className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  disabled={(deleteConfirmName.trim()) !== (deleteConfirmGroup.name ?? "").trim()}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  削除
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* レギュラーリストモーダル（地区／小組） */}
+      {listModal && (
+        <RegularListModal
+          kind={listModal.kind}
+          id={listModal.id}
+          name={listModal.name}
+          onClose={() => {
+            const was = listModal;
+            setListModal(null);
+            if (was.kind === "group" && was.id) {
+              setGroupListCache((prev) => {
+                const next = { ...prev };
+                delete next[was.id];
+                return next;
+              });
+            }
+          }}
+        />
       )}
     </div>
   );
