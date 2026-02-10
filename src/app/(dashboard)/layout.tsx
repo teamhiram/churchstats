@@ -37,6 +37,7 @@ export default async function DashboardLayout({
             displayName={data.displayName}
             roleLabel={data.roleLabel}
             localityName={data.localityName}
+            showDebug={data.profile?.role === "admin"}
           />
           <main className="flex-1 pt-[calc(1rem+0.5em)] md:pt-[calc(3.5rem+0.5em)] p-4 md:p-6 pb-[calc(2rem+env(safe-area-inset-bottom,0px))] md:pb-6 overflow-auto">
             <MainContentWrapper>{children}</MainContentWrapper>

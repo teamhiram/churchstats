@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
   let defaultLocalityId: string | null = null;
   const { data: profile } = await supabase
     .from("profiles")
-    .select("main_district_id")
+    .select("main_district_id, role")
     .eq("id", user.id)
     .maybeSingle();
   if (profile?.main_district_id) {
@@ -48,8 +48,10 @@ export async function GET(request: NextRequest) {
   }
 
   const localityParam = searchParams.get("locality");
-  const localityId =
-    localityParam && localityParam !== "all" ? localityParam : defaultLocalityId;
+  const isAdmin = (profile as { role?: string } | null)?.role === "admin";
+  const localityId = isAdmin && localityParam && localityParam !== "all"
+    ? localityParam
+    : defaultLocalityId;
 
   const { weeks, absenceAlertWeeks } = await getListData(year, localityId, localOnly);
 

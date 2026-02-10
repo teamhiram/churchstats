@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { Toggle } from "@/components/Toggle";
 
 type Locality = { id: string; name: string };
 
@@ -10,9 +11,10 @@ type Props = {
   localOnly: boolean;
   years: number[];
   localities: Locality[];
+  showLocalityFilter?: boolean;
 };
 
-export function MeetingsListFilters({ year, localityId, localOnly, years, localities }: Props) {
+export function MeetingsListFilters({ year, localityId, localOnly, years, localities, showLocalityFilter = false }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -50,44 +52,33 @@ export function MeetingsListFilters({ year, localityId, localOnly, years, locali
           ))}
         </select>
       </div>
-      <div className="flex items-center gap-2">
-        <label htmlFor="locality" className="text-sm font-medium text-slate-700">
-          地方
-        </label>
-        <select
-          id="locality"
-          value={localityId ?? "all"}
-          className="px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
-          onChange={(e) => updateParams({ locality: e.target.value })}
-        >
-          <option value="all">全体</option>
-          {localities.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={localOnly}
-          onClick={() => updateParams({ localOnly: !localOnly })}
-          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
-            localOnly ? "bg-primary-600" : "bg-slate-200"
-          }`}
-        >
-          <span
-            className={`pointer-events-none absolute left-0.5 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow ring-0 transition ${
-              localOnly ? "translate-x-4" : "translate-x-0"
-            }`}
-          />
-        </button>
-        <label className="text-sm font-medium text-slate-700 cursor-pointer touch-target" onClick={() => updateParams({ localOnly: !localOnly })}>
-          ローカルのみ
-        </label>
-      </div>
+      {showLocalityFilter && (
+        <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-amber-300 bg-amber-50/50">
+          <span className="text-xs font-medium text-amber-800/80">管理者</span>
+          <label htmlFor="locality" className="text-sm font-medium text-slate-700">
+            地方
+          </label>
+          <select
+            id="locality"
+            value={localityId ?? "all"}
+            className="px-3 py-2 border border-amber-300 rounded-lg text-sm touch-target bg-white"
+            onChange={(e) => updateParams({ locality: e.target.value })}
+          >
+            <option value="all">全体</option>
+            {localities.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      <Toggle
+        checked={localOnly}
+        onChange={() => updateParams({ localOnly: !localOnly })}
+        ariaLabel="ローカルのみ"
+        label="ローカルのみ"
+      />
     </div>
   );
 }

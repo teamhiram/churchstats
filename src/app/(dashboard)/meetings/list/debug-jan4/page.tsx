@@ -1,10 +1,17 @@
+import { redirect } from "next/navigation";
+import { getCurrentUserWithProfile } from "@/lib/cachedData";
 import { getDebugJan4SundayAttendees, getDebugSundayAttendees } from "../actions";
 
+/** デバッグページは管理者のみアクセス可能 */
 export default async function DebugJan4Page({
   searchParams,
 }: {
   searchParams: Promise<{ year?: string; date?: string }>;
 }) {
+  const { user, profile } = await getCurrentUserWithProfile();
+  if (!user) redirect("/login");
+  if (profile?.role !== "admin") redirect("/meetings/list");
+
   const params = await searchParams;
   const data = params.date
     ? await getDebugSundayAttendees(params.date)

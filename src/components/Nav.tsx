@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useState, useRef, useEffect, useLayoutEffect, type RefObject } from "react";
 
-const links: { href?: string; label: string; type?: "dropdown"; children?: { href: string; label: string }[] }[] = [
+const baseLinks: { href?: string; label: string; type?: "dropdown"; children?: { href: string; label: string }[] }[] = [
   { href: "/dashboard", label: "ダッシュボード" },
   { href: "/meetings/list", label: "週別集計" },
   { href: "/meetings", label: "出欠登録" },
@@ -37,6 +37,8 @@ type NavProps = {
   displayName?: string | null;
   roleLabel?: string;
   localityName?: string | null;
+  /** 管理者のみデバッグメニューを表示。共同管理者以下は false */
+  showDebug?: boolean;
 };
 
 function isSettingsPath(pathname: string) {
@@ -73,7 +75,7 @@ function DebugDropdownPc({
   if (rect === null) return null;
   return (
     <div
-      className="fixed w-40 rounded-b-lg border border-t-0 border-slate-200 bg-white py-1 shadow-lg z-[100]"
+      className="fixed w-40 rounded-b-lg border border-t-0 border-amber-200 bg-amber-50/95 py-1 shadow-lg z-[100]"
       style={{ top: rect.top, left: rect.left }}
       role="menu"
     >
@@ -97,11 +99,12 @@ function DebugDropdownPc({
   );
 }
 
-export function Nav({ displayName, roleLabel, localityName }: NavProps) {
+export function Nav({ displayName, roleLabel, localityName, showDebug = false }: NavProps) {
   const pathname = usePathname();
   const { fullWidth } = useDisplaySettings();
   const [settingsSubOpen, setSettingsSubOpen] = useState(false);
   const [debugSubOpen, setDebugSubOpen] = useState(false);
+  const links = showDebug ? baseLinks : baseLinks.filter((item) => item.type !== "dropdown" || item.label !== "デバッグ");
   const settingsRef = useRef<HTMLDivElement>(null);
   const debugRef = useRef<HTMLDivElement>(null);
   const debugRefMobile = useRef<HTMLDivElement>(null);
@@ -144,7 +147,7 @@ export function Nav({ displayName, roleLabel, localityName }: NavProps) {
               if (item.type === "dropdown" && item.children) {
                 const isActive = item.children.some((c) => pathname.startsWith(c.href));
                 return (
-                  <div key={item.label} className="relative h-full flex items-stretch" ref={debugRef}>
+                  <div key={item.label} className="relative h-full flex items-stretch border-x-2 border-amber-300 bg-amber-50/40" ref={debugRef}>
                     <button
                       type="button"
                       onClick={() => {
@@ -152,7 +155,7 @@ export function Nav({ displayName, roleLabel, localityName }: NavProps) {
                         setDebugSubOpen((o) => !o);
                       }}
                       className={`flex items-center h-full px-4 text-sm font-medium whitespace-nowrap touch-target ${
-                        isActive ? "bg-primary-700 text-white" : "text-slate-600 hover:bg-slate-100"
+                        isActive ? "bg-primary-600 text-white" : "text-amber-800/90 hover:bg-amber-100/60"
                       }`}
                       aria-expanded={debugSubOpen}
                       aria-haspopup="true"
@@ -194,7 +197,7 @@ export function Nav({ displayName, roleLabel, localityName }: NavProps) {
                   key={href}
                   href={href}
                   className={`flex items-center h-full px-4 text-sm font-medium whitespace-nowrap touch-target ${
-                    isActive ? "bg-primary-700 text-white" : "text-slate-600 hover:bg-slate-100"
+                    isActive ? "bg-primary-600 text-white" : "text-slate-600 hover:bg-slate-100"
                   }`}
                 >
                   {label}
@@ -266,46 +269,48 @@ export function Nav({ displayName, roleLabel, localityName }: NavProps) {
               </div>
             )}
           </div>
-          <div className="relative flex-1 h-full flex" ref={debugRefMobile}>
-            <button
-              type="button"
-              onClick={() => {
-                debugJustOpenedRef.current = true;
-                setDebugSubOpen((o) => !o);
-              }}
-              className={`w-full h-full flex items-center justify-center text-sm font-medium min-h-0 ${
-                pathname.startsWith("/debug") || pathname.startsWith("/meetings/list/duplicates") ? "text-primary-600 bg-primary-50" : "text-slate-600 active:bg-slate-100"
-              }`}
-              aria-expanded={debugSubOpen}
-              aria-haspopup="true"
-              aria-label="デバッグ"
-            >
-              デバッグ
-            </button>
-            {debugSubOpen && (
-              <div
-                className="absolute bottom-full right-0 left-auto mb-1 w-36 rounded-lg border border-slate-200 bg-white py-1 shadow-lg z-50"
-                role="menu"
+          {showDebug && (
+            <div className="relative flex-1 h-full flex border-x border-amber-300 bg-amber-50/40" ref={debugRefMobile}>
+              <button
+                type="button"
+                onClick={() => {
+                  debugJustOpenedRef.current = true;
+                  setDebugSubOpen((o) => !o);
+                }}
+                className={`w-full h-full flex items-center justify-center text-sm font-medium min-h-0 ${
+                  pathname.startsWith("/debug") || pathname.startsWith("/meetings/list/duplicates") ? "text-primary-600 bg-primary-50" : "text-amber-800/90 active:bg-amber-100/60"
+                }`}
+                aria-expanded={debugSubOpen}
+                aria-haspopup="true"
+                aria-label="デバッグ"
               >
-                {debugSubItems.map(({ href, label }) => {
-                  const isActive = pathname.startsWith(href);
-                  return (
-                    <Link
-                      key={href}
-                      href={href}
-                      onClick={() => setDebugSubOpen(false)}
-                      className={`block px-3 py-2.5 text-sm touch-target ${
-                        isActive ? "bg-primary-50 text-primary-700 font-medium" : "text-slate-700 hover:bg-slate-50"
-                      }`}
-                      role="menuitem"
-                    >
-                      {label}
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                デバッグ
+              </button>
+              {debugSubOpen && (
+                <div
+                  className="absolute bottom-full right-0 left-auto mb-1 w-36 rounded-lg border border-amber-200 bg-amber-50/95 py-1 shadow-lg z-50"
+                  role="menu"
+                >
+                  {debugSubItems.map(({ href, label }) => {
+                    const isActive = pathname.startsWith(href);
+                    return (
+                      <Link
+                        key={href}
+                        href={href}
+                        onClick={() => setDebugSubOpen(false)}
+                        className={`block px-3 py-2.5 text-sm touch-target ${
+                          isActive ? "bg-primary-50 text-primary-700 font-medium" : "text-slate-700 hover:bg-slate-50"
+                        }`}
+                        role="menuitem"
+                      >
+                        {label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </nav>
       </footer>
     </>

@@ -1,24 +1,27 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserWithProfile } from "@/lib/cachedData";
 import { StatisticsChartsDynamic } from "../statistics/StatisticsChartsDynamic";
 import { DispatchMonitor } from "./DispatchMonitor";
+import { AttendanceMatrix } from "./AttendanceMatrix";
 import { getDispatchMonitorData } from "./actions";
+import { getAttendanceMatrixData } from "./attendanceMatrixActions";
 
 export default async function DashboardPage() {
+  const { localityName } = await getCurrentUserWithProfile();
   const supabase = await createClient();
   const oneYearAgo = new Date();
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
   const yearStartIso = oneYearAgo.toISOString().slice(0, 10);
 
   const [
-    localitiesRes,
     membersCountRes,
     meetingsCountRes,
     districtsCountRes,
     groupsCountRes,
     meetingsRes,
     membersRes,
+    districtsRes,
   ] = await Promise.all([
-    supabase.from("localities").select("id, name").order("name").limit(500),
     supabase.from("members").select("id", { count: "exact", head: true }),
     supabase.from("meetings").select("id", { count: "exact", head: true }),
     supabase.from("districts").select("id", { count: "exact", head: true }),
@@ -30,9 +33,8 @@ export default async function DashboardPage() {
     supabase
       .from("members")
       .select("id, name, is_local, district_id, group_id, is_baptized"),
+    supabase.from("districts").select("id, name").order("name"),
   ]);
-
-  const localities = localitiesRes.data ?? [];
 
   const meetings = meetingsRes.data ?? [];
   const meetingIds = meetings.map((m) => m.id);
@@ -92,13 +94,22 @@ export default async function DashboardPage() {
     dispatchData = { weekLabel: "—", mainAbsent: [], groupAbsent: [] };
   }
 
+  let attendanceMatrixData: Awaited<ReturnType<typeof getAttendanceMatrixData>>;
+  try {
+    attendanceMatrixData = await getAttendanceMatrixData(new Date().getFullYear());
+  } catch {
+    attendanceMatrixData = { weeks: [], members: [], districts: [] };
+  }
+
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-slate-800">ダッシュボード</h1>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
         <div className="bg-white rounded-lg border border-slate-200 px-3 py-2.5">
           <p className="text-xs text-slate-500">地方</p>
-          <p className="text-lg font-semibold text-slate-800 tabular-nums">{localities.length ?? 0}</p>
+          <p className="text-lg font-semibold text-slate-800 truncate" title={localityName ?? undefined}>
+            {localityName && localityName !== "" ? localityName : "—"}
+          </p>
         </div>
         <div className="bg-white rounded-lg border border-slate-200 px-3 py-2.5">
           <p className="text-xs text-slate-500">地区</p>
@@ -124,7 +135,11 @@ export default async function DashboardPage() {
         attendance={attendance}
         meetings={meetings}
         members={membersRes.data ?? []}
+        districts={districtsRes.data ?? []}
+        localityName={localityName}
       />
+
+      <AttendanceMatrix {...attendanceMatrixData} />
     </div>
   );
 }

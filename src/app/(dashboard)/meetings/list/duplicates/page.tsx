@@ -1,11 +1,18 @@
+import { redirect } from "next/navigation";
+import { getCurrentUserWithProfile } from "@/lib/cachedData";
 import { getDuplicateMainAttendance } from "../actions";
 import { DuplicatesList } from "./DuplicatesList";
 
+/** 重複出席ページは管理者のみアクセス可能 */
 export default async function DuplicatesPage({
   searchParams,
 }: {
   searchParams: Promise<{ year?: string; week?: string }>;
 }) {
+  const { user, profile } = await getCurrentUserWithProfile();
+  if (!user) redirect("/login");
+  if (profile?.role !== "admin") redirect("/meetings/list");
+
   const params = await searchParams;
   const year = params.year && Number.isFinite(Number(params.year)) ? Number(params.year) : new Date().getFullYear();
   const weekStart = params.week && /^\d{4}-\d{2}-\d{2}$/.test(params.week) ? params.week : undefined;
