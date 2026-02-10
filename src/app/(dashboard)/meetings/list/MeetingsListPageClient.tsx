@@ -4,18 +4,9 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { MeetingsListFilters } from "./MeetingsListFilters";
 import { MeetingsListTable } from "./MeetingsListTable";
+import type { WeekRow } from "./actions";
 
 type Locality = { id: string; name: string };
-type WeekRow = {
-  weekNumber: number;
-  weekStart: string;
-  weekEnd: string;
-  label: string;
-  mainCount: number;
-  prayerCount: number;
-  groupCount: number;
-  dispatchCount: number;
-};
 
 type MeetingsListClientData = {
   year: number;
