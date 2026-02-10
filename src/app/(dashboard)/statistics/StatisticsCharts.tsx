@@ -12,9 +12,8 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { format, subWeeks, startOfWeek, endOfWeek, addDays } from "date-fns";
+import { format, subWeeks, startOfWeek, endOfWeek } from "date-fns";
 import { ja } from "date-fns/locale";
-import { getThisWeekByLastSunday } from "@/lib/weekUtils";
 import { CATEGORY_LABELS } from "@/types/database";
 import type { Category } from "@/types/database";
 
@@ -25,6 +24,7 @@ type AttendanceRow = {
   recorded_category: string | null;
   recorded_is_baptized: boolean | null;
   district_id: string | null;
+  attended?: boolean;
 };
 
 type MeetingRow = {
@@ -48,7 +48,6 @@ export type StatisticsChartsProps = {
   attendance: AttendanceRow[];
   meetings: MeetingRow[];
   members: MemberRow[];
-  absenceAlertWeeks: number;
 };
 
 type ColorGroupBy = "none" | "faith" | "category";
@@ -62,6 +61,64 @@ function isSaint(recorded: unknown): boolean {
 
 const FAITH_KEYS = { saint: "聖徒", friend: "友人" } as const;
 const FAITH_COLORS = { saint: "#0284c7", friend: "#0ea5e9" };
+
+/** 週別棒グラフ用：週のラベルと人数＋名前を表示（信仰別 or 年代別で出し分け） */
+function WeeklyBarTooltip({
+  active,
+  payload,
+  colorGroupBy,
+}: {
+  active?: boolean;
+  payload?: { payload: Record<string, string | number | string[]> }[];
+  colorGroupBy?: ColorGroupBy;
+}) {
+  if (!active || !payload?.length) return null;
+  const data = payload[0].payload as Record<string, string | number | string[]>;
+  const isCategory = colorGroupBy === "category";
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 max-w-[320px] text-left max-h-[70vh] overflow-y-auto">
+      <p className="font-semibold text-slate-800 mb-2">
+        {data.week}（週の開始日）
+      </p>
+      {isCategory ? (
+        CATEGORY_KEYS.map((k) => {
+          const label = CATEGORY_LABELS[k];
+          const count = (data[label] as number) ?? 0;
+          const names = (data[`${label}_names`] as string[] | undefined) ?? [];
+          return (
+            <div key={k} className="mb-2 last:mb-0">
+              <p className="text-xs text-slate-600 mb-0.5">
+                {label}: {count}名
+              </p>
+              <ul className="text-xs text-slate-700 list-disc list-inside pl-0.5">
+                {names.length ? names.map((n) => <li key={n}>{n}</li>) : <li>—</li>}
+              </ul>
+            </div>
+          );
+        })
+      ) : (
+        <>
+          <p className="text-xs text-slate-600 mb-1">
+            {FAITH_KEYS.saint}: {data.saint}名
+          </p>
+          <ul className="text-xs text-slate-700 list-disc list-inside mb-2 pl-0.5">
+            {((data.saintNames ?? []) as string[]).length
+              ? ((data.saintNames ?? []) as string[]).map((n) => <li key={n}>{n}</li>)
+              : <li>—</li>}
+          </ul>
+          <p className="text-xs text-slate-600 mb-1">
+            {FAITH_KEYS.friend}: {data.friend}名
+          </p>
+          <ul className="text-xs text-slate-700 list-disc list-inside pl-0.5">
+            {((data.friendNames ?? []) as string[]).length
+              ? ((data.friendNames ?? []) as string[]).map((n) => <li key={n}>{n}</li>)
+              : <li>—</li>}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
 const CATEGORY_KEYS: Category[] = ["adult", "university", "high_school", "junior_high", "elementary", "preschool"];
 const CATEGORY_COLORS: Record<string, string> = {
   adult: "#a5b4fc",
@@ -76,10 +133,9 @@ export function StatisticsCharts({
   attendance,
   meetings,
   members,
-  absenceAlertWeeks,
 }: StatisticsChartsProps) {
   const chartRef = useRef<HTMLDivElement>(null);
-  const [localOnly, setLocalOnly] = useState(true);
+  const [localOnly, setLocalOnly] = useState(false);
   const [colorGroupBy, setColorGroupBy] = useState<ColorGroupBy>("faith");
 
   const downloadPng = useCallback(async () => {
@@ -102,25 +158,52 @@ export function StatisticsCharts({
     members.forEach((m) => map.set(m.id, isSaint(m.is_baptized)));
     return map;
   }, [members]);
+  const memberIdToName = useMemo(() => {
+    const map = new Map<string, string>();
+    members.forEach((m) => map.set(m.id, m.name ?? "—"));
+    return map;
+  }, [members]);
+
+  type WeeklyRow = {
+    week: string;
+    date: string;
+    count: number;
+    saint: number;
+    friend: number;
+    saintNames: string[];
+    friendNames: string[];
+    [key: string]: string | number | string[];
+  };
 
   const weeklyData = useMemo(() => {
     const last12Weeks = 12;
-    const base: { week: string; date: string; count: number; saint: number; friend: number; [key: string]: string | number }[] = [];
+    const base: WeeklyRow[] = [];
     for (let i = last12Weeks - 1; i >= 0; i--) {
-      const end = endOfWeek(subWeeks(new Date(), i), { weekStartsOn: 1 });
-      const start = startOfWeek(subWeeks(new Date(), i), { weekStartsOn: 1 });
-      const weekLabel = format(end, "M/d", { locale: ja });
+      const end = endOfWeek(subWeeks(new Date(), i), { weekStartsOn: 0 });
+      const start = startOfWeek(subWeeks(new Date(), i), { weekStartsOn: 0 });
+      const weekLabel = format(start, "M/d", { locale: ja });
 
       const countByFaith = { saint: 0, friend: 0 };
+      const saintMemberIds = new Set<string>();
+      const friendMemberIds = new Set<string>();
       const countByCategory: Record<string, number> = {};
-      CATEGORY_KEYS.forEach((k) => (countByCategory[k] = 0));
+      const categoryMemberIds: Record<string, Set<string>> = {};
+      CATEGORY_KEYS.forEach((k) => {
+        countByCategory[k] = 0;
+        categoryMemberIds[k] = new Set();
+      });
       let total = 0;
 
       const meetingIdsInWeek = new Set<string>();
+      const startIso = format(start, "yyyy-MM-dd");
+      const endIso = format(end, "yyyy-MM-dd");
       mainMeetings.forEach((m) => {
-        const d = new Date(m.event_date);
-        if (d >= start && d <= end) meetingIdsInWeek.add(m.id);
+        const eventIso = m.event_date;
+        if (eventIso >= startIso && eventIso <= endIso) meetingIdsInWeek.add(m.id);
       });
+      let countAttendedOnly = 0;
+      let saintAttendedOnly = 0;
+      let friendAttendedOnly = 0;
       meetingIdsInWeek.forEach((mid) => {
         attendance
           .filter((a) => a.meeting_id === mid)
@@ -130,57 +213,74 @@ export function StatisticsCharts({
             const baptized = a.recorded_is_baptized ?? memberIsBaptized.get(a.member_id);
             const saint = isSaint(baptized);
             countByFaith[saint ? "saint" : "friend"] += 1;
+            if (saint) saintMemberIds.add(a.member_id);
+            else friendMemberIds.add(a.member_id);
             const cat = a.recorded_category && CATEGORY_KEYS.includes(a.recorded_category as Category) ? a.recorded_category : "adult";
             countByCategory[cat] = (countByCategory[cat] ?? 0) + 1;
+            categoryMemberIds[cat].add(a.member_id);
+            if (a.attended !== false) {
+              countAttendedOnly += 1;
+              if (saint) saintAttendedOnly += 1;
+              else friendAttendedOnly += 1;
+            }
           });
       });
 
-      const row: { week: string; date: string; count: number; saint: number; friend: number; [key: string]: string | number } = {
+      const saintNames = Array.from(saintMemberIds)
+        .map((id) => memberIdToName.get(id) ?? "(不明)")
+        .sort((a, b) => a.localeCompare(b, "ja"));
+      const friendNames = Array.from(friendMemberIds)
+        .map((id) => memberIdToName.get(id) ?? "(不明)")
+        .sort((a, b) => a.localeCompare(b, "ja"));
+
+      // #region agent log — 2/1 信仰別不整合
+      const rowDate = format(start, "yyyy-MM-dd");
+      if (rowDate === "2026-02-01" || rowDate === "2025-02-01") {
+        fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            location: "StatisticsCharts.tsx:weeklyData",
+            message: "week faith breakdown (chart)",
+            data: {
+              weekLabel: format(start, "M/d", { locale: ja }),
+              date: rowDate,
+              meetingIdsInWeek: meetingIdsInWeek.size,
+              total,
+              saint: countByFaith.saint,
+              friend: countByFaith.friend,
+              totalAttendedOnly: countAttendedOnly,
+              saintAttendedOnly,
+              friendAttendedOnly,
+              localOnly,
+            },
+            timestamp: Date.now(),
+            hypothesisId: "A,B,E",
+          }),
+        }).catch(() => {});
+      }
+      // #endregion
+
+      const row: WeeklyRow = {
         week: weekLabel,
-        date: format(end, "yyyy-MM-dd"),
+        date: format(start, "yyyy-MM-dd"),
         count: total,
         saint: countByFaith.saint,
         friend: countByFaith.friend,
+        saintNames,
+        friendNames,
       };
       CATEGORY_KEYS.forEach((k) => (row[CATEGORY_LABELS[k as Category]] = countByCategory[k] ?? 0));
+      CATEGORY_KEYS.forEach((k) => {
+        const names = Array.from(categoryMemberIds[k])
+          .map((id) => memberIdToName.get(id) ?? "(不明)")
+          .sort((a, b) => a.localeCompare(b, "ja"));
+        row[`${CATEGORY_LABELS[k as Category]}_names`] = names;
+      });
       base.push(row);
     }
     return base;
-  }, [attendance, mainMeetings, localMemberIds, localOnly, memberIsBaptized]);
-
-  // 今週 = 本日を含む一番近い過去の日曜日までの1週間（月曜〜日曜）
-  const { weekStart: thisWeekStart, weekEnd: thisWeekEnd } = getThisWeekByLastSunday();
-  const thisWeekMeetingIds = useMemo(
-    () =>
-      new Set(
-        meetings
-          .filter((m) => {
-            const d = new Date(m.event_date);
-            return d >= thisWeekStart && d <= thisWeekEnd;
-          })
-          .flatMap((m) => [m.id])
-      ),
-    [meetings, thisWeekStart, thisWeekEnd]
-  );
-  const attendedThisWeek = new Set(
-    attendance.filter((a) => thisWeekMeetingIds.has(a.meeting_id)).map((a) => a.member_id)
-  );
-  const pastWeeksStart = addDays(thisWeekStart, -7 * absenceAlertWeeks);
-  const attendedInPastWeeks = new Map<string, number>();
-  attendance.forEach((a) => {
-    const meeting = meetings.find((m) => m.id === a.meeting_id);
-    if (!meeting) return;
-    const d = new Date(meeting.event_date);
-    if (d >= pastWeeksStart && d < thisWeekStart) {
-      attendedInPastWeeks.set(a.member_id, (attendedInPastWeeks.get(a.member_id) ?? 0) + 1);
-    }
-  });
-  const absentThisWeek = Array.from(localMemberIds).filter(
-    (id) => attendedInPastWeeks.has(id) && !attendedThisWeek.has(id)
-  );
-  const absentNames = absentThisWeek
-    .map((id) => members.find((m) => m.id === id)?.name)
-    .filter(Boolean) as string[];
+  }, [attendance, mainMeetings, localMemberIds, localOnly, memberIsBaptized, memberIdToName]);
 
   return (
     <div className="space-y-6">
@@ -231,7 +331,7 @@ export function StatisticsCharts({
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
+                <Tooltip content={(props) => <WeeklyBarTooltip {...props} colorGroupBy={colorGroupBy} />} />
                 <Bar dataKey="count" fill="#0284c7" name="出席者数" />
               </BarChart>
             ) : colorGroupBy === "faith" ? (
@@ -239,7 +339,7 @@ export function StatisticsCharts({
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
+                <Tooltip content={(props) => <WeeklyBarTooltip {...props} colorGroupBy={colorGroupBy} />} />
                 <Legend />
                 <Bar dataKey="saint" stackId="a" fill={FAITH_COLORS.saint} name={FAITH_KEYS.saint} />
                 <Bar dataKey="friend" stackId="a" fill={FAITH_COLORS.friend} name={FAITH_KEYS.friend} />
@@ -249,7 +349,7 @@ export function StatisticsCharts({
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
+                <Tooltip content={(props) => <WeeklyBarTooltip {...props} colorGroupBy={colorGroupBy} />} />
                 <Legend />
                 {CATEGORY_KEYS.map((k) => (
                   <Bar
@@ -274,21 +374,6 @@ export function StatisticsCharts({
           グラフをPNGでダウンロード
         </button>
       </div>
-      {absentNames.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-          <h2 className="font-semibold text-amber-800 mb-1">
-            欠席アラート（過去{absenceAlertWeeks}週出席していたローカルメンバー・今週欠席）
-          </h2>
-          <p className="text-xs text-amber-700 mb-2">
-            今週＝本日を含む一番近い過去の日曜日までの1週間
-          </p>
-          <ul className="list-disc list-inside text-sm text-amber-800">
-            {absentNames.map((name) => (
-              <li key={name}>{name}</li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }

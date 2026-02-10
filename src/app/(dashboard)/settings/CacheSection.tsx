@@ -34,7 +34,7 @@ export function CacheSection() {
           type="button"
           onClick={handleRefresh}
           disabled={loading}
-          className="rounded-md bg-slate-700 text-white px-3 py-2 text-sm font-medium hover:bg-slate-600 disabled:opacity-50"
+          className="rounded-md bg-primary-600 text-white px-3 py-2 text-sm font-medium hover:bg-primary-700 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500"
         >
           {loading ? "処理中…" : "キャッシュをリフレッシュ"}
         </button>

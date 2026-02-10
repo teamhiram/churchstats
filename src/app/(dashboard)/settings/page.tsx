@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { BackupSection } from "./BackupSection";
 import { CacheSection } from "./CacheSection";
+import { DisplaySettingsSection } from "./DisplaySettingsSection";
 import { UserManagement } from "./UserManagement";
 import { getCurrentUserWithProfile } from "@/lib/cachedData";
 
@@ -13,6 +14,7 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-8">
       <h1 className="text-xl font-bold text-slate-800">システム設定</h1>
+      <DisplaySettingsSection />
       {canManageUsers && (
         <section>
           <h2 className="font-semibold text-slate-800 mb-4">ユーザー管理</h2>

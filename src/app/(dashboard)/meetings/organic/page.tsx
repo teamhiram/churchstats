@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 import { OrganicDispatchForm } from "./OrganicDispatchForm";
-import { getMondayWeeksInYear, getDefaultMondayWeekStart, formatDateYmd } from "@/lib/weekUtils";
+import { getSundayWeeksInYear, getDefaultSundayWeekStart, formatDateYmd } from "@/lib/weekUtils";
 import { getMeetingsLayoutData } from "@/lib/cachedData";
 
 export default async function OrganicDispatchPage({
@@ -15,18 +16,21 @@ export default async function OrganicDispatchPage({
     ? Math.min(Math.max(yearFromUrl, currentYear - 10), currentYear + 1)
     : currentYear;
 
-  const mondayWeeks = getMondayWeeksInYear(initialYear);
-  const defaultWeekStart = formatDateYmd(getDefaultMondayWeekStart(initialYear));
+  const sundayWeeks = getSundayWeeksInYear(initialYear);
+  const defaultWeekStart = formatDateYmd(getDefaultSundayWeekStart(initialYear));
   const weekStartParam = params.week_start;
   const weekStartIso =
-    weekStartParam && mondayWeeks.some((w) => formatDateYmd(w.weekStart) === weekStartParam)
+    weekStartParam && sundayWeeks.some((w) => formatDateYmd(w.weekStart) === weekStartParam)
       ? weekStartParam
-      : (mondayWeeks.find((w) => formatDateYmd(w.weekStart) === defaultWeekStart)
+      : (sundayWeeks.find((w) => formatDateYmd(w.weekStart) === defaultWeekStart)
           ? defaultWeekStart
-          : formatDateYmd(mondayWeeks[0]?.weekStart ?? new Date(initialYear, 0, 1)));
+          : formatDateYmd(sundayWeeks[0]?.weekStart ?? new Date(initialYear, 0, 1)));
 
   const { user, profile, districts } = await getMeetingsLayoutData();
   if (!user) redirect("/login");
+
+  const supabase = await createClient();
+  const { data: groups } = await supabase.from("groups").select("id, name, district_id").order("name");
 
   const defaultDistrictId =
     params.district_id ?? (profile?.main_district_id ?? districts[0]?.id ?? "");
@@ -35,10 +39,11 @@ export default async function OrganicDispatchPage({
     <div className="space-y-6">
       <OrganicDispatchForm
         districts={districts}
+        groups={groups ?? []}
         defaultDistrictId={defaultDistrictId}
         initialYear={initialYear}
         initialWeekStartIso={weekStartIso}
-        weekOptions={mondayWeeks.map((w) => ({
+        weekOptions={sundayWeeks.map((w) => ({
           value: formatDateYmd(w.weekStart),
           label: w.label,
         }))}

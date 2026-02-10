@@ -68,7 +68,7 @@ function LoginFormInner() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-3 px-4 bg-slate-600 text-white font-medium rounded-lg touch-target disabled:opacity-50 hover:bg-slate-700"
+          className="w-full py-3 px-4 bg-primary-600 text-white font-medium rounded-lg touch-target disabled:opacity-50 hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500"
         >
           {loading ? "ログイン中…" : "ログイン"}
         </button>

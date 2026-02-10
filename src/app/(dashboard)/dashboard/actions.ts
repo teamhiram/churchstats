@@ -17,7 +17,7 @@ function parseYmd(s: string): Date {
   return new Date(y, m - 1, d);
 }
 
-/** 直近の日曜日までの週の主日・小組欠席者と、派遣済/未派遣を返す */
+/** 今週（アメリカ式・日曜〜土曜）の主日・小組欠席者と、派遣済/未派遣を返す */
 export async function getDispatchMonitorData(): Promise<DispatchMonitorData> {
   const supabase = await createClient();
   const { weekStart, weekEnd } = getThisWeekByLastSunday();
@@ -25,16 +25,13 @@ export async function getDispatchMonitorData(): Promise<DispatchMonitorData> {
   const weekEndIso = formatDateYmd(weekEnd);
   const weekLabel = `${format(weekStart, "yyyy/MM/dd")} - ${format(weekEnd, "yyyy/MM/dd")}`;
 
-  const nextSaturday = addDays(weekEnd, 6);
-  const dispatchRangeEnd = format(nextSaturday, "yyyy-MM-dd");
-
   const [mainMeetingsRes, groupRecordsRes, districtRegularRes, groupRegularRes, membersRes, dispatchRes] =
     await Promise.all([
       supabase
         .from("meetings")
         .select("id, district_id")
         .eq("meeting_type", "main")
-        .eq("event_date", weekEndIso),
+        .eq("event_date", weekStartIso),
       supabase
         .from("group_meeting_records")
         .select("id, group_id")
@@ -45,8 +42,8 @@ export async function getDispatchMonitorData(): Promise<DispatchMonitorData> {
       supabase
         .from("organic_dispatch_records")
         .select("member_id, dispatch_type, dispatch_date, dispatch_memo")
-        .gte("dispatch_date", weekEndIso)
-        .lte("dispatch_date", dispatchRangeEnd),
+        .gte("dispatch_date", weekStartIso)
+        .lte("dispatch_date", weekEndIso),
     ]);
 
   const mainMeetings = (mainMeetingsRes.data ?? []) as { id: string; district_id: string | null }[];
@@ -56,25 +53,29 @@ export async function getDispatchMonitorData(): Promise<DispatchMonitorData> {
   const groupRecordIds = new Set(groupRecords.map((r) => r.id));
   const groupIdsThisWeek = new Set(groupRecords.map((r) => r.group_id));
 
-  let mainAttData: { meeting_id: string; member_id: string }[] = [];
+  let mainAttData: { meeting_id: string; member_id: string; attended?: boolean }[] = [];
   if (mainMeetingIds.size > 0) {
     const { data } = await supabase
       .from("attendance_records")
-      .select("meeting_id, member_id")
+      .select("meeting_id, member_id, attended")
       .in("meeting_id", [...mainMeetingIds]);
-    mainAttData = (data ?? []) as { meeting_id: string; member_id: string }[];
+    mainAttData = (data ?? []) as { meeting_id: string; member_id: string; attended?: boolean }[];
   }
-  let groupAttData: { group_meeting_record_id: string; member_id: string }[] = [];
+  let groupAttData: { group_meeting_record_id: string; member_id: string; attended?: boolean }[] = [];
   if (groupRecordIds.size > 0) {
     const { data } = await supabase
       .from("group_meeting_attendance")
-      .select("group_meeting_record_id, member_id")
+      .select("group_meeting_record_id, member_id, attended")
       .in("group_meeting_record_id", [...groupRecordIds]);
-    groupAttData = (data ?? []) as { group_meeting_record_id: string; member_id: string }[];
+    groupAttData = (data ?? []) as { group_meeting_record_id: string; member_id: string; attended?: boolean }[];
   }
 
-  const mainAttendedThisWeek = new Set(mainAttData.map((a) => a.member_id));
-  const groupAttendedThisWeek = new Set(groupAttData.map((a) => a.member_id));
+  const mainAttendedThisWeek = new Set(
+    mainAttData.filter((a) => a.attended !== false).map((a) => a.member_id)
+  );
+  const groupAttendedThisWeek = new Set(
+    groupAttData.filter((a) => a.attended !== false).map((a) => a.member_id)
+  );
 
   const districtRegularRows = (districtRegularRes.data ?? []) as { district_id: string; member_id: string }[];
   const groupRegularRows = (groupRegularRes.data ?? []) as { group_id: string; member_id: string }[];
@@ -107,9 +108,11 @@ export async function getDispatchMonitorData(): Promise<DispatchMonitorData> {
     if (pastMainIds.size > 0) {
       const { data: pastAtt } = await supabase
         .from("attendance_records")
-        .select("member_id")
+        .select("member_id, attended")
         .in("meeting_id", [...pastMainIds]);
-      (pastAtt ?? []).forEach((a: { member_id: string }) => mainSourceIds.add(a.member_id));
+      (pastAtt ?? [])
+        .filter((a: { attended?: boolean }) => a.attended !== false)
+        .forEach((a: { member_id: string }) => mainSourceIds.add(a.member_id));
     }
   }
   if (groupRegularMemberIds.size === 0 && groupIdsThisWeek.size > 0) {
@@ -124,9 +127,11 @@ export async function getDispatchMonitorData(): Promise<DispatchMonitorData> {
     if (pastGroupRecordIds.size > 0) {
       const { data: pastGroupAtt } = await supabase
         .from("group_meeting_attendance")
-        .select("member_id")
+        .select("member_id, attended")
         .in("group_meeting_record_id", [...pastGroupRecordIds]);
-      (pastGroupAtt ?? []).forEach((a: { member_id: string }) => groupSourceIds.add(a.member_id));
+      (pastGroupAtt ?? [])
+        .filter((a: { attended?: boolean }) => a.attended !== false)
+        .forEach((a: { member_id: string }) => groupSourceIds.add(a.member_id));
     }
   }
 

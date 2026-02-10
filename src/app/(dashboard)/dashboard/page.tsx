@@ -15,7 +15,6 @@ export default async function DashboardPage() {
     meetingsCountRes,
     districtsCountRes,
     groupsCountRes,
-    settingsRes,
     meetingsRes,
     membersRes,
   ] = await Promise.all([
@@ -24,7 +23,6 @@ export default async function DashboardPage() {
     supabase.from("meetings").select("id", { count: "exact", head: true }),
     supabase.from("districts").select("id", { count: "exact", head: true }),
     supabase.from("groups").select("id", { count: "exact", head: true }),
-    supabase.from("system_settings").select("key, value").eq("key", "absence_alert_weeks").maybeSingle(),
     supabase
       .from("meetings")
       .select("id, event_date, meeting_type, district_id, name")
@@ -35,7 +33,6 @@ export default async function DashboardPage() {
   ]);
 
   const localities = localitiesRes.data ?? [];
-  const absenceWeeks = settingsRes.data?.value != null ? Number(settingsRes.data.value) : 4;
 
   const meetings = meetingsRes.data ?? [];
   const meetingIds = meetings.map((m) => m.id);
@@ -45,9 +42,43 @@ export default async function DashboardPage() {
       : (
           await supabase
             .from("attendance_records")
-            .select("id, meeting_id, member_id, recorded_category, recorded_is_baptized, district_id")
+            .select("id, meeting_id, member_id, recorded_category, recorded_is_baptized, district_id, attended")
             .in("meeting_id", meetingIds)
         ).data ?? [];
+
+  // #region agent log — 2/1 信仰別不整合調査（attended は DB に存在する場合のみ select に含める）
+  const TARGET_ISO = "2026-02-01";
+  const targetMeetings = meetings.filter((m) => m.event_date === TARGET_ISO && m.meeting_type === "main");
+  const targetMeetingIds = new Set(targetMeetings.map((m) => m.id));
+  const targetRecords = attendance.filter((a: { meeting_id: string }) => targetMeetingIds.has(a.meeting_id));
+  function isSaint(v: unknown): boolean {
+    if (v === true || v === 1) return true;
+    if (typeof v === "string" && (v.toLowerCase() === "true" || v === "1")) return true;
+    return false;
+  }
+  const byFaithAll = { saint: 0, friend: 0 };
+  targetRecords.forEach((a: { recorded_is_baptized?: unknown }) => {
+    const saint = isSaint(a.recorded_is_baptized);
+    byFaithAll[saint ? "saint" : "friend"] += 1;
+  });
+  fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      location: "dashboard/page.tsx",
+      message: "2/1 dashboard attendance stats",
+      data: {
+        targetDate: TARGET_ISO,
+        meetingCount: targetMeetings.length,
+        meetingIds: targetMeetings.map((m) => m.id),
+        recordsTotal: targetRecords.length,
+        byFaithAll,
+      },
+      timestamp: Date.now(),
+      hypothesisId: "A",
+    }),
+  }).catch(() => {});
+  // #endregion
 
   const membersCount = membersCountRes.count ?? 0;
   const meetingsCount = meetingsCountRes.count ?? 0;
@@ -93,7 +124,6 @@ export default async function DashboardPage() {
         attendance={attendance}
         meetings={meetings}
         members={membersRes.data ?? []}
-        absenceAlertWeeks={absenceWeeks}
       />
     </div>
   );

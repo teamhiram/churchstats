@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { SmallGroupAttendance } from "./SmallGroupAttendance";
-import { getMondayWeeksInYear, getDefaultMondayWeekStart, formatDateYmd } from "@/lib/weekUtils";
+import { getSundayWeeksInYear, getDefaultSundayWeekStart, formatDateYmd } from "@/lib/weekUtils";
 import { getMeetingsLayoutData } from "@/lib/cachedData";
 
 export default async function SmallGroupAttendancePage({
@@ -15,15 +15,15 @@ export default async function SmallGroupAttendancePage({
     ? Math.min(Math.max(yearFromUrl, currentYear - 10), currentYear + 1)
     : currentYear;
 
-  const mondayWeeks = getMondayWeeksInYear(initialYear);
-  const defaultWeekStart = formatDateYmd(getDefaultMondayWeekStart(initialYear));
+  const sundayWeeks = getSundayWeeksInYear(initialYear);
+  const defaultWeekStart = formatDateYmd(getDefaultSundayWeekStart(initialYear));
   const weekStartParam = params.week_start;
   const weekStartIso =
-    weekStartParam && mondayWeeks.some((w) => formatDateYmd(w.weekStart) === weekStartParam)
+    weekStartParam && sundayWeeks.some((w) => formatDateYmd(w.weekStart) === weekStartParam)
       ? weekStartParam
-      : (mondayWeeks.find((w) => formatDateYmd(w.weekStart) === defaultWeekStart)
+      : (sundayWeeks.find((w) => formatDateYmd(w.weekStart) === defaultWeekStart)
           ? defaultWeekStart
-          : formatDateYmd(mondayWeeks[0]?.weekStart ?? new Date(initialYear, 0, 1)));
+          : formatDateYmd(sundayWeeks[0]?.weekStart ?? new Date(initialYear, 0, 1)));
 
   const { user, profile, districts } = await getMeetingsLayoutData();
   if (!user) redirect("/login");
@@ -48,7 +48,7 @@ export default async function SmallGroupAttendancePage({
         defaultDistrictId={defaultDistrictId}
         initialYear={initialYear}
         initialWeekStartIso={weekStartIso}
-        weekOptions={mondayWeeks.map((w) => ({
+        weekOptions={sundayWeeks.map((w) => ({
           value: formatDateYmd(w.weekStart),
           label: w.label,
         }))}

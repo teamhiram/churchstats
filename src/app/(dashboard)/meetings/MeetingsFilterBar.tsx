@@ -2,7 +2,8 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo } from "react";
-import { getMondayWeeksInYear, getDefaultMondayWeekStart, formatDateYmd } from "@/lib/weekUtils";
+import { addDays } from "date-fns";
+import { getSundayWeeksInYear, getDefaultSundayWeekStart, formatDateYmd } from "@/lib/weekUtils";
 
 type District = { id: string; name: string };
 
@@ -19,15 +20,15 @@ export function MeetingsFilterBar({ districts, defaultDistrictId }: Props) {
   const currentYear = new Date().getFullYear();
   const yearParam = searchParams.get("year");
   const year = yearParam ? Math.min(Math.max(Number(yearParam), currentYear - 10), currentYear + 1) : currentYear;
-  const mondayWeeks = useMemo(() => getMondayWeeksInYear(year), [year]);
-  const defaultWeekStart = formatDateYmd(getDefaultMondayWeekStart(year));
+  const sundayWeeks = useMemo(() => getSundayWeeksInYear(year), [year]);
+  const defaultWeekStart = formatDateYmd(getDefaultSundayWeekStart(year));
   const weekStartParam = searchParams.get("week_start");
   const weekStartIso =
-    weekStartParam && mondayWeeks.some((w) => formatDateYmd(w.weekStart) === weekStartParam)
+    weekStartParam && sundayWeeks.some((w) => formatDateYmd(w.weekStart) === weekStartParam)
       ? weekStartParam
-      : (mondayWeeks.find((w) => formatDateYmd(w.weekStart) === defaultWeekStart)
+      : (sundayWeeks.find((w) => formatDateYmd(w.weekStart) === defaultWeekStart)
           ? defaultWeekStart
-          : formatDateYmd(mondayWeeks[0]?.weekStart ?? new Date(year, 0, 1)));
+          : formatDateYmd(sundayWeeks[0]?.weekStart ?? new Date(year, 0, 1)));
   const districtIdParam = searchParams.get("district_id");
   const districtId =
     districtIdParam ?? (defaultDistrictId || (districts[0]?.id ?? ""));
@@ -52,21 +53,37 @@ export function MeetingsFilterBar({ districts, defaultDistrictId }: Props) {
   if (!showFilter) return null;
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
-  const weekOptions = mondayWeeks.map((w) => ({
+  const weekOptions = sundayWeeks.map((w) => ({
     value: formatDateYmd(w.weekStart),
     label: w.label,
   }));
 
+  const [y, m, d] = weekStartIso.split("-").map(Number);
+  const currentWeekStart = new Date(y, m - 1, d);
+  const prevWeekStart = addDays(currentWeekStart, -7);
+  const nextWeekStart = addDays(currentWeekStart, 7);
+  const prevWeekIso = formatDateYmd(prevWeekStart);
+  const nextWeekIso = formatDateYmd(nextWeekStart);
+
+  const goPrevWeek = useCallback(() => {
+    const newYear = prevWeekStart.getFullYear();
+    updateParams({ year: newYear, week_start: prevWeekIso });
+  }, [prevWeekIso, prevWeekStart, updateParams]);
+  const goNextWeek = useCallback(() => {
+    const newYear = nextWeekStart.getFullYear();
+    updateParams({ year: newYear, week_start: nextWeekIso });
+  }, [nextWeekIso, nextWeekStart, updateParams]);
+
   return (
     <div className="bg-white border-b border-slate-200 px-4 py-3 md:px-6 m-0">
-      <div className="grid gap-4 sm:grid-cols-[minmax(0,0.4fr)_1.2fr_minmax(0,1fr)] max-w-3xl">
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,0.4fr)_1.7fr_minmax(0,0.5fr)] max-w-3xl">
         <div className="min-w-0">
           <select
             value={year}
             onChange={(e) => {
               const y = Number(e.target.value);
-              const weeks = getMondayWeeksInYear(y);
-              const def = formatDateYmd(getDefaultMondayWeekStart(y));
+              const weeks = getSundayWeeksInYear(y);
+              const def = formatDateYmd(getDefaultSundayWeekStart(y));
               const ws = weeks.find((w) => formatDateYmd(w.weekStart) === def)
                 ? def
                 : formatDateYmd(weeks[0]?.weekStart ?? new Date(y, 0, 1));
@@ -81,11 +98,19 @@ export function MeetingsFilterBar({ districts, defaultDistrictId }: Props) {
             ))}
           </select>
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={goPrevWeek}
+            className="shrink-0 px-2 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 touch-target text-sm text-slate-700"
+            aria-label="先週"
+          >
+            先週
+          </button>
           <select
             value={weekStartIso}
             onChange={(e) => updateParams({ week_start: e.target.value })}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
+            className="min-w-0 flex-1 px-3 py-2 border border-slate-300 rounded-lg touch-target"
           >
             {weekOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -93,6 +118,14 @@ export function MeetingsFilterBar({ districts, defaultDistrictId }: Props) {
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            onClick={goNextWeek}
+            className="shrink-0 px-2 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 touch-target text-sm text-slate-700"
+            aria-label="翌週"
+          >
+            翌週
+          </button>
         </div>
         <div className="min-w-0">
           <select

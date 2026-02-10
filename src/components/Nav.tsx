@@ -1,18 +1,37 @@
 "use client";
 
+import { useDisplaySettings } from "@/contexts/DisplaySettingsContext";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useCallback, useRef, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createPortal } from "react-dom";
+import { useState, useRef, useEffect, useLayoutEffect, type RefObject } from "react";
 
-const links = [
+const links: { href?: string; label: string; type?: "dropdown"; children?: { href: string; label: string }[] }[] = [
   { href: "/dashboard", label: "ダッシュボード" },
   { href: "/meetings/list", label: "週別集計" },
   { href: "/meetings", label: "出欠登録" },
   { href: "/members", label: "名簿管理" },
   { href: "/settings/organization", label: "枠組設定" },
   { href: "/settings", label: "システム設定" },
+  { href: "/settings/account", label: "アカウント詳細" },
+  { type: "dropdown", label: "デバッグ", children: [{ href: "/debug/tables", label: "全テーブル" }, { href: "/meetings/list/duplicates", label: "重複出席" }] },
 ];
+
+/** モバイルフッター用: 速報｜週別｜出欠｜名簿｜設定（設定はサブメニュー） */
+const footerMainItems = [
+  { href: "/dashboard", label: "速報" },
+  { href: "/meetings/list", label: "週別" },
+  { href: "/meetings", label: "出欠" },
+  { href: "/members", label: "名簿" },
+] as const;
+
+const settingsSubItems = [
+  { href: "/settings/organization", label: "枠組設定" },
+  { href: "/settings", label: "システム設定" },
+  { href: "/settings/account", label: "アカウント詳細" },
+] as const;
+
+const debugSubItems = [{ href: "/debug/tables", label: "全テーブル" }, { href: "/meetings/list/duplicates", label: "重複出席" }] as const;
 
 type NavProps = {
   displayName?: string | null;
@@ -20,134 +39,162 @@ type NavProps = {
   localityName?: string | null;
 };
 
-function AccountBlock({
-  displayName,
-  roleLabel,
-  localityName,
-  onLinkClick,
-}: {
-  displayName?: string | null;
-  roleLabel?: string;
-  localityName?: string | null;
-  onLinkClick?: () => void;
-}) {
-  const handleSignOut = async () => {
-    onLinkClick?.();
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    window.location.href = "/login";
-  };
-
-  return (
-    <div className="border-t border-slate-200 p-2 shrink-0 space-y-2">
-      <div className="px-3 py-2 text-xs text-slate-600 space-y-0.5">
-        <p className="font-medium text-slate-800 truncate" title={displayName ?? undefined}>
-          {displayName && displayName !== "" ? displayName : "—"}
-        </p>
-        <p className="text-slate-500">ロール: {roleLabel ?? "—"}</p>
-        <p className="text-slate-500">所属地方: {localityName && localityName !== "" ? localityName : "—"}</p>
-      </div>
-      <button
-        type="button"
-        onClick={handleSignOut}
-        className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded touch-target"
-      >
-        ログアウト
-      </button>
-    </div>
-  );
+function isSettingsPath(pathname: string) {
+  return pathname.startsWith("/settings");
 }
 
-function DrawerNavContent({
+const contentWidthClass = (fullWidth: boolean) =>
+  fullWidth ? "w-full" : "w-full max-w-7xl mx-auto";
+
+function DebugDropdownPc({
+  children,
   pathname,
-  onLinkClick,
-  displayName,
-  roleLabel,
-  localityName,
+  onClose,
+  anchorRef,
 }: {
+  children: { href: string; label: string }[];
   pathname: string;
-  onLinkClick: () => void;
-  displayName?: string | null;
-  roleLabel?: string;
-  localityName?: string | null;
+  onClose: () => void;
+  anchorRef: RefObject<HTMLDivElement | null>;
 }) {
+  const [rect, setRect] = useState<{ top: number; left: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = anchorRef.current;
+    if (!el) return;
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      setRect({ top: r.bottom, left: r.left });
+    };
+    update();
+    const obs = new ResizeObserver(update);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [anchorRef]);
+  if (rect === null) return null;
   return (
-    <>
-      <div className="flex flex-col gap-1 py-2">
-        {links.map(({ href, label }) => {
-          const isActive =
-            pathname === href ||
-            (href === "/meetings" &&
-              pathname.startsWith("/meetings") &&
-              !pathname.startsWith("/meetings/list")) ||
-            (href === "/settings" && pathname === "/settings");
-          return (
-            <Link
-              key={href}
-              href={href}
-              onClick={onLinkClick}
-              className={`block px-4 py-3 touch-target text-sm font-medium rounded-lg ${
-                isActive ? "bg-primary-700 text-white" : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {label}
-            </Link>
-          );
-        })}
-      </div>
-      <div className="mt-2">
-        <p className="px-3 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wide">アカウント</p>
-        <AccountBlock
-          displayName={displayName}
-          roleLabel={roleLabel}
-          localityName={localityName}
-          onLinkClick={onLinkClick}
-        />
-      </div>
-    </>
+    <div
+      className="fixed w-40 rounded-b-lg border border-t-0 border-slate-200 bg-white py-1 shadow-lg z-[100]"
+      style={{ top: rect.top, left: rect.left }}
+      role="menu"
+    >
+      {children.map(({ href, label }) => {
+        const childActive = pathname.startsWith(href);
+        return (
+          <Link
+            key={href}
+            href={href}
+            onClick={onClose}
+            className={`block px-4 py-2 text-sm touch-target ${
+              childActive ? "bg-primary-50 text-primary-700 font-medium" : "text-slate-700 hover:bg-slate-50"
+            }`}
+            role="menuitem"
+          >
+            {label}
+          </Link>
+        );
+      })}
+    </div>
   );
 }
 
 export function Nav({ displayName, roleLabel, localityName }: NavProps) {
   const pathname = usePathname();
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [accountOpen, setAccountOpen] = useState(false);
-  const accountRef = useRef<HTMLDivElement>(null);
-
-  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+  const { fullWidth } = useDisplaySettings();
+  const [settingsSubOpen, setSettingsSubOpen] = useState(false);
+  const [debugSubOpen, setDebugSubOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
+  const debugRef = useRef<HTMLDivElement>(null);
+  const debugRefMobile = useRef<HTMLDivElement>(null);
+  const debugJustOpenedRef = useRef(false);
 
   useEffect(() => {
-    if (!accountOpen) return;
+    if (!settingsSubOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (accountRef.current && !accountRef.current.contains(e.target as Node)) {
-        setAccountOpen(false);
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setSettingsSubOpen(false);
       }
     };
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
-  }, [accountOpen]);
+  }, [settingsSubOpen]);
+
+  useEffect(() => {
+    if (!debugSubOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (debugJustOpenedRef.current) {
+        debugJustOpenedRef.current = false;
+        return;
+      }
+      const target = e.target as Node;
+      const insidePc = debugRef.current?.contains(target);
+      const insideMobile = debugRefMobile.current?.contains(target);
+      if (!insidePc && !insideMobile) setDebugSubOpen(false);
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [debugSubOpen]);
 
   return (
     <>
       {/* PC: トップ固定ナビゲーション */}
       <header className="hidden md:block fixed top-0 left-0 right-0 z-40 h-12 bg-white border-b border-slate-200">
-        <div className="h-full flex items-center justify-between px-4">
+        <div className={`h-full flex items-center justify-between px-4 ${contentWidthClass(fullWidth)}`}>
           <nav className="flex h-full overflow-x-auto">
-            {links.map(({ href, label }) => {
+            {links.map((item) => {
+              if (item.type === "dropdown" && item.children) {
+                const isActive = item.children.some((c) => pathname.startsWith(c.href));
+                return (
+                  <div key={item.label} className="relative h-full flex items-stretch" ref={debugRef}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        debugJustOpenedRef.current = true;
+                        setDebugSubOpen((o) => !o);
+                      }}
+                      className={`flex items-center h-full px-4 text-sm font-medium whitespace-nowrap touch-target ${
+                        isActive ? "bg-primary-700 text-white" : "text-slate-600 hover:bg-slate-100"
+                      }`}
+                      aria-expanded={debugSubOpen}
+                      aria-haspopup="true"
+                    >
+                      {item.label}
+                      <svg
+                        className={`ml-1 w-4 h-4 transition-transform ${debugSubOpen ? "rotate-180" : ""}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {debugSubOpen &&
+                      createPortal(
+                        <DebugDropdownPc
+                          children={item.children}
+                          pathname={pathname}
+                          onClose={() => setDebugSubOpen(false)}
+                          anchorRef={debugRef}
+                        />,
+                        document.body
+                      )}
+                  </div>
+                );
+              }
+              const { href, label } = item as { href: string; label: string };
               const isActive =
                 pathname === href ||
                 (href === "/meetings" &&
                   pathname.startsWith("/meetings") &&
                   !pathname.startsWith("/meetings/list")) ||
-                (href === "/settings" && pathname === "/settings");
+                (href === "/settings" && pathname === "/settings") ||
+                (href === "/settings/organization" && pathname.startsWith("/settings/organization")) ||
+                (href === "/settings/account" && pathname.startsWith("/settings/account"));
               return (
                 <Link
                   key={href}
                   href={href}
                   className={`flex items-center h-full px-4 text-sm font-medium whitespace-nowrap touch-target ${
-                    isActive
-                      ? "bg-primary-700 text-white"
-                      : "text-slate-600 hover:bg-slate-100"
+                    isActive ? "bg-primary-700 text-white" : "text-slate-600 hover:bg-slate-100"
                   }`}
                 >
                   {label}
@@ -155,99 +202,112 @@ export function Nav({ displayName, roleLabel, localityName }: NavProps) {
               );
             })}
           </nav>
-          <div className="relative shrink-0" ref={accountRef}>
-            <button
-              type="button"
-              onClick={() => setAccountOpen((o) => !o)}
-              className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-slate-700 hover:bg-slate-100 touch-target"
-              aria-expanded={accountOpen}
-              aria-haspopup="true"
-              aria-label="アカウントメニュー"
-            >
-              <span>アカウント</span>
-              <svg
-                className={`w-4 h-4 transition-transform ${accountOpen ? "rotate-180" : ""}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            {accountOpen && (
-              <div
-                className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-slate-200 bg-white py-2 shadow-lg z-50"
-                role="menu"
-              >
-                <div className="px-3 py-2 border-b border-slate-100">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">アカウント</p>
-                </div>
-                <div className="px-3 py-2 text-xs text-slate-600 space-y-0.5">
-                  <p className="font-medium text-slate-800 truncate" title={displayName ?? undefined}>
-                    氏名: {displayName && displayName !== "" ? displayName : "—"}
-                  </p>
-                  <p className="text-slate-500">ロール: {roleLabel ?? "—"}</p>
-                  <p className="text-slate-500">所属地方: {localityName && localityName !== "" ? localityName : "—"}</p>
-                </div>
-                <div className="px-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setAccountOpen(false);
-                      const supabase = createClient();
-                      await supabase.auth.signOut();
-                      window.location.href = "/login";
-                    }}
-                    className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-md touch-target"
-                    role="menuitem"
-                  >
-                    ログアウト
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       </header>
 
-      {/* モバイル: 右下の丸いハンバーガーボタン（リキッドグラス風・クリックで開閉トグル） */}
-      <button
-        type="button"
-        onClick={() => setDrawerOpen((o) => !o)}
-        className="md:hidden fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-primary-500/20 backdrop-blur-md border border-white/30 shadow-lg hover:bg-primary-500/35 active:scale-95 transition-all flex items-center justify-center touch-target text-primary-700"
-        aria-label={drawerOpen ? "メニューを閉じる" : "メニューを開く"}
-        aria-expanded={drawerOpen}
-      >
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-        </svg>
-      </button>
-
-      {/* モバイル: ハンバーガー上に開くパネル（必要分の高さのみ） */}
-      {drawerOpen && (
-        <>
-          <div
-            className="md:hidden fixed inset-0 z-40 bg-black/50 transition-opacity"
-            aria-hidden
-            onClick={closeDrawer}
-          />
-          <aside
-            className="md:hidden fixed right-6 bottom-[5.5rem] z-50 w-[min(320px,calc(100vw-3rem))] max-h-[calc(100dvh-6rem-4rem)] bg-white rounded-xl border border-slate-200 shadow-xl flex flex-col overflow-y-auto"
-            role="dialog"
-            aria-label="ナビゲーション"
-          >
-            <div className="overflow-y-auto">
-              <DrawerNavContent
-                pathname={pathname}
-                onLinkClick={closeDrawer}
-                displayName={displayName}
-                roleLabel={roleLabel}
-                localityName={localityName}
-              />
-            </div>
-          </aside>
-        </>
-      )}
+      {/* モバイル: 固定フッター + 5ボタン */}
+      <footer className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 pb-[env(safe-area-inset-bottom)]">
+        <nav className={`flex h-8 items-stretch ${contentWidthClass(fullWidth)}`} aria-label="メインメニュー">
+          {footerMainItems.map(({ href, label }) => {
+            const isActive =
+              (href === "/dashboard" && pathname === "/dashboard") ||
+              (href === "/meetings/list" && pathname.startsWith("/meetings/list")) ||
+              (href === "/meetings" && pathname.startsWith("/meetings") && !pathname.startsWith("/meetings/list")) ||
+              (href === "/members" && pathname.startsWith("/members"));
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`flex-1 h-full flex items-center justify-center text-sm font-medium min-h-0 ${
+                  isActive ? "text-primary-600 bg-primary-50" : "text-slate-600 active:bg-slate-100"
+                }`}
+              >
+                {label}
+              </Link>
+            );
+          })}
+          <div className="relative flex-1 h-full flex" ref={settingsRef}>
+            <button
+              type="button"
+              onClick={() => setSettingsSubOpen((o) => !o)}
+              className={`w-full h-full flex items-center justify-center text-sm font-medium min-h-0 ${
+                isSettingsPath(pathname) ? "text-primary-600 bg-primary-50" : "text-slate-600 active:bg-slate-100"
+              }`}
+              aria-expanded={settingsSubOpen}
+              aria-haspopup="true"
+              aria-label="設定"
+            >
+              設定
+            </button>
+            {settingsSubOpen && (
+              <div
+                className="absolute bottom-full right-4 left-auto mb-1 w-40 rounded-lg border border-slate-200 bg-white py-1 shadow-lg z-50"
+                role="menu"
+              >
+                {settingsSubItems.map(({ href, label }) => {
+                  const isActive =
+                    (href === "/settings/organization" && pathname.startsWith("/settings/organization")) ||
+                    (href === "/settings" && pathname === "/settings") ||
+                    (href === "/settings/account" && pathname.startsWith("/settings/account"));
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={() => setSettingsSubOpen(false)}
+                      className={`block px-3 py-2.5 text-sm touch-target ${
+                        isActive ? "bg-primary-50 text-primary-700 font-medium" : "text-slate-700 hover:bg-slate-50"
+                      }`}
+                      role="menuitem"
+                    >
+                      {label}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div className="relative flex-1 h-full flex" ref={debugRefMobile}>
+            <button
+              type="button"
+              onClick={() => {
+                debugJustOpenedRef.current = true;
+                setDebugSubOpen((o) => !o);
+              }}
+              className={`w-full h-full flex items-center justify-center text-sm font-medium min-h-0 ${
+                pathname.startsWith("/debug") || pathname.startsWith("/meetings/list/duplicates") ? "text-primary-600 bg-primary-50" : "text-slate-600 active:bg-slate-100"
+              }`}
+              aria-expanded={debugSubOpen}
+              aria-haspopup="true"
+              aria-label="デバッグ"
+            >
+              デバッグ
+            </button>
+            {debugSubOpen && (
+              <div
+                className="absolute bottom-full right-0 left-auto mb-1 w-36 rounded-lg border border-slate-200 bg-white py-1 shadow-lg z-50"
+                role="menu"
+              >
+                {debugSubItems.map(({ href, label }) => {
+                  const isActive = pathname.startsWith(href);
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={() => setDebugSubOpen(false)}
+                      className={`block px-3 py-2.5 text-sm touch-target ${
+                        isActive ? "bg-primary-50 text-primary-700 font-medium" : "text-slate-700 hover:bg-slate-50"
+                      }`}
+                      role="menuitem"
+                    >
+                      {label}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </nav>
+      </footer>
     </>
   );
 }
