@@ -69,10 +69,10 @@ function WeeklyBarTooltip({
   colorGroupBy,
 }: {
   active?: boolean;
-  payload?: { payload: Record<string, string | number | string[]> }[];
+  payload?: { payload?: Record<string, string | number | string[]> }[];
   colorGroupBy?: ColorGroupBy;
 }) {
-  if (!active || !payload?.length) return null;
+  if (!active || !payload?.length || !payload[0].payload) return null;
   const data = payload[0].payload as Record<string, string | number | string[]>;
   const isCategory = colorGroupBy === "category";
   return (
@@ -331,7 +331,14 @@ export function StatisticsCharts({
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip content={(props) => <WeeklyBarTooltip {...props} colorGroupBy={colorGroupBy} />} />
+                <Tooltip
+                  content={(props) => (
+                    <WeeklyBarTooltip
+                      {...(props as { active?: boolean; payload?: { payload?: Record<string, string | number | string[]> }[] })}
+                      colorGroupBy={colorGroupBy}
+                    />
+                  )}
+                />
                 <Bar dataKey="count" fill="#0284c7" name="出席者数" />
               </BarChart>
             ) : colorGroupBy === "faith" ? (
@@ -339,7 +346,14 @@ export function StatisticsCharts({
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip content={(props) => <WeeklyBarTooltip {...props} colorGroupBy={colorGroupBy} />} />
+                <Tooltip
+                  content={(props) => (
+                    <WeeklyBarTooltip
+                      {...(props as { active?: boolean; payload?: { payload?: Record<string, string | number | string[]> }[] })}
+                      colorGroupBy={colorGroupBy}
+                    />
+                  )}
+                />
                 <Legend />
                 <Bar dataKey="saint" stackId="a" fill={FAITH_COLORS.saint} name={FAITH_KEYS.saint} />
                 <Bar dataKey="friend" stackId="a" fill={FAITH_COLORS.friend} name={FAITH_KEYS.friend} />
@@ -349,7 +363,14 @@ export function StatisticsCharts({
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip content={(props) => <WeeklyBarTooltip {...props} colorGroupBy={colorGroupBy} />} />
+                <Tooltip
+                  content={(props) => (
+                    <WeeklyBarTooltip
+                      {...(props as { active?: boolean; payload?: { payload?: Record<string, string | number | string[]> }[] })}
+                      colorGroupBy={colorGroupBy}
+                    />
+                  )}
+                />
                 <Legend />
                 {CATEGORY_KEYS.map((k) => (
                   <Bar
