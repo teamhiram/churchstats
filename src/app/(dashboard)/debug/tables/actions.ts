@@ -9,15 +9,6 @@ function escapeLike(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
-type QueryChain = {
-  select: (s: string) => QueryChain;
-  limit: (n: number) => QueryChain;
-  ilike: (col: string, pattern: string) => QueryChain;
-  eq: (col: string, val: string | number | boolean) => QueryChain;
-  order: (col: string, opts?: { ascending: boolean }) => QueryChain;
-  then: (onFulfilled: (value: { data: unknown[] | null; error: unknown }) => unknown) => Promise<unknown>;
-};
-
 export async function getDebugTableData(
   tableName: string,
   columnFilters: Record<string, string>,
@@ -32,26 +23,27 @@ export async function getDebugTableData(
   }
 
   const supabase = await createClient();
-  const from = (supabase as { from: (t: string) => QueryChain }).from.bind(supabase);
-  let query: QueryChain = from(tableName).select("*").limit(limit);
-
   const filterEntries = Object.entries(columnFilters).filter(([, v]) => v !== "" && v != null);
+
+  let query = supabase.from(tableName).select("*").limit(limit);
+
   for (const [column, value] of filterEntries) {
     const v = value.trim();
     if (!v) continue;
     query = query.ilike(column, `%${escapeLike(v)}%`);
   }
 
-  let result = (await query) as { data: Record<string, unknown>[] | null; error: { message?: string } | null };
+  let result = await query;
+
   if (result.error && filterEntries.length > 0) {
     // ilike が使えない列（UUID 等）の場合は完全一致で再試行
-    query = from(tableName).select("*").limit(limit);
+    let eqQuery = supabase.from(tableName).select("*").limit(limit);
     for (const [column, value] of filterEntries) {
       const v = value.trim();
       if (!v) continue;
-      query = query.eq(column, v);
+      eqQuery = eqQuery.eq(column, v);
     }
-    result = (await query) as { data: Record<string, unknown>[] | null; error: { message?: string } | null };
+    result = await eqQuery;
   }
 
   const { data, error } = result;
