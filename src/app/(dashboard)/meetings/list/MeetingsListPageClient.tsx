@@ -21,9 +21,11 @@ type MeetingsListClientData = {
 export function MeetingsListPageClient({
   searchParams,
   initialData,
+  showLocalityFilter = false,
 }: {
   searchParams: { year?: string; locality?: string; localOnly?: string };
   initialData?: MeetingsListClientData;
+  showLocalityFilter?: boolean;
 }) {
   const currentYear = initialData?.currentYear ?? new Date().getFullYear();
   const year = Math.min(
@@ -33,10 +35,9 @@ export function MeetingsListPageClient({
   const localOnly = (searchParams.localOnly ?? (initialData?.localOnly ? "1" : "0")) !== "0";
 
   const localityParam = searchParams.locality;
-  const localityId =
-    localityParam && localityParam !== "all"
-      ? localityParam
-      : (initialData?.localityId ?? null);
+  const localityId = showLocalityFilter && localityParam && localityParam !== "all"
+    ? localityParam
+    : (initialData?.localityId ?? null);
 
   const { data, isPending, error } = useQuery({
     queryKey: ["meetingsList", year, localityId ?? "default", localOnly ? 1 : 0],
@@ -93,10 +94,11 @@ export function MeetingsListPageClient({
         localOnly={localOnly}
         years={years}
         localities={effective!.localities}
+        showLocalityFilter={showLocalityFilter}
       />
 
       <p className="text-xs text-slate-500">
-        欠席アラート: 過去{effective!.absenceAlertWeeks}週間の出席者で今週欠席した方を表示。派遣先にある名前は青、ない名前は赤。
+        隔週をクリック/タップすると、各種集会の出席者が表示されます。
       </p>
 
       <MeetingsListTable

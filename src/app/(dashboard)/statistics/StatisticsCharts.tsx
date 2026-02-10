@@ -11,10 +11,12 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
+  LabelList,
 } from "recharts";
 import { format, subWeeks, startOfWeek, endOfWeek } from "date-fns";
 import { ja } from "date-fns/locale";
 import { CATEGORY_LABELS } from "@/types/database";
+import { Toggle } from "@/components/Toggle";
 import type { Category } from "@/types/database";
 
 type AttendanceRow = {
@@ -44,13 +46,17 @@ type MemberRow = {
   is_baptized?: boolean;
 };
 
+type DistrictRow = { id: string; name: string };
+
 export type StatisticsChartsProps = {
   attendance: AttendanceRow[];
   meetings: MeetingRow[];
   members: MemberRow[];
+  districts?: DistrictRow[];
+  localityName?: string | null;
 };
 
-type ColorGroupBy = "none" | "faith" | "category";
+type ColorGroupBy = "none" | "faith" | "category" | "district";
 
 /** recorded_is_baptized / is_baptized: Yes=聖徒, No=友人。APIが boolean / number / string で返す場合に対応 */
 function isSaint(recorded: unknown): boolean {
@@ -62,19 +68,24 @@ function isSaint(recorded: unknown): boolean {
 const FAITH_KEYS = { saint: "聖徒", friend: "友人" } as const;
 const FAITH_COLORS = { saint: "#0284c7", friend: "#0ea5e9" };
 
-/** 週別棒グラフ用：週のラベルと人数＋名前を表示（信仰別 or 年代別で出し分け） */
+/** 週別棒グラフ用：週のラベルと人数＋名前を表示（信仰別 or 年代別 or 地区別で出し分け） */
 function WeeklyBarTooltip({
   active,
   payload,
   colorGroupBy,
+  districtKeys,
+  districtNameMap,
 }: {
   active?: boolean;
   payload?: { payload?: Record<string, string | number | string[]> }[];
   colorGroupBy?: ColorGroupBy;
+  districtKeys?: string[];
+  districtNameMap?: Map<string, string>;
 }) {
   if (!active || !payload?.length || !payload[0].payload) return null;
   const data = payload[0].payload as Record<string, string | number | string[]>;
   const isCategory = colorGroupBy === "category";
+  const isDistrict = colorGroupBy === "district";
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 max-w-[320px] text-left max-h-[70vh] overflow-y-auto">
       <p className="font-semibold text-slate-800 mb-2">
@@ -87,6 +98,22 @@ function WeeklyBarTooltip({
           const names = (data[`${label}_names`] as string[] | undefined) ?? [];
           return (
             <div key={k} className="mb-2 last:mb-0">
+              <p className="text-xs text-slate-600 mb-0.5">
+                {label}: {count}名
+              </p>
+              <ul className="text-xs text-slate-700 list-disc list-inside pl-0.5">
+                {names.length ? names.map((n) => <li key={n}>{n}</li>) : <li>—</li>}
+              </ul>
+            </div>
+          );
+        })
+      ) : isDistrict && districtKeys && districtNameMap ? (
+        districtKeys.map((districtId) => {
+          const label = districtId === "__none__" ? "未設定" : (districtNameMap.get(districtId) ?? districtId);
+          const count = (data[`district_${districtId}`] as number) ?? 0;
+          const names = (data[`district_${districtId}_names`] as string[] | undefined) ?? [];
+          return (
+            <div key={districtId} className="mb-2 last:mb-0">
               <p className="text-xs text-slate-600 mb-0.5">
                 {label}: {count}名
               </p>
@@ -128,15 +155,44 @@ const CATEGORY_COLORS: Record<string, string> = {
   elementary: "#86efac",
   preschool: "#f9a8d4",
 };
+/** 地区別の色パレット（地区数が多い場合はインデックスで循環） */
+const DISTRICT_PALETTE = ["#0284c7", "#0ea5e9", "#a5b4fc", "#fdba74", "#67e8f9", "#fde047", "#86efac", "#f9a8d4", "#c084fc", "#f472b6", "#94a3b8", "#22d3ee"];
 
 export function StatisticsCharts({
   attendance,
   meetings,
   members,
+  districts = [],
+  localityName,
 }: StatisticsChartsProps) {
   const chartRef = useRef<HTMLDivElement>(null);
-  const [localOnly, setLocalOnly] = useState(false);
+  const [includeGuests, setIncludeGuests] = useState(false);
+  const localOnly = !includeGuests;
   const [colorGroupBy, setColorGroupBy] = useState<ColorGroupBy>("faith");
+
+  const meetingIdToDistrictId = useMemo(() => {
+    const map = new Map<string, string>();
+    meetings.filter((m) => m.meeting_type === "main").forEach((m) => {
+      if (m.district_id) map.set(m.id, m.district_id);
+    });
+    return map;
+  }, [meetings]);
+  const districtNameMap = useMemo(() => new Map(districts.map((d) => [d.id, d.name])), [districts]);
+  const districtKeys = useMemo(() => {
+    const ids = new Set<string>();
+    meetingIdToDistrictId.forEach((did) => ids.add(did));
+    const fromDistricts = districts
+      .filter((d) => ids.has(d.id))
+      .sort((a, b) => a.name.localeCompare(b.name, "ja"))
+      .map((d) => d.id);
+    if (ids.has("__none__")) return [...fromDistricts, "__none__"];
+    return fromDistricts;
+  }, [districts, meetingIdToDistrictId]);
+  const districtColors = useMemo(() => {
+    const map = new Map<string, string>();
+    districtKeys.forEach((id, idx) => map.set(id, DISTRICT_PALETTE[idx % DISTRICT_PALETTE.length]));
+    return map;
+  }, [districtKeys]);
 
   const downloadPng = useCallback(async () => {
     if (!chartRef.current) return;
@@ -188,6 +244,8 @@ export function StatisticsCharts({
       const friendMemberIds = new Set<string>();
       const countByCategory: Record<string, number> = {};
       const categoryMemberIds: Record<string, Set<string>> = {};
+      const countByDistrict: Record<string, number> = {};
+      const districtMemberIds: Record<string, Set<string>> = {};
       CATEGORY_KEYS.forEach((k) => {
         countByCategory[k] = 0;
         categoryMemberIds[k] = new Set();
@@ -205,6 +263,11 @@ export function StatisticsCharts({
       let saintAttendedOnly = 0;
       let friendAttendedOnly = 0;
       meetingIdsInWeek.forEach((mid) => {
+        const districtId = meetingIdToDistrictId.get(mid) ?? "__none__";
+        if (!countByDistrict[districtId]) {
+          countByDistrict[districtId] = 0;
+          districtMemberIds[districtId] = new Set();
+        }
         attendance
           .filter((a) => a.meeting_id === mid)
           .filter((a) => !localOnly || localMemberIds.has(a.member_id))
@@ -218,6 +281,8 @@ export function StatisticsCharts({
             const cat = a.recorded_category && CATEGORY_KEYS.includes(a.recorded_category as Category) ? a.recorded_category : "adult";
             countByCategory[cat] = (countByCategory[cat] ?? 0) + 1;
             categoryMemberIds[cat].add(a.member_id);
+            countByDistrict[districtId] += 1;
+            districtMemberIds[districtId].add(a.member_id);
             if (a.attended !== false) {
               countAttendedOnly += 1;
               if (saint) saintAttendedOnly += 1;
@@ -277,35 +342,47 @@ export function StatisticsCharts({
           .sort((a, b) => a.localeCompare(b, "ja"));
         row[`${CATEGORY_LABELS[k as Category]}_names`] = names;
       });
+      Object.keys(countByDistrict).forEach((districtId) => {
+        row[`district_${districtId}`] = countByDistrict[districtId];
+        row[`district_${districtId}_names`] = Array.from(districtMemberIds[districtId] ?? [])
+          .map((id) => memberIdToName.get(id) ?? "(不明)")
+          .sort((a, b) => a.localeCompare(b, "ja"));
+      });
       base.push(row);
     }
     return base;
-  }, [attendance, mainMeetings, localMemberIds, localOnly, memberIsBaptized, memberIdToName]);
+  }, [attendance, mainMeetings, localMemberIds, localOnly, memberIsBaptized, memberIdToName, meetingIdToDistrictId]);
 
   return (
     <div className="space-y-6">
       <div ref={chartRef} className="bg-white rounded-lg border border-slate-200 p-4 space-y-4">
-        <h2 className="font-semibold text-slate-800">週別主日出席（過去12週間）</h2>
+        <div className="flex items-start justify-between gap-4">
+          <h2 className="font-semibold text-slate-800">週別主日出席（過去12週間）</h2>
+          {localityName && (
+            <span className="text-sm font-medium text-slate-500 shrink-0">{localityName}</span>
+          )}
+        </div>
 
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <span className="text-sm text-slate-600">棒グラフの色分け</span>
-            <div className="flex rounded-lg border border-slate-200 p-0.5">
+            <div className="flex overflow-hidden">
               {(
                 [
                   { value: "none" as const, label: "集計のみ" },
                   { value: "faith" as const, label: "信仰別" },
                   { value: "category" as const, label: "年代別" },
+                  { value: "district" as const, label: "地区別" },
                 ] as const
               ).map(({ value, label }) => (
                 <button
                   key={value}
                   type="button"
                   onClick={() => setColorGroupBy(value)}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md touch-target ${
+                  className={`px-4 py-2 text-sm font-medium touch-target border border-slate-300 -mr-px transition-all duration-100 first:rounded-l-md last:rounded-r-md ${
                     colorGroupBy === value
-                      ? "bg-primary-600 text-white"
-                      : "text-slate-600 hover:bg-slate-100"
+                      ? "bg-primary-600 text-white border-primary-600 shadow-none z-10"
+                      : "bg-slate-200 text-slate-600 shadow-[inset_0_1px_3px_rgba(0,0,0,0.15)] hover:bg-slate-300"
                   }`}
                 >
                   {label}
@@ -313,15 +390,11 @@ export function StatisticsCharts({
               ))}
             </div>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={localOnly}
-              onChange={(e) => setLocalOnly(e.target.checked)}
-              className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-            />
-            <span className="text-sm text-slate-700">ローカルのみ</span>
-          </label>
+          <Toggle
+            checked={includeGuests}
+            onChange={() => setIncludeGuests((v) => !v)}
+            label="ゲストを含む"
+          />
         </div>
 
         <div className="h-64 w-full">
@@ -336,10 +409,14 @@ export function StatisticsCharts({
                     <WeeklyBarTooltip
                       {...(props as { active?: boolean; payload?: { payload?: Record<string, string | number | string[]> }[] })}
                       colorGroupBy={colorGroupBy}
+                      districtKeys={districtKeys}
+                      districtNameMap={districtNameMap}
                     />
                   )}
                 />
-                <Bar dataKey="count" fill="#0284c7" name="出席者数" />
+                <Bar dataKey="count" fill="#0284c7" name="出席者数">
+                  <LabelList dataKey="count" position="top" fill="#475569" fontSize={12} />
+                </Bar>
               </BarChart>
             ) : colorGroupBy === "faith" ? (
               <BarChart data={weeklyData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
@@ -351,12 +428,66 @@ export function StatisticsCharts({
                     <WeeklyBarTooltip
                       {...(props as { active?: boolean; payload?: { payload?: Record<string, string | number | string[]> }[] })}
                       colorGroupBy={colorGroupBy}
+                      districtKeys={districtKeys}
+                      districtNameMap={districtNameMap}
                     />
                   )}
                 />
                 <Legend />
                 <Bar dataKey="saint" stackId="a" fill={FAITH_COLORS.saint} name={FAITH_KEYS.saint} />
-                <Bar dataKey="friend" stackId="a" fill={FAITH_COLORS.friend} name={FAITH_KEYS.friend} />
+                <Bar dataKey="friend" stackId="a" fill={FAITH_COLORS.friend} name={FAITH_KEYS.friend}>
+                  <LabelList dataKey="count" position="top" fill="#475569" fontSize={12} />
+                </Bar>
+              </BarChart>
+            ) : colorGroupBy === "district" && districtKeys.length > 0 ? (
+              <BarChart data={weeklyData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="week" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip
+                  content={(props) => (
+                    <WeeklyBarTooltip
+                      {...(props as { active?: boolean; payload?: { payload?: Record<string, string | number | string[]> }[] })}
+                      colorGroupBy={colorGroupBy}
+                      districtKeys={districtKeys}
+                      districtNameMap={districtNameMap}
+                    />
+                  )}
+                />
+                <Legend />
+                {districtKeys.map((districtId, idx) => (
+                  <Bar
+                    key={districtId}
+                    dataKey={`district_${districtId}`}
+                    stackId="a"
+                    fill={districtColors.get(districtId) ?? "#94a3b8"}
+                    name={districtId === "__none__" ? "未設定" : (districtNameMap.get(districtId) ?? districtId)}
+                  >
+                    {idx === districtKeys.length - 1 ? (
+                      <LabelList dataKey="count" position="top" fill="#475569" fontSize={12} />
+                    ) : null}
+                  </Bar>
+                ))}
+              </BarChart>
+            ) : colorGroupBy === "district" && districtKeys.length === 0 ? (
+              // 地区別選択時、地区データがない場合は集計のみを表示
+              <BarChart data={weeklyData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="week" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip
+                  content={(props) => (
+                    <WeeklyBarTooltip
+                      {...(props as { active?: boolean; payload?: { payload?: Record<string, string | number | string[]> }[] })}
+                      colorGroupBy="none"
+                      districtKeys={districtKeys}
+                      districtNameMap={districtNameMap}
+                    />
+                  )}
+                />
+                <Bar dataKey="count" fill="#0284c7" name="出席者数">
+                  <LabelList dataKey="count" position="top" fill="#475569" fontSize={12} />
+                </Bar>
               </BarChart>
             ) : (
               <BarChart data={weeklyData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
@@ -368,18 +499,24 @@ export function StatisticsCharts({
                     <WeeklyBarTooltip
                       {...(props as { active?: boolean; payload?: { payload?: Record<string, string | number | string[]> }[] })}
                       colorGroupBy={colorGroupBy}
+                      districtKeys={districtKeys}
+                      districtNameMap={districtNameMap}
                     />
                   )}
                 />
                 <Legend />
-                {CATEGORY_KEYS.map((k) => (
+                {CATEGORY_KEYS.map((k, idx) => (
                   <Bar
                     key={k}
                     dataKey={CATEGORY_LABELS[k]}
                     stackId="a"
                     fill={CATEGORY_COLORS[k]}
                     name={CATEGORY_LABELS[k]}
-                  />
+                  >
+                    {idx === CATEGORY_KEYS.length - 1 ? (
+                      <LabelList dataKey="count" position="top" fill="#475569" fontSize={12} />
+                    ) : null}
+                  </Bar>
                 ))}
               </BarChart>
             )}

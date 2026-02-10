@@ -13,34 +13,10 @@ import {
   removeGroupRegularMember,
 } from "@/app/(dashboard)/settings/organization/actions";
 import { QUERY_KEYS } from "@/lib/queryClient";
+import { Toggle } from "@/components/Toggle";
 import { updateMemberAction } from "./actions";
 
 const CATEGORIES: Category[] = ["adult", "university", "high_school", "junior_high", "elementary", "preschool"];
-
-function Toggle({
-  checked,
-  onChange,
-  ariaLabel,
-}: { checked: boolean; onChange: () => void; ariaLabel: string }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={ariaLabel}
-      onClick={onChange}
-      className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
-        checked ? "bg-primary-600" : "bg-slate-200"
-      }`}
-    >
-      <span
-        className={`pointer-events-none absolute left-0.5 top-1/2 h-6 w-6 -translate-y-1/2 rounded-full bg-white shadow ring-0 transition ${
-          checked ? "translate-x-5" : "translate-x-0"
-        }`}
-      />
-    </button>
-  );
-}
 
 function ButtonGroup<T extends string>({
   value,

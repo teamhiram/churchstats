@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
+import { Toggle } from "@/components/Toggle";
 import { formatDateYmd, getDaysInWeek } from "@/lib/weekUtils";
 import { CATEGORY_LABELS } from "@/types/database";
 import type { Category } from "@/types/database";
@@ -682,22 +683,12 @@ export function SmallGroupAttendance({
                       <tr key={m.id} className="hover:bg-slate-50">
                         <td className="px-3 py-1.5 text-slate-800">{m.name}</td>
                         <td className="px-3 py-1.5">
-                          <button
-                            type="button"
-                            role="switch"
-                            aria-checked={attended}
+                          <Toggle
+                            checked={attended}
+                            onChange={() => toggleAttendance(m.id, m)}
+                            ariaLabel={`${m.name}の出欠`}
                             disabled={isAllGroups}
-                            onClick={() => toggleAttendance(m.id, m)}
-                            className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
-                              isAllGroups ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-                            } ${attended ? "bg-primary-600" : "bg-slate-200"}`}
-                          >
-                            <span
-                              className={`pointer-events-none absolute left-0.5 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white shadow ring-0 transition ${
-                                attended ? "translate-x-4" : "translate-x-0"
-                              }`}
-                            />
-                          </button>
+                          />
                         </td>
                         <td className="px-3 py-1.5">
                           <input

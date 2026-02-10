@@ -44,20 +44,6 @@ export function MeetingsFilterBar({ districts, defaultDistrictId }: Props) {
     [pathname, router, searchParams]
   );
 
-  const showFilter =
-    pathname === "/meetings" ||
-    pathname === "/meetings/sunday" ||
-    pathname === "/meetings/prayer" ||
-    pathname === "/meetings/small-group" ||
-    pathname === "/meetings/organic";
-  if (!showFilter) return null;
-
-  const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
-  const weekOptions = sundayWeeks.map((w) => ({
-    value: formatDateYmd(w.weekStart),
-    label: w.label,
-  }));
-
   const [y, m, d] = weekStartIso.split("-").map(Number);
   const currentWeekStart = new Date(y, m - 1, d);
   const prevWeekStart = addDays(currentWeekStart, -7);
@@ -73,6 +59,20 @@ export function MeetingsFilterBar({ districts, defaultDistrictId }: Props) {
     const newYear = nextWeekStart.getFullYear();
     updateParams({ year: newYear, week_start: nextWeekIso });
   }, [nextWeekIso, nextWeekStart, updateParams]);
+
+  const showFilter =
+    pathname === "/meetings" ||
+    pathname === "/meetings/sunday" ||
+    pathname === "/meetings/prayer" ||
+    pathname === "/meetings/small-group" ||
+    pathname === "/meetings/organic";
+  if (!showFilter) return null;
+
+  const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+  const weekOptions = sundayWeeks.map((w) => ({
+    value: formatDateYmd(w.weekStart),
+    label: w.label,
+  }));
 
   return (
     <div className="bg-white border-b border-slate-200 px-4 py-3 md:px-6 m-0">
