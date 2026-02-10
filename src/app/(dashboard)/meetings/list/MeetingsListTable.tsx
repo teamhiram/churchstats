@@ -46,9 +46,10 @@ export function MeetingsListTable({
           <tr>
             <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase w-12" />
             <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">週</th>
-            <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">主日人数</th>
-            <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">小組人数</th>
-            <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">派遣先人数</th>
+            <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">主日</th>
+            <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">祈り</th>
+            <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">小組</th>
+            <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">派遣先</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-200">
@@ -66,62 +67,52 @@ export function MeetingsListTable({
                   </td>
                   <td className="px-4 py-2 text-sm text-slate-800">{row.label}</td>
                   <td className="px-4 py-2 text-sm text-right text-slate-700">{row.mainCount}</td>
+                  <td className="px-4 py-2 text-sm text-right text-slate-700">{row.prayerCount}</td>
                   <td className="px-4 py-2 text-sm text-right text-slate-700">{row.groupCount}</td>
                   <td className="px-4 py-2 text-sm text-right text-slate-700">{row.dispatchCount}</td>
                 </tr>
                 {isExpanded && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-3 bg-slate-50 border-b border-slate-200">
+                    <td colSpan={6} className="px-4 py-3 bg-slate-50 border-b border-slate-200">
                       {loadingDetail ? (
                         <p className="text-sm text-slate-500">読み込み中…</p>
                       ) : detail ? (
                         <div className="grid gap-4 sm:grid-cols-2 text-sm">
                           <div className="space-y-3">
                             <div>
-                              <p className="font-medium text-slate-700 mb-1">主日欠席者</p>
-                              <ul className="space-y-0.5">
-                                {detail.mainAbsent.length === 0 && (
-                                  <li className="text-slate-500">—</li>
-                                )}
-                                {detail.mainAbsent.map((m) => (
-                                  <li
-                                    key={m.memberId}
-                                    className={m.inDispatch ? "text-blue-600" : "text-red-600"}
-                                  >
-                                    {m.name}
-                                  </li>
-                                ))}
-                              </ul>
+                              <p className="font-bold text-slate-700 mb-1">主日集会</p>
+                              <p className="text-slate-800">
+                                {detail.mainAttendees.length === 0
+                                  ? "—"
+                                  : detail.mainAttendees.map((m) => m.name).join("、")}
+                              </p>
                             </div>
                             <div>
-                              <p className="font-medium text-slate-700 mb-1">小組欠席者</p>
-                              <ul className="space-y-0.5">
-                                {detail.groupAbsent.length === 0 && (
-                                  <li className="text-slate-500">—</li>
-                                )}
-                                {detail.groupAbsent.map((m) => (
-                                  <li
-                                    key={m.memberId}
-                                    className={m.inDispatch ? "text-blue-600" : "text-red-600"}
-                                  >
-                                    {m.name}
-                                  </li>
-                                ))}
-                              </ul>
+                              <p className="font-bold text-slate-700 mb-1">祈りの集会</p>
+                              <p className="text-slate-800">
+                                {detail.prayerAttendees.length === 0
+                                  ? "—"
+                                  : detail.prayerAttendees.map((m) => m.name).join("、")}
+                              </p>
                             </div>
                           </div>
-                          <div>
-                            <p className="font-medium text-slate-700 mb-1">派遣先</p>
-                            <ul className="space-y-0.5">
-                              {detail.dispatchNames.length === 0 && (
-                                <li className="text-slate-500">—</li>
-                              )}
-                              {detail.dispatchNames.map((m) => (
-                                <li key={m.memberId} className="text-slate-800">
-                                  {m.name}
-                                </li>
-                              ))}
-                            </ul>
+                          <div className="space-y-3">
+                            <div>
+                              <p className="font-bold text-slate-700 mb-1">小組</p>
+                              <p className="text-slate-800">
+                                {detail.groupAttendees.length === 0
+                                  ? "—"
+                                  : detail.groupAttendees.map((m) => m.name).join("、")}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="font-bold text-slate-700 mb-1">派遣先</p>
+                              <p className="text-slate-800">
+                                {detail.dispatchNames.length === 0
+                                  ? "—"
+                                  : detail.dispatchNames.map((m) => m.name).join("、")}
+                              </p>
+                            </div>
                           </div>
                         </div>
                       ) : null}
