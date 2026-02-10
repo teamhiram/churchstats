@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
 import { Toggle } from "@/components/Toggle";
 import { formatDateYmd } from "@/lib/weekUtils";
+import { getGojuonRowLabel, GOJUON_ROW_LABELS } from "@/lib/furigana";
 import { CATEGORY_LABELS } from "@/types/database";
 import type { Category } from "@/types/database";
 import { ensureSundayMeetingsBatch } from "./actions";
@@ -74,6 +75,7 @@ export function SundayAttendance({
   const [message, setMessage] = useState("");
   const [sortOrder, setSortOrder] = useState<SortOption>("furigana");
   const [group1, setGroup1] = useState<GroupOption | "">("");
+  const [gojuonGroup, setGojuonGroup] = useState(true);
   const [accordionOpen, setAccordionOpen] = useState(false);
   const [memoPopupMemberId, setMemoPopupMemberId] = useState<string | null>(null);
 
@@ -522,7 +524,21 @@ const { data: guestData } = await supabase
       return a === "believer" ? -1 : 1;
     });
   };
+  const useGojuonGrouping = sortOrder === "furigana" && gojuonGroup;
   const sections = useMemo((): Section[] => {
+    if (useGojuonGrouping) {
+      const map = new Map<string, MemberRow[]>();
+      for (const m of sortedMembers) {
+        const key = getGojuonRowLabel(m.furigana ?? m.name);
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(m);
+      }
+      return GOJUON_ROW_LABELS.filter((l) => map.has(l)).map((label) => ({
+        group1Key: label,
+        group1Label: label,
+        members: map.get(label) ?? [],
+      }));
+    }
     if (!group1) return [{ group1Key: "", group1Label: "", members: sortedMembers }];
     const map = new Map<string, MemberRow[]>();
     for (const m of sortedMembers) {
@@ -536,7 +552,7 @@ const { data: guestData } = await supabase
       group1Label: getLabel(group1, g1Key),
       members: map.get(g1Key) ?? [],
     }));
-  }, [sortedMembers, group1, districtMap, groupMap]);
+  }, [sortedMembers, group1, districtMap, groupMap, useGojuonGrouping]);
 
   return (
     <div className="space-y-4">
@@ -623,6 +639,13 @@ const { data: guestData } = await supabase
                       ))}
                     </select>
                   </div>
+                  {sortOrder === "furigana" && (
+                    <Toggle
+                      checked={gojuonGroup}
+                      onChange={() => setGojuonGroup((v) => !v)}
+                      label="五十音グループ"
+                    />
+                  )}
                 </div>
               </div>
             )}
@@ -655,10 +678,10 @@ const { data: guestData } = await supabase
                       )}
                       {sections.map((section, idx) => (
                         <Fragment key={`s-${section.group1Key}-${idx}`}>
-                          {group1 && section.members.length > 0 && (
+                          {(group1 || useGojuonGrouping) && section.members.length > 0 && (
                             <tr className="bg-slate-100">
                               <td colSpan={5} className="px-3 py-1 text-sm font-medium text-slate-700">
-                                {GROUP_LABELS[group1]}：{section.group1Label || "—"}
+                                {useGojuonGrouping ? section.group1Label : (group1 ? `${GROUP_LABELS[group1]}：${section.group1Label || "—"}` : "—")}
                               </td>
                             </tr>
                           )}
