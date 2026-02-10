@@ -1,7 +1,6 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
 import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
 import { formatDateYmd } from "@/lib/weekUtils";
 import { CATEGORY_LABELS } from "@/types/database";
@@ -46,6 +45,7 @@ type AttendanceRow = {
   memo: string | null;
   is_online: boolean | null;
   is_away: boolean | null;
+  attended?: boolean;
 };
 
 type Props = {
@@ -61,7 +61,6 @@ export function SundayAttendance({
   defaultDistrictId,
   initialSundayIso,
 }: Props) {
-  const router = useRouter();
   const districtId = defaultDistrictId || (districts[0]?.id ?? "");
   const sundayIso = initialSundayIso;
   const [meetingId, setMeetingId] = useState<string | null>(null);
@@ -75,6 +74,7 @@ export function SundayAttendance({
   const [sortOrder, setSortOrder] = useState<SortOption>("furigana");
   const [group1, setGroup1] = useState<GroupOption | "">("");
   const [accordionOpen, setAccordionOpen] = useState(false);
+  const [memoPopupMemberId, setMemoPopupMemberId] = useState<string | null>(null);
 
   const districtMap = useMemo(() => new Map(districts.map((d) => [d.id, d.name])), [districts]);
   const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
@@ -158,14 +158,14 @@ export function SundayAttendance({
 
         const { data: attData } = await supabase
           .from("attendance_records")
-          .select("id, member_id, memo, is_online, is_away")
+          .select("id, member_id, memo, is_online, is_away, attended")
           .in("meeting_id", meetingIds);
         if (cancelled) return;
         const records = (attData ?? []) as AttendanceRow[];
         const map = new Map<string, AttendanceRow>();
         const memoMap = new Map<string, string>();
         records.forEach((r) => {
-          map.set(r.member_id, r);
+          map.set(r.member_id, { ...r, attended: r.attended === false ? false : true });
           memoMap.set(r.member_id, r.memo ?? "");
         });
         const rosterMemberIds = new Set(districtMembers.map((m) => m.id));
@@ -216,7 +216,7 @@ const { data: guestData } = await supabase
             }
             return supabase
               .from("attendance_records")
-              .select("id, member_id, memo, is_online, is_away")
+              .select("id, member_id, memo, is_online, is_away, attended")
               .eq("meeting_id", mid)
               .then(async (attRes) => {
                 if (cancelled) return;
@@ -224,7 +224,7 @@ const { data: guestData } = await supabase
                 const map = new Map<string, AttendanceRow>();
                 const memoMap = new Map<string, string>();
                 records.forEach((r) => {
-                  map.set(r.member_id, r);
+                  map.set(r.member_id, { ...r, attended: r.attended === false ? false : true });
                   memoMap.set(r.member_id, r.memo ?? "");
                 });
                 const districtIds = new Set(districtMembers.map((m) => m.id));
@@ -237,6 +237,45 @@ const { data: guestData } = await supabase
                     .in("id", guestIds);
                   guests = (guestData ?? []) as MemberRow[];
                 }
+                // #region agent log — 2/1 信仰別不整合（出欠登録内訳）
+                if (sundayIso === "2026-02-01" || sundayIso === "2025-02-01") {
+                  const rosterAll = [...districtMembers, ...guests];
+                  const memberBaptized = new Map(rosterAll.map((m) => [m.id, m.is_baptized]));
+                  let byFaithRoster = { saint: 0, friend: 0 };
+                  rosterAll.forEach((m) => {
+                    if (m.is_baptized) byFaithRoster.saint += 1;
+                    else byFaithRoster.friend += 1;
+                  });
+                  let byFaithAttendedOnly = { saint: 0, friend: 0 };
+                  records.forEach((r) => {
+                    if (r.attended !== false) {
+                      const bapt = memberBaptized.get(r.member_id);
+                      if (bapt) byFaithAttendedOnly.saint += 1;
+                      else byFaithAttendedOnly.friend += 1;
+                    }
+                  });
+                  fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      location: "SundayAttendance.tsx",
+                      message: "2/1 出欠登録内訳",
+                      data: {
+                        sundayIso,
+                        districtId,
+                        meetingId: mid,
+                        rosterSize: rosterAll.length,
+                        attendanceMapSize: map.size,
+                        byFaithRoster,
+                        byFaithAttendedOnly,
+                        recordsWithAttendedFalse: records.filter((r) => r.attended === false).length,
+                      },
+                      timestamp: Date.now(),
+                      hypothesisId: "A,C",
+                    }),
+                  }).catch(() => {});
+                }
+                // #endregion
                 setRoster([...districtMembers, ...guests]);
                 setAttendanceMap(map);
                 setMemos(memoMap);
@@ -253,18 +292,26 @@ const { data: guestData } = await supabase
     setMessage("");
     const supabase = createClient();
     const rec = attendanceMap.get(memberId);
+    const memoVal = (memos.get(memberId) ?? "").trim();
+    const isCurrentlyOn = Boolean(rec && rec.attended !== false);
     if (rec) {
-      await supabase.from("attendance_records").delete().eq("id", rec.id);
-      setAttendanceMap((prev) => {
-        const next = new Map(prev);
-        next.delete(memberId);
-        return next;
-      });
-      setMemos((prev) => {
-        const next = new Map(prev);
-        next.delete(memberId);
-        return next;
-      });
+      if (isCurrentlyOn) {
+        await supabase
+          .from("attendance_records")
+          .update({ attended: false, is_online: false, is_away: false, memo: memoVal || null })
+          .eq("id", rec.id);
+        setAttendanceMap((prev) =>
+          new Map(prev).set(memberId, { ...rec, attended: false, is_online: false, is_away: false, memo: memoVal || null })
+        );
+      } else {
+        await supabase.from("attendance_records").update({ attended: true }).eq("id", rec.id);
+        setAttendanceMap((prev) => {
+          const next = new Map(prev);
+          const r = next.get(memberId);
+          if (r) next.set(memberId, { ...r, attended: true });
+          return next;
+        });
+      }
     } else {
       const isAll = districtId === "__all__";
       let mid = isAll ? null : meetingId;
@@ -291,29 +338,29 @@ const { data: guestData } = await supabase
           memo: null,
           is_online: false,
           is_away: false,
+          attended: true,
           reported_by_user_id: user?.id ?? null,
         })
-        .select("id, member_id, memo, is_online, is_away")
+        .select("id, member_id, memo, is_online, is_away, attended")
         .single();
       if (error) {
         if (error.code === "23505") setMessage("この方はすでに登録済みです。");
         else setMessage(error.message);
         return;
       }
-      setAttendanceMap((prev) => new Map(prev).set(memberId, { id: inserted.id, member_id: memberId, memo: null, is_online: inserted.is_online ?? false, is_away: inserted.is_away ?? false }));
+      setAttendanceMap((prev) => new Map(prev).set(memberId, { id: inserted.id, member_id: memberId, memo: null, is_online: inserted.is_online ?? false, is_away: inserted.is_away ?? false, attended: inserted.attended ?? true }));
       setMemos((prev) => new Map(prev).set(memberId, ""));
       setRoster((prev) => (prev.some((m) => m.id === memberId) ? prev : [...prev, member]));
     }
-    router.refresh();
   };
 
   const saveMemo = async (memberId: string) => {
+    const memo = (memos.get(memberId) ?? "").trim();
     const rec = attendanceMap.get(memberId);
-    if (!rec) return;
-    const memo = memos.get(memberId) ?? "";
     const supabase = createClient();
-    await supabase.from("attendance_records").update({ memo: memo || null }).eq("id", rec.id);
-    router.refresh();
+    if (rec) {
+      await supabase.from("attendance_records").update({ memo: memo || null }).eq("id", rec.id);
+    }
   };
 
   const toggleOnline = async (memberId: string) => {
@@ -328,7 +375,6 @@ const { data: guestData } = await supabase
       if (r) nextMap.set(memberId, { ...r, is_online: next });
       return nextMap;
     });
-    router.refresh();
   };
 
   const toggleIsAway = async (memberId: string) => {
@@ -343,7 +389,6 @@ const { data: guestData } = await supabase
       if (r) nextMap.set(memberId, { ...r, is_away: next });
       return nextMap;
     });
-    router.refresh();
   };
 
   useEffect(() => {
@@ -411,7 +456,7 @@ const { data: guestData } = await supabase
     setRoster((prev) => (prev.some((m) => m.id === member.id) ? prev : [...prev, member]));
     const { data: rec } = await supabase
       .from("attendance_records")
-      .select("id, member_id, memo, is_online, is_away")
+      .select("id, member_id, memo, is_online, is_away, attended")
       .eq("meeting_id", mid)
       .eq("member_id", member.id)
       .single();
@@ -421,7 +466,6 @@ const { data: guestData } = await supabase
     }
     setSearchQuery("");
     setSearchResults([]);
-    router.refresh();
   };
 
   const sortedMembers = useMemo(() => {
@@ -594,10 +638,10 @@ const { data: guestData } = await supabase
                     <thead className="bg-slate-50">
                       <tr>
                         <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">名前</th>
-                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-24">出欠（{attendanceMap.size}）</th>
-                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-24">オンライン</th>
-                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-24">他地方で出席</th>
-                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">メモ</th>
+                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-24">出欠（{[...attendanceMap.values()].filter((r) => r.attended !== false).length}）</th>
+                        <th className="px-1 py-1.5 text-center text-xs font-medium text-slate-500 uppercase w-14 sm:w-24">オンライン</th>
+                        <th className="px-1 py-1.5 text-center text-xs font-medium text-slate-500 uppercase w-14 sm:w-24">他地方</th>
+                        <th className="px-2 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-10 sm:w-auto"><span className="hidden sm:inline">メモ</span></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
@@ -618,14 +662,15 @@ const { data: guestData } = await supabase
                             </tr>
                           )}
                           {section.members.map((m) => {
-                      const attended = attendanceMap.has(m.id);
                       const rec = attendanceMap.get(m.id);
+                      const attended = Boolean(rec && rec.attended !== false);
                       const isOnline = rec?.is_online ?? false;
                       const isAway = rec?.is_away ?? false;
                       const memo = memos.get(m.id) ?? "";
                       const memoPlaceholder = isAway ? "出席した地方を記載してください" : "欠席理由など";
                       return (
-                        <tr key={m.id} className="hover:bg-slate-50">
+                        <Fragment key={m.id}>
+                        <tr className="hover:bg-slate-50">
                           <td className="px-3 py-1.5 text-slate-800">{m.name}</td>
                           <td className="px-3 py-1.5">
                             <button
@@ -644,7 +689,7 @@ const { data: guestData } = await supabase
                               />
                             </button>
                           </td>
-                          <td className="px-3 py-1.5">
+                          <td className="px-1 py-1.5 align-middle">
                             {attended ? (
                               <button
                                 type="button"
@@ -665,7 +710,7 @@ const { data: guestData } = await supabase
                               <span className="text-slate-300">—</span>
                             )}
                           </td>
-                          <td className="px-3 py-1.5">
+                          <td className="px-1 py-1.5 align-middle">
                             {attended ? (
                               <button
                                 type="button"
@@ -686,19 +731,45 @@ const { data: guestData } = await supabase
                               <span className="text-slate-300">—</span>
                             )}
                           </td>
-                          <td className="px-3 py-1.5">
-                            <input
-                              type="text"
-                              value={memo}
-                              onChange={(e) => setMemos((prev) => new Map(prev).set(m.id, e.target.value))}
-                              onBlur={() => saveMemo(m.id)}
-                              placeholder={memoPlaceholder}
-                              className={`w-full max-w-xs px-2 py-0.5 text-sm border rounded touch-target ${
-                                isAway ? "border-amber-400" : "border-slate-300"
-                              }`}
-                            />
+                          <td className="px-2 py-1.5 align-top">
+                            <div className="sm:hidden">
+                              <button
+                                type="button"
+                                onClick={() => setMemoPopupMemberId(m.id)}
+                                className="p-1 rounded touch-target inline-flex"
+                                aria-label="メモを編集"
+                              >
+                                <svg className={`w-5 h-5 ${memo.trim() ? "text-primary-600" : "text-slate-400"}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                  <polyline points="14 2 14 8 20 8" />
+                                  <line x1="16" y1="13" x2="8" y2="13" />
+                                  <line x1="16" y1="17" x2="8" y2="17" />
+                                  <polyline points="10 9 9 9 8 9" />
+                                </svg>
+                              </button>
+                            </div>
+                            <div className="hidden sm:block">
+                              <input
+                                type="text"
+                                value={memo}
+                                onChange={(e) => setMemos((prev) => new Map(prev).set(m.id, e.target.value))}
+                                onBlur={() => saveMemo(m.id)}
+                                placeholder={memoPlaceholder}
+                                className={`w-full max-w-xs px-2 py-0.5 text-sm border rounded touch-target ${
+                                  isAway ? "border-amber-400" : "border-slate-300"
+                                }`}
+                              />
+                            </div>
                           </td>
                         </tr>
+                        {memo.trim() && (
+                          <tr className="sm:hidden bg-slate-50/50">
+                            <td colSpan={5} className="px-3 py-0.5 pb-1.5 text-xs text-slate-500">
+                              {memo}
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
                       );
                     })}
                         </Fragment>
@@ -712,6 +783,47 @@ const { data: guestData } = await supabase
         </>
       )}
       </>
+      )}
+
+      {memoPopupMemberId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 sm:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="memo-popup-title"
+          onClick={() => setMemoPopupMemberId(null)}
+        >
+          <div className="w-full max-w-sm bg-white rounded-lg shadow-lg p-4" onClick={(e) => e.stopPropagation()}>
+            <h2 id="memo-popup-title" className="text-sm font-medium text-slate-700 mb-2">メモ</h2>
+            <textarea
+              value={memos.get(memoPopupMemberId) ?? ""}
+              onChange={(e) => setMemos((prev) => new Map(prev).set(memoPopupMemberId, e.target.value))}
+              placeholder={(attendanceMap.get(memoPopupMemberId)?.is_away) ? "出席した地方を記載してください" : "欠席理由など"}
+              rows={3}
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg touch-target resize-none"
+              autoFocus
+            />
+            <div className="flex gap-2 mt-3">
+              <button
+                type="button"
+                onClick={() => setMemoPopupMemberId(null)}
+                className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg text-slate-700 touch-target"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  saveMemo(memoPopupMemberId);
+                  setMemoPopupMemberId(null);
+                }}
+                className="flex-1 px-3 py-2 text-sm bg-primary-600 text-white rounded-lg touch-target"
+              >
+                確定
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -81,12 +81,12 @@ export function OrganizationForm({
 
   const districtsForLocality = districtsList
     .filter((d) => userLocalityIds.includes(d.locality_id ?? ""))
-    .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+    .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "en"));
   const groupsByDistrict = districtsForLocality.map((d) => ({
     district: d,
     groups: groupsList
       .filter((g) => (g.district_id ?? "") === (d.id ?? ""))
-      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")),
+      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "en")),
   }));
 
   useEffect(() => {
@@ -279,11 +279,6 @@ export function OrganizationForm({
               key={did}
               className="mb-4 rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden"
             >
-              <div className="bg-slate-100 border-b border-slate-200 py-2 px-4">
-                <h3 className="font-semibold text-white rounded-md px-2 py-1 inline-block bg-gradient-to-r from-fuchsia-600 via-indigo-600 to-sky-600 shadow-sm">
-                  {d.name ?? ""}
-                </h3>
-              </div>
               <div className="p-3">
                 <div className="flex flex-wrap items-center gap-2 py-2 w-full">
                   <button
@@ -296,10 +291,13 @@ export function OrganizationForm({
                         return next;
                       })
                     }
-                    className="w-10 h-10 shrink-0 rounded-lg touch-target flex items-center justify-center text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 font-mono"
+                    className="flex-1 min-w-0 text-left px-3 py-3 min-h-[44px] rounded-lg touch-target flex items-center gap-2 text-white bg-primary-600 shadow-sm hover:bg-primary-700 active:bg-primary-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500"
                     aria-expanded={isExpanded}
                   >
-                    {isExpanded ? "−" : "+"}
+                    <span className="w-5 shrink-0 text-center font-mono text-white/90" aria-hidden>
+                      {isExpanded ? "−" : "+"}
+                    </span>
+                    <span className="min-w-0 truncate font-semibold text-white">{d.name ?? ""}</span>
                   </button>
                   <button
                     type="button"
@@ -310,7 +308,7 @@ export function OrganizationForm({
                   </button>
                 </div>
                 {isExpanded && (
-                  <div className="pl-2 pb-3 pr-2 text-sm text-slate-700 border-l-2 border-slate-200 ml-2 mt-1">
+                  <div className="pl-4 pb-3 pr-2 text-sm text-slate-700 border-l-2 border-slate-200 ml-2">
                     {loading ? (
                       <p className="text-slate-500">読み込み中…</p>
                     ) : (
@@ -371,7 +369,7 @@ export function OrganizationForm({
             className="mb-4 rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden"
           >
             <div className="bg-slate-100 border-b border-slate-200 py-2 px-4">
-              <h3 className="font-semibold text-white rounded-md px-2 py-1 inline-block bg-gradient-to-r from-fuchsia-600 via-indigo-600 to-sky-600 shadow-sm">
+              <h3 className="font-semibold text-white rounded-md px-2 py-1 inline-block bg-primary-600 shadow-sm">
                 {district.name ?? ""}
               </h3>
             </div>
@@ -395,7 +393,7 @@ export function OrganizationForm({
                             return next;
                           })
                         }
-                        className="flex-1 min-w-0 text-left px-3 py-3 min-h-[44px] rounded-lg touch-target flex items-center gap-2 text-white bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 shadow-sm hover:brightness-110 active:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-400"
+                        className="flex-1 min-w-0 text-left px-3 py-3 min-h-[44px] rounded-lg touch-target flex items-center gap-2 text-white bg-primary-600 shadow-sm hover:bg-primary-700 active:bg-primary-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500"
                       >
                         <span className="w-5 shrink-0 text-center font-mono text-white/90" aria-hidden>
                           {isExpanded ? "−" : "+"}
@@ -520,7 +518,7 @@ export function OrganizationForm({
                 >
                   キャンセル
                 </Link>
-                <button type="submit" className="px-4 py-2 bg-slate-600 text-white rounded-lg text-sm hover:bg-slate-700">
+                <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500">
                   追加
                 </button>
               </div>
@@ -571,7 +569,7 @@ export function OrganizationForm({
                 >
                   キャンセル
                 </Link>
-                <button type="submit" className="px-4 py-2 bg-slate-600 text-white rounded-lg text-sm hover:bg-slate-700">
+                <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500">
                   追加
                 </button>
               </div>
@@ -622,7 +620,7 @@ export function OrganizationForm({
                 >
                   キャンセル
                 </button>
-                <button type="submit" className="px-4 py-2 bg-slate-600 text-white rounded-lg text-sm hover:bg-slate-700">
+                <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500">
                   保存
                 </button>
               </div>
@@ -688,7 +686,7 @@ export function OrganizationForm({
                 >
                   キャンセル
                 </button>
-                <button type="submit" className="px-4 py-2 bg-slate-600 text-white rounded-lg text-sm hover:bg-slate-700">
+                <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500">
                   保存
                 </button>
               </div>

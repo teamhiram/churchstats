@@ -9,7 +9,7 @@ export function DispatchMonitor({ weekLabel, mainAbsent = [], groupAbsent = [] }
     <section className="bg-white rounded-lg border border-slate-200 p-4">
       <h2 className="font-semibold text-slate-800 mb-2">派遣モニター</h2>
       <p className="text-sm text-slate-500 mb-3">
-        直近の日曜日までの週（{weekLabel ?? "—"}）の主日・小組欠席者。かっこ内は集計週の日曜〜翌週土曜に派遣記録がある場合は「派遣済」、ない場合は「未派遣」。
+        今週（日曜〜土曜、{weekLabel ?? "—"}）の主日・小組欠席者。かっこ内は集計週内に派遣記録がある場合は「派遣済」、ない場合は「未派遣」。
       </p>
       <div className="grid gap-4 sm:grid-cols-2 text-sm">
         <div>

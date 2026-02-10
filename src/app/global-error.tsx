@@ -40,18 +40,15 @@ export default function GlobalError({
 
   return (
     <html lang="ja">
-      <body
-        className="antialiased bg-slate-50 min-h-screen flex flex-col items-center justify-center p-4"
-        style={{ minHeight: "100vh", backgroundColor: "#f8fafc", color: "#0f172a", margin: 0 }}
-      >
-        <div className="max-w-md w-full space-y-4 text-center" style={{ padding: 16 }}>
-          <h1 className="text-xl font-bold" style={{ color: "#0f172a" }}>召会生活統計</h1>
-          <p className="text-lg font-medium" style={{ color: "#334155" }}>エラーが発生しました</p>
-          <p className="text-sm break-all" style={{ color: "#475569" }}>{error.message}</p>
+      <body className="antialiased bg-slate-50 min-h-screen flex flex-col items-center justify-center p-4 text-slate-900 m-0">
+        <div className="max-w-md w-full space-y-4 text-center p-4">
+          <h1 className="text-xl font-bold text-slate-900">召会生活統計</h1>
+          <p className="text-lg font-medium text-slate-700">エラーが発生しました</p>
+          <p className="text-sm break-all text-slate-600">{error.message}</p>
           <button
             type="button"
             onClick={() => reset()}
-            className="px-4 py-2 bg-slate-600 text-white text-sm font-medium rounded-lg hover:bg-slate-700"
+            className="px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500"
           >
             再試行
           </button>

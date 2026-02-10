@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { getWeekDetail, type WeekRow, type WeekDetail } from "./actions";
+import { getWeekDetail } from "./actions";
+import type { WeekRow, WeekDetail } from "./types";
 
 type Props = {
   weeks: WeekRow[];

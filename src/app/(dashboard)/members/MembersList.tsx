@@ -427,7 +427,7 @@ export function MembersList({
         </button>
         <Link
           href="/members/new"
-          className="inline-flex items-center justify-center px-3 py-2 bg-slate-600 text-white text-sm font-medium rounded-lg touch-target ml-auto hover:bg-slate-700"
+          className="inline-flex items-center justify-center px-3 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg touch-target ml-auto hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500"
         >
           追加
         </Link>
@@ -554,7 +554,7 @@ export function MembersList({
         </div>
         <Link
           href="/members/new"
-          className="inline-flex items-center justify-center px-3 py-1.5 bg-slate-600 text-white text-sm font-medium rounded-lg touch-target ml-auto hover:bg-slate-700"
+          className="inline-flex items-center justify-center px-3 py-1.5 bg-primary-600 text-white text-sm font-medium rounded-lg touch-target ml-auto hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500"
         >
           メンバーを追加
         </Link>

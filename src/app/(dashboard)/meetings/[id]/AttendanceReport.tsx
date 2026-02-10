@@ -1,7 +1,6 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { CATEGORY_LABELS } from "@/types/database";
 import type { Category } from "@/types/database";
@@ -27,7 +26,6 @@ export function AttendanceReport({
   initialMembers,
   regularList,
 }: Props) {
-  const router = useRouter();
   const [search, setSearch] = useState("");
   const [candidates, setCandidates] = useState<Member[]>([]);
   const [attendedIds, setAttendedIds] = useState<Set<string>>(
@@ -73,7 +71,6 @@ export function AttendanceReport({
     setMembers((prev) => [...prev, member]);
     setSearch("");
     setCandidates([]);
-    router.refresh();
   };
 
   const removeAttendance = async (memberId: string) => {
@@ -85,7 +82,6 @@ export function AttendanceReport({
       return next;
     });
     setMembers((prev) => prev.filter((m) => m.id !== memberId));
-    router.refresh();
   };
 
   return (

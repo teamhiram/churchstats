@@ -2,21 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ユニバーサルデザイン・モダンシンプル：サイト全体で統一 */
 :root {
   --foreground: #0f172a;
   --background: #f8fafc;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground: #f1f5f9;
-    --background: #0f172a;
-  }
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --muted: #64748b;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
+}
+
+/* フォーカス可視性（キーボード・アクセシビリティ） */
+*:focus-visible {
+  outline: 2px solid #16a34a;
+  outline-offset: 2px;
 }
 
 @layer utilities {

@@ -83,6 +83,8 @@ export interface AttendanceRecord {
   memo: string | null;
   is_online: boolean | null;
   is_away: boolean | null;
+  /** 出欠フラグ。false = 欠席（メモのみ）。マイグレーション 014 で追加 */
+  attended?: boolean;
   reported_by_user_id?: string | null;
   created_at?: string;
 }
@@ -101,7 +103,7 @@ export interface OrganicDispatchRecord {
   updated_at?: string;
 }
 
-/** 小組集会記録（小組・週ごと。週は月曜日を week_start とする） */
+/** 小組集会記録（小組・週ごと。週はアメリカ式・日曜日を week_start とする） */
 export interface GroupMeetingRecord {
   id: string;
   group_id: string;
@@ -118,6 +120,8 @@ export interface GroupMeetingAttendance {
   group_meeting_record_id: string;
   member_id: string;
   memo: string | null;
+  /** 出欠フラグ。false = 欠席（メモのみ）。マイグレーション 014 で追加 */
+  attended?: boolean;
   reported_by_user_id: string | null;
   created_at?: string;
 }

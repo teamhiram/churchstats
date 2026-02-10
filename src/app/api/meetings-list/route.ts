@@ -1,13 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { getListData } from "@/app/(dashboard)/meetings/list/actions";
+import type { WeekRow } from "@/app/(dashboard)/meetings/list/types";
 
 export type MeetingsListApiResponse = {
   year: number;
   localOnly: boolean;
   localityId: string | null;
   localities: { id: string; name: string }[];
-  weeks: Awaited<ReturnType<typeof getListData>>["weeks"];
+  weeks: WeekRow[];
   absenceAlertWeeks: number;
   currentYear: number;
 };

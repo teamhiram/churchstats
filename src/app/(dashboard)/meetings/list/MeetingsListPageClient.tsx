@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { MeetingsListFilters } from "./MeetingsListFilters";
 import { MeetingsListTable } from "./MeetingsListTable";
-import type { WeekRow } from "./actions";
+import type { WeekRow } from "./types";
 
 type Locality = { id: string; name: string };
 

@@ -116,7 +116,7 @@ export function BackupSection() {
           type="button"
           onClick={handleExport}
           disabled={loading}
-          className="px-4 py-2 bg-slate-600 text-white text-sm font-medium rounded-lg touch-target disabled:opacity-50 hover:bg-slate-700"
+          className="px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg touch-target disabled:opacity-50 hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500"
         >
           {loading ? "処理中…" : "エクスポート"}
         </button>
@@ -136,7 +136,7 @@ export function BackupSection() {
           <button
             type="submit"
             disabled={loading || !importFile}
-            className="px-4 py-2 bg-slate-700 text-white text-sm font-medium rounded-lg touch-target disabled:opacity-50"
+            className="px-4 py-2 bg-primary-700 text-white text-sm font-medium rounded-lg touch-target disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500"
           >
             {loading ? "処理中…" : "インポート"}
           </button>
