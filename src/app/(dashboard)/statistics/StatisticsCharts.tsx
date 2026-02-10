@@ -365,7 +365,6 @@ export function StatisticsCharts({
 
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-600">棒グラフの色分け</span>
             <div className="flex overflow-hidden">
               {(
                 [
@@ -379,7 +378,7 @@ export function StatisticsCharts({
                   key={value}
                   type="button"
                   onClick={() => setColorGroupBy(value)}
-                  className={`px-4 py-2 text-sm font-medium touch-target border border-slate-300 -mr-px transition-all duration-100 first:rounded-l-md last:rounded-r-md ${
+                  className={`px-4 py-1 text-sm font-medium touch-target border border-slate-300 -mr-px transition-all duration-100 first:rounded-l-md last:rounded-r-md ${
                     colorGroupBy === value
                       ? "bg-primary-600 text-white border-primary-600 shadow-none z-10"
                       : "bg-slate-200 text-slate-600 shadow-[inset_0_1px_3px_rgba(0,0,0,0.15)] hover:bg-slate-300"
