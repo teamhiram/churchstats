@@ -15,6 +15,11 @@ export default function DebugTablesPage() {
           在籍期間不確定リスト →
         </Link>
       </p>
+      <p className="text-sm">
+        <Link href="/debug/meeting-duplicates" className="text-primary-600 hover:underline">
+          集会重複検知 →
+        </Link>
+      </p>
       <DebugTablesClient />
     </div>
   );

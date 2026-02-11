@@ -219,6 +219,11 @@ export function StatisticsCharts({
     members.forEach((m) => map.set(m.id, m.name ?? "—"));
     return map;
   }, [members]);
+  const meetingIdToDate = useMemo(() => {
+    const map = new Map<string, string>();
+    meetings.forEach((m) => map.set(m.id, m.event_date));
+    return map;
+  }, [meetings]);
 
   type WeeklyRow = {
     week: string;
@@ -326,6 +331,38 @@ export function StatisticsCharts({
       }
       // #endregion
 
+      // #region agent log — 2/8 実体確認
+      if (rowDate === "2026-02-08") {
+        const meetingDetailsInWeek = Array.from(meetingIdsInWeek).map((id) => ({
+          id,
+          event_date: meetingIdToDate.get(id) ?? null,
+          district_id: meetingIdToDistrictId.get(id) ?? null,
+        }));
+        fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            location: "StatisticsCharts.tsx:weeklyData",
+            message: "week 2/8 breakdown (chart)",
+            data: {
+              rowDate,
+              weekLabel: format(start, "M/d", { locale: ja }),
+              meetingIdsInWeek: Array.from(meetingIdsInWeek),
+              meetingDetailsInWeek,
+              total,
+              saint: countByFaith.saint,
+              friend: countByFaith.friend,
+              totalAttendedOnly: countAttendedOnly,
+              countByDistrict,
+              localOnly,
+            },
+            timestamp: Date.now(),
+            hypothesisId: "H12",
+          }),
+        }).catch(() => {});
+      }
+      // #endregion
+
       const row: WeeklyRow = {
         week: weekLabel,
         date: format(start, "yyyy-MM-dd"),
@@ -351,7 +388,7 @@ export function StatisticsCharts({
       base.push(row);
     }
     return base;
-  }, [attendance, mainMeetings, localMemberIds, localOnly, memberIsBaptized, memberIdToName, meetingIdToDistrictId]);
+  }, [attendance, mainMeetings, localMemberIds, localOnly, memberIsBaptized, memberIdToName, meetingIdToDistrictId, meetingIdToDate]);
 
   return (
     <div className="space-y-6">
