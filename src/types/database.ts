@@ -52,6 +52,10 @@ export interface Member {
   district_id: string | null;
   group_id: string | null;
   locality_id: string | null;
+  /** ローカルメンバー転入日：この日以降、在籍期間内 */
+  local_member_join_date?: string | null;
+  /** ローカルメンバー転出日：この日以降、在籍期間外 */
+  local_member_leave_date?: string | null;
   age_group: Category | null;
   is_baptized: boolean;
   baptism_year: number | null;

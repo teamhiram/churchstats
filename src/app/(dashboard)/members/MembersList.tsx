@@ -72,6 +72,9 @@ type MemberRow = {
   group_id: string | null;
   age_group: Category | null;
   is_baptized: boolean;
+  local_member_join_date?: string | null;
+  local_member_leave_date?: string | null;
+  enrollment_periods?: { period_no: number; join_date: string | null; leave_date: string | null }[];
 };
 
 type DistrictRow = { id: string; name: string; locality_id: string | null };
@@ -640,6 +643,33 @@ export function MembersList({
                                 <span className="text-slate-800">{m.gender === "male" ? "男" : "女"}</span>
                                 <span className="text-slate-500">ローカル/ゲスト</span>
                                 <span className="text-slate-800">{m.is_local ? "ローカル" : "ゲスト"}</span>
+                                {m.is_local && (
+                                  <>
+                                    <span className="text-slate-500">ローカルメンバー転入日</span>
+                                    <span className="text-slate-800">
+                                      {m.enrollment_periods?.length
+                                        ? m.enrollment_periods
+                                            .sort((a, b) => a.period_no - b.period_no)
+                                            .map((p, i) => `期間${i + 1}: ${p.join_date ?? "—"}`)
+                                            .join(" / ")
+                                        : m.local_member_join_date ?? "—"}
+                                    </span>
+                                    {(m.enrollment_periods?.some((p) => p.leave_date) || m.local_member_leave_date) && (
+                                      <>
+                                        <span className="text-slate-500">ローカルメンバー転出日</span>
+                                        <span className="text-slate-800">
+                                          {m.enrollment_periods?.length
+                                            ? m.enrollment_periods
+                                                .sort((a, b) => a.period_no - b.period_no)
+                                                .filter((p) => p.leave_date)
+                                                .map((p) => `期間${p.period_no}: ${p.leave_date}`)
+                                                .join(" / ")
+                                            : m.local_member_leave_date ?? ""}
+                                        </span>
+                                      </>
+                                    )}
+                                  </>
+                                )}
                               </div>
                             </td>
                           </tr>

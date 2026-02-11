@@ -10,6 +10,13 @@ import {
   removeGroupRegularMember,
 } from "@/app/(dashboard)/settings/organization/actions";
 
+export type EnrollmentPeriodInput = {
+  period_no: number;
+  join_date: string | null;
+  leave_date: string | null;
+  is_uncertain: boolean;
+};
+
 export type UpdateMemberResult = {
   ok: boolean;
   error?: string;
@@ -29,6 +36,9 @@ export async function updateMemberAction(
     locality_id: string | null;
     age_group: Category | null;
     is_baptized: boolean;
+    local_member_join_date: string | null;
+    local_member_leave_date: string | null;
+    enrollment_periods?: EnrollmentPeriodInput[];
   },
   /** 編集中に取得した updated_at。これと一致する場合のみ更新（楽観ロック）。 */
   expectedUpdatedAt: string | null
@@ -36,6 +46,7 @@ export async function updateMemberAction(
   const supabase = await createClient();
   const now = new Date().toISOString();
 
+  const period1 = data.enrollment_periods?.find((p) => p.period_no === 1);
   const updatePayload = {
     name: data.name.trim(),
     furigana: data.furigana ? hiraganaToKatakana(data.furigana) : null,
@@ -46,6 +57,8 @@ export async function updateMemberAction(
     locality_id: !data.is_local ? data.locality_id : null,
     age_group: data.age_group,
     is_baptized: data.is_baptized,
+    local_member_join_date: (period1?.join_date ?? data.local_member_join_date) || null,
+    local_member_leave_date: (period1?.leave_date ?? data.local_member_leave_date) || null,
     updated_at: now,
   };
 
@@ -71,6 +84,23 @@ export async function updateMemberAction(
       error:
         "他のユーザーが先にこのメンバーを更新したため、保存できません。画面を更新して最新の内容を確認してから、再度保存してください。",
     };
+  }
+
+  if (data.is_local && data.enrollment_periods && data.enrollment_periods.length > 0) {
+    await supabase.from("member_local_enrollment_periods").delete().eq("member_id", memberId);
+    const rows = data.enrollment_periods.map((p) => ({
+      member_id: memberId,
+      period_no: p.period_no,
+      join_date: p.join_date?.trim() || null,
+      leave_date: p.leave_date?.trim() || null,
+      is_uncertain: p.is_uncertain,
+    }));
+    if (rows.length > 0) {
+      const { error: periodsError } = await supabase.from("member_local_enrollment_periods").insert(rows);
+      if (periodsError) {
+        return { ok: false, error: periodsError.message };
+      }
+    }
   }
 
   return { ok: true };

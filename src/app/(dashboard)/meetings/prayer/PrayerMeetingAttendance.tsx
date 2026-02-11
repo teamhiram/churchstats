@@ -7,12 +7,14 @@ import { formatDateYmd, getDaysInWeek } from "@/lib/weekUtils";
 import { getGojuonRowLabel, GOJUON_ROW_LABELS } from "@/lib/furigana";
 import { CATEGORY_LABELS } from "@/types/database";
 import type { Category } from "@/types/database";
+import { isInEnrollmentPeriod } from "@/lib/enrollmentPeriod";
+import { removeDistrictRegularMember } from "@/app/(dashboard)/settings/organization/actions";
 
 type District = { id: string; name: string };
 type Group = { id: string; name: string; district_id: string };
 type WeekOption = { value: string; label: string };
 type SortOption = "furigana" | "district" | "group" | "age_group";
-type GroupOption = "district" | "group" | "age_group" | "believer";
+type GroupOption = "district" | "group" | "age_group" | "believer" | "attendance" | "gojuon";
 
 const SORT_LABELS: Record<SortOption, string> = {
   furigana: "フリガナ順",
@@ -26,6 +28,8 @@ const GROUP_LABELS: Record<GroupOption, string> = {
   group: "小組",
   age_group: "年齢層",
   believer: "信者",
+  attendance: "出欠別",
+  gojuon: "五十音別",
 };
 
 type MemberRow = {
@@ -36,6 +40,8 @@ type MemberRow = {
   group_id: string | null;
   age_group: Category | null;
   is_baptized: boolean;
+  local_member_join_date?: string | null;
+  local_member_leave_date?: string | null;
   locality_name?: string;
   district_name?: string;
   group_name?: string;
@@ -80,8 +86,16 @@ export function PrayerMeetingAttendance({
   const [searchResults, setSearchResults] = useState<MemberRow[]>([]);
   const [sortOrder, setSortOrder] = useState<SortOption>("furigana");
   const [group1, setGroup1] = useState<GroupOption | "">("");
-  const [gojuonGroup, setGojuonGroup] = useState(true);
+  const [group2, setGroup2] = useState<GroupOption | "">("");
+  const [sectionOpen, setSectionOpen] = useState<Record<string, boolean>>({});
   const [accordionOpen, setAccordionOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [enrollmentBlockedMemberId, setEnrollmentBlockedMemberId] = useState<string | null>(null);
+  const [excludedMemberIds, setExcludedMemberIds] = useState<Set<string>>(new Set());
+  const [excludedForDeletion, setExcludedForDeletion] = useState<Map<string, string>>(new Map());
+  const [regularListExcludePopup, setRegularListExcludePopup] = useState<{ memberId: string; member: MemberRow; districtId: string } | null>(null);
 
   const districtMap = useMemo(() => new Map(districts.map((d) => [d.id, d.name])), [districts]);
   const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
@@ -159,11 +173,14 @@ export function PrayerMeetingAttendance({
 
         const { data: membersData } = await supabase
           .from("members")
-          .select("id, name, furigana, district_id, group_id, age_group, is_baptized")
+          .select("id, name, furigana, district_id, group_id, age_group, is_baptized, local_member_join_date, local_member_leave_date")
           .in("district_id", districtIdsToLoad)
           .order("name");
         if (cancelled) return;
-        const districtMembers = (membersData ?? []) as MemberRow[];
+        const refDate = weekStartIso;
+        const districtMembers = ((membersData ?? []) as MemberRow[]).filter((m) =>
+          isInEnrollmentPeriod(m, refDate)
+        );
 
         if (recordIds.length === 0) {
           setRecordId(null);
@@ -184,7 +201,7 @@ export function PrayerMeetingAttendance({
         const map = new Map<string, AttendanceRow>();
         const memoMap = new Map<string, string>();
         records.forEach((r) => {
-          map.set(r.member_id, { ...r, attended: r.attended === false ? false : true });
+          map.set(r.member_id, { ...r, attended: r.attended });
           memoMap.set(r.member_id, r.memo ?? "");
         });
         const districtMemberIds = new Set(districtMembers.map((m) => m.id));
@@ -193,7 +210,7 @@ export function PrayerMeetingAttendance({
         if (guestIds.length > 0) {
           const { data: guestData } = await supabase
             .from("members")
-            .select("id, name, furigana, district_id, group_id, age_group, is_baptized")
+            .select("id, name, furigana, district_id, group_id, age_group, is_baptized, local_member_join_date, local_member_leave_date")
             .in("id", guestIds);
           guests = (guestData ?? []) as MemberRow[];
         }
@@ -223,12 +240,16 @@ export function PrayerMeetingAttendance({
         setEventDate(evDate ?? "");
         return supabase
           .from("members")
-          .select("id, name, furigana, district_id, group_id, age_group, is_baptized")
+          .select("id, name, furigana, district_id, group_id, age_group, is_baptized, local_member_join_date, local_member_leave_date")
           .eq("district_id", districtId)
           .order("name")
           .then((membersRes) => {
             if (cancelled) return;
-            const districtMembers = (membersRes.data ?? []) as MemberRow[];
+            const evDate = (existingRecord as { id: string; event_date?: string | null } | null)?.event_date ?? "";
+            const refDate = evDate || weekStartIso;
+            const districtMembers = ((membersRes.data ?? []) as MemberRow[]).filter((m) =>
+              isInEnrollmentPeriod(m, refDate)
+            );
             if (!rid) {
               setRoster(districtMembers);
               setAttendanceMap(new Map());
@@ -247,7 +268,7 @@ export function PrayerMeetingAttendance({
                 const map = new Map<string, AttendanceRow>();
                 const memoMap = new Map<string, string>();
                 records.forEach((r) => {
-                  map.set(r.member_id, { ...r, attended: r.attended === false ? false : true });
+                  map.set(r.member_id, { ...r, attended: r.attended });
                   memoMap.set(r.member_id, r.memo ?? "");
                 });
                 const districtMemberIds = new Set(districtMembers.map((m) => m.id));
@@ -256,7 +277,7 @@ export function PrayerMeetingAttendance({
                 if (guestIds.length > 0) {
                   const { data: guestData } = await supabase
                     .from("members")
-                    .select("id, name, furigana, district_id, group_id, age_group, is_baptized")
+                    .select("id, name, furigana, district_id, group_id, age_group, is_baptized, local_member_join_date, local_member_leave_date")
                     .in("id", guestIds);
                   guests = (guestData ?? []) as MemberRow[];
                 }
@@ -270,7 +291,7 @@ export function PrayerMeetingAttendance({
     return () => {
       cancelled = true;
     };
-  }, [districtId, weekStartIso, districts]);
+  }, [districtId, weekStartIso, districts, refreshTrigger]);
 
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -281,7 +302,7 @@ export function PrayerMeetingAttendance({
     supabase
       .from("members")
       .select(
-        "id, name, furigana, district_id, group_id, age_group, is_baptized, districts(name, localities(name)), groups(name)"
+        "id, name, furigana, district_id, group_id, age_group, is_baptized, local_member_join_date, local_member_leave_date, districts(name, localities(name)), groups(name)"
       )
       .ilike("name", `%${searchQuery.trim()}%`)
       .limit(15)
@@ -296,6 +317,8 @@ export function PrayerMeetingAttendance({
             group_id: row.group_id as string | null,
             age_group: row.age_group as Category | null,
             is_baptized: Boolean(row.is_baptized),
+            local_member_join_date: (row.local_member_join_date as string | null) ?? null,
+            local_member_leave_date: (row.local_member_leave_date as string | null) ?? null,
             district_name: dist?.name,
             locality_name: dist?.localities?.name ?? dist?.locality?.name,
             group_name: (row.groups as { name: string } | null)?.name,
@@ -305,47 +328,66 @@ export function PrayerMeetingAttendance({
       });
   }, [searchQuery]);
 
-  const addFromSearch = async (member: MemberRow) => {
-    const did = member.district_id ?? districtId;
-    if (districtId === "__all__" && !did) return;
-    const rid = await ensurePrayerMeetingRecordForDistrict(did);
-    if (!rid) {
-      setMessage("集会の登録に失敗しました。");
+  const refDateForEnrollment = eventDate || weekStartIso;
+  const handleExclude = async (member: MemberRow) => {
+    const rec = attendanceMap.get(member.id);
+    const did = districtId === "__all__" ? (member.district_id ?? "") : districtId;
+    if (!did) {
+      setExcludedMemberIds((prev) => new Set(prev).add(member.id));
+      if (rec?.id) setExcludedForDeletion((prev) => new Map(prev).set(member.id, rec.id));
+      setAttendanceMap((prev) => { const n = new Map(prev); n.delete(member.id); return n; });
+      setMemos((prev) => { const n = new Map(prev); n.delete(member.id); return n; });
+      return;
+    }
+    const supabase = createClient();
+    const { data: onList } = await supabase
+      .from("district_regular_list")
+      .select("id")
+      .eq("district_id", did)
+      .eq("member_id", member.id)
+      .maybeSingle();
+    if (onList) {
+      setRegularListExcludePopup({ memberId: member.id, member, districtId: did });
+    } else {
+      setExcludedMemberIds((prev) => new Set(prev).add(member.id));
+      if (rec?.id) setExcludedForDeletion((prev) => new Map(prev).set(member.id, rec.id));
+      setAttendanceMap((prev) => { const n = new Map(prev); n.delete(member.id); return n; });
+      setMemos((prev) => { const n = new Map(prev); n.delete(member.id); return n; });
+    }
+  };
+
+  const addFromSearch = (member: MemberRow) => {
+    if (!isEditMode) return;
+    if (attendanceMap.has(member.id)) {
+      setMessage("この方はすでに登録済みです。");
+      return;
+    }
+    if (!isInEnrollmentPeriod(member, refDateForEnrollment)) {
+      setEnrollmentBlockedMemberId(member.id);
       return;
     }
     setMessage("");
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase.from("prayer_meeting_attendance").insert({
-      prayer_meeting_record_id: rid,
-      member_id: member.id,
-      memo: null,
-      is_online: false,
-      is_away: false,
-      reported_by_user_id: user?.id ?? null,
-    });
-    if (error) {
-      if (error.code === "23505") setMessage("この方はすでに登録済みです。");
-      else setMessage(error.message);
-      return;
-    }
+    setAttendanceMap((prev) =>
+      new Map(prev).set(member.id, {
+        id: "",
+        member_id: member.id,
+        memo: null,
+        is_online: false,
+        is_away: false,
+        attended: true,
+      })
+    );
+    setMemos((prev) => new Map(prev).set(member.id, ""));
     setRoster((prev) => (prev.some((m) => m.id === member.id) ? prev : [...prev, member]));
-    const { data: rec } = await supabase
-      .from("prayer_meeting_attendance")
-      .select("id, member_id, memo, is_online, is_away, attended")
-      .eq("prayer_meeting_record_id", rid)
-      .eq("member_id", member.id)
-      .single();
-    if (rec) {
-      setAttendanceMap((prev) => new Map(prev).set(member.id, { ...rec, attended: rec.attended ?? true } as AttendanceRow));
-      setMemos((prev) => new Map(prev).set(member.id, ""));
-    }
     setSearchQuery("");
     setSearchResults([]);
   };
 
+  const displayRoster = isEditMode
+    ? roster.filter((m) => !excludedMemberIds.has(m.id))
+    : roster.filter((m) => attendanceMap.has(m.id));
   const sortedMembers = useMemo(() => {
-    const list = [...roster];
+    const list = [...displayRoster];
     const collator = new Intl.Collator("ja");
     const byFurigana = (a: MemberRow, b: MemberRow) =>
       collator.compare((a.furigana ?? a.name), (b.furigana ?? b.name));
@@ -371,22 +413,30 @@ export function PrayerMeetingAttendance({
     else if (sortOrder === "group") list.sort(byGroup);
     else list.sort(byAgeGroup);
     return list;
-  }, [roster, sortOrder, districtMap, groupMap]);
+  }, [displayRoster, sortOrder, districtMap, groupMap]);
 
-  type Section = { group1Key: string; group1Label: string; members: MemberRow[] };
   const getKey = (opt: GroupOption, m: MemberRow): string => {
     if (opt === "district") return m.district_id ?? "__none__";
     if (opt === "group") return m.group_id ?? "__none__";
     if (opt === "age_group") return m.age_group ?? "__none__";
+    if (opt === "attendance") {
+      const rec = attendanceMap.get(m.id);
+      return (rec && rec.attended !== false) ? "attended" : "absent";
+    }
+    if (opt === "gojuon") return getGojuonRowLabel(m.furigana ?? m.name);
     return m.is_baptized ? "believer" : "friend";
   };
   const getLabel = (opt: GroupOption, key: string): string => {
     if (opt === "district") return key === "__none__" ? "—" : (districtMap.get(key) ?? "");
     if (opt === "group") return key === "__none__" ? "無所属" : (groupMap.get(key) ?? "");
     if (opt === "age_group") return key === "__none__" ? "不明" : (key in CATEGORY_LABELS ? CATEGORY_LABELS[key as Category] : "");
+    if (opt === "attendance") return key === "attended" ? "出席" : "欠席";
+    if (opt === "gojuon") return key;
     return key === "believer" ? "聖徒" : "友人";
   };
   const sortKeys = (opt: GroupOption, keys: string[]): string[] => {
+    if (opt === "attendance") return ["attended", "absent"].filter((k) => keys.includes(k));
+    if (opt === "gojuon") return GOJUON_ROW_LABELS.filter((l) => keys.includes(l));
     return [...keys].sort((a, b) => {
       if (opt === "district") return new Intl.Collator("ja").compare(districtMap.get(a) ?? "", districtMap.get(b) ?? "");
       if (opt === "group") return new Intl.Collator("ja").compare(groupMap.get(a) ?? "", groupMap.get(b) ?? "");
@@ -397,22 +447,14 @@ export function PrayerMeetingAttendance({
       return a === "believer" ? -1 : 1;
     });
   };
-  const useGojuonGrouping = sortOrder === "furigana" && gojuonGroup;
+  const group2Options = useMemo(
+    () => (Object.keys(GROUP_LABELS) as GroupOption[]).filter((k) => k !== group1),
+    [group1]
+  );
+  type Subsection = { group2Key: string; group2Label: string; members: MemberRow[] };
+  type Section = { group1Key: string; group1Label: string; subsections: Subsection[] };
   const sections = useMemo((): Section[] => {
-    if (useGojuonGrouping) {
-      const map = new Map<string, MemberRow[]>();
-      for (const m of sortedMembers) {
-        const key = getGojuonRowLabel(m.furigana ?? m.name);
-        if (!map.has(key)) map.set(key, []);
-        map.get(key)!.push(m);
-      }
-      return GOJUON_ROW_LABELS.filter((l) => map.has(l)).map((label) => ({
-        group1Key: label,
-        group1Label: label,
-        members: map.get(label) ?? [],
-      }));
-    }
-    if (!group1) return [{ group1Key: "", group1Label: "", members: sortedMembers }];
+    if (!group1) return [{ group1Key: "", group1Label: "", subsections: [{ group2Key: "", group2Label: "", members: sortedMembers }] }];
     const map = new Map<string, MemberRow[]>();
     for (const m of sortedMembers) {
       const key = getKey(group1, m);
@@ -420,30 +462,41 @@ export function PrayerMeetingAttendance({
       map.get(key)!.push(m);
     }
     const group1Keys = sortKeys(group1, Array.from(map.keys()));
-    return group1Keys.map((g1Key) => ({
-      group1Key: g1Key,
-      group1Label: getLabel(group1, g1Key),
-      members: map.get(g1Key) ?? [],
-    }));
-  }, [sortedMembers, group1, districtMap, groupMap, useGojuonGrouping]);
+    return group1Keys.map((g1Key) => {
+      const members = map.get(g1Key) ?? [];
+      if (!group2) {
+        return { group1Key: g1Key, group1Label: getLabel(group1, g1Key), subsections: [{ group2Key: "", group2Label: "", members }] };
+      }
+      const subMap = new Map<string, MemberRow[]>();
+      for (const m of members) {
+        const key = getKey(group2, m);
+        if (!subMap.has(key)) subMap.set(key, []);
+        subMap.get(key)!.push(m);
+      }
+      const group2Keys = sortKeys(group2, Array.from(subMap.keys()));
+      const subsections = group2Keys.map((g2Key) => ({
+        group2Key: g2Key,
+        group2Label: getLabel(group2, g2Key),
+        members: subMap.get(g2Key) ?? [],
+      }));
+      return { group1Key: g1Key, group1Label: getLabel(group1, g1Key), subsections };
+    });
+  }, [sortedMembers, group1, group2, districtMap, groupMap, attendanceMap]);
+  const toggleSectionOpen = (key: string) => setSectionOpen((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }));
+  const isSectionOpen = (key: string) => sectionOpen[key] ?? true;
 
-  const toggleAttendance = async (memberId: string, member: MemberRow) => {
+  const toggleAttendance = (memberId: string, member: MemberRow) => {
+    if (!isEditMode) return;
     setMessage("");
-    const supabase = createClient();
     const rec = attendanceMap.get(memberId);
     const memoVal = (memos.get(memberId) ?? "").trim();
     const isCurrentlyOn = Boolean(rec && rec.attended !== false);
     if (rec) {
       if (isCurrentlyOn) {
-        await supabase
-          .from("prayer_meeting_attendance")
-          .update({ attended: false, is_online: false, is_away: false, memo: memoVal || null })
-          .eq("id", rec.id);
         setAttendanceMap((prev) =>
           new Map(prev).set(memberId, { ...rec, attended: false, is_online: false, is_away: false, memo: memoVal || null })
         );
       } else {
-        await supabase.from("prayer_meeting_attendance").update({ attended: true }).eq("id", rec.id);
         setAttendanceMap((prev) => {
           const next = new Map(prev);
           const r = next.get(memberId);
@@ -452,58 +505,30 @@ export function PrayerMeetingAttendance({
         });
       }
     } else {
-      const isAll = districtId === "__all__";
-      let rid = isAll ? null : recordId;
-      if (!rid) {
-        rid = isAll
-          ? await ensurePrayerMeetingRecordForDistrict(member.district_id ?? "")
-          : await ensurePrayerMeetingRecord();
-        if (!rid) {
-          setMessage("集会の登録に失敗しました。");
-          return;
-        }
-        if (!isAll) setRecordId(rid);
-      }
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: inserted, error } = await supabase
-        .from("prayer_meeting_attendance")
-        .insert({
-          prayer_meeting_record_id: rid,
+      setAttendanceMap((prev) =>
+        new Map(prev).set(memberId, {
+          id: "",
           member_id: memberId,
           memo: null,
           is_online: false,
           is_away: false,
           attended: true,
-          reported_by_user_id: user?.id ?? null,
         })
-        .select("id, member_id, memo, is_online, is_away, attended")
-        .single();
-      if (error) {
-        if (error.code === "23505") setMessage("この方はすでに登録済みです。");
-        else setMessage(error.message);
-        return;
-      }
-      setAttendanceMap((prev) => new Map(prev).set(memberId, { id: inserted.id, member_id: memberId, memo: null, is_online: inserted.is_online ?? false, is_away: inserted.is_away ?? false, attended: inserted.attended ?? true }));
+      );
       setMemos((prev) => new Map(prev).set(memberId, ""));
       setRoster((prev) => (prev.some((m) => m.id === memberId) ? prev : [...prev, member]));
     }
   };
 
-  const saveMemo = async (memberId: string) => {
-    const memo = (memos.get(memberId) ?? "").trim();
-    const rec = attendanceMap.get(memberId);
-    const supabase = createClient();
-    if (rec) {
-      await supabase.from("prayer_meeting_attendance").update({ memo: memo || null }).eq("id", rec.id);
-    }
+  const saveMemo = (_memberId: string) => {
+    if (!isEditMode) return;
   };
 
-  const toggleOnline = async (memberId: string) => {
+  const toggleOnline = (memberId: string) => {
+    if (!isEditMode) return;
     const rec = attendanceMap.get(memberId);
     if (!rec) return;
     const next = !(rec.is_online ?? false);
-    const supabase = createClient();
-    await supabase.from("prayer_meeting_attendance").update({ is_online: next }).eq("id", rec.id);
     setAttendanceMap((prev) => {
       const nextMap = new Map(prev);
       const r = nextMap.get(memberId);
@@ -512,12 +537,11 @@ export function PrayerMeetingAttendance({
     });
   };
 
-  const toggleIsAway = async (memberId: string) => {
+  const toggleIsAway = (memberId: string) => {
+    if (!isEditMode) return;
     const rec = attendanceMap.get(memberId);
     if (!rec) return;
     const next = !(rec.is_away ?? false);
-    const supabase = createClient();
-    await supabase.from("prayer_meeting_attendance").update({ is_away: next }).eq("id", rec.id);
     setAttendanceMap((prev) => {
       const nextMap = new Map(prev);
       const r = nextMap.get(memberId);
@@ -571,6 +595,133 @@ export function PrayerMeetingAttendance({
 
           {districtId && (
             <>
+              <div className="sticky top-0 z-10 flex justify-end gap-2 py-2 bg-white border-b border-slate-200 -mx-4 px-4 md:-mx-6 md:px-6">
+                {!isEditMode ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditMode(true)}
+                    className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 touch-target"
+                  >
+                    記録モードに切り替える
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditMode(false);
+                        setExcludedMemberIds(new Set());
+                        setExcludedForDeletion(new Map());
+                        setRegularListExcludePopup(null);
+                      }}
+                      disabled={saving}
+                      className="px-4 py-2 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 touch-target disabled:opacity-50"
+                    >
+                      キャンセル
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setSaving(true);
+                        setMessage("");
+                        const supabase = createClient();
+                        const { data: { user } } = await supabase.auth.getUser();
+                        const uid = user?.id ?? null;
+                        const isAll = districtId === "__all__";
+                        try {
+                          for (const [, recId] of excludedForDeletion) {
+                            await supabase.from("prayer_meeting_attendance").delete().eq("id", recId);
+                          }
+                          if (isAll) {
+                            const districtIds = [...new Set(roster.filter((m) => attendanceMap.has(m.id)).map((m) => m.district_id).filter(Boolean))] as string[];
+                            const recordIdMap: Record<string, string> = {};
+                            for (const did of districtIds) {
+                              const rid = await ensurePrayerMeetingRecordForDistrict(did);
+                              if (rid) recordIdMap[did] = rid;
+                            }
+                            for (const [memberId, rec] of attendanceMap) {
+                              const member = roster.find((m) => m.id === memberId);
+                              const did = member?.district_id ?? "";
+                              const rid = recordIdMap[did];
+                              if (!rid) continue;
+                              const memo = (memos.get(memberId) ?? "").trim() || null;
+                              if (rec.id) {
+                                await supabase
+                                  .from("prayer_meeting_attendance")
+                                  .update({
+                                    attended: rec.attended,
+                                    is_online: rec.is_online ?? false,
+                                    is_away: rec.is_away ?? false,
+                                    memo,
+                                  })
+                                  .eq("id", rec.id);
+                              } else {
+                                await supabase.from("prayer_meeting_attendance").insert({
+                                  prayer_meeting_record_id: rid,
+                                  member_id: memberId,
+                                  memo,
+                                  is_online: rec.is_online ?? false,
+                                  is_away: rec.is_away ?? false,
+                                  attended: rec.attended !== false,
+                                  reported_by_user_id: uid,
+                                });
+                              }
+                            }
+                          } else {
+                            let rid = recordId;
+                            if (!rid) {
+                              rid = await ensurePrayerMeetingRecord(eventDate || undefined);
+                              if (rid) setRecordId(rid);
+                            }
+                            if (!rid) {
+                              setMessage("集会の登録に失敗しました。");
+                              setSaving(false);
+                              return;
+                            }
+                            for (const [memberId, rec] of attendanceMap) {
+                              const memo = (memos.get(memberId) ?? "").trim() || null;
+                              if (rec.id) {
+                                await supabase
+                                  .from("prayer_meeting_attendance")
+                                  .update({
+                                    attended: rec.attended,
+                                    is_online: rec.is_online ?? false,
+                                    is_away: rec.is_away ?? false,
+                                    memo,
+                                  })
+                                  .eq("id", rec.id);
+                              } else {
+                                await supabase.from("prayer_meeting_attendance").insert({
+                                  prayer_meeting_record_id: rid,
+                                  member_id: memberId,
+                                  memo,
+                                  is_online: rec.is_online ?? false,
+                                  is_away: rec.is_away ?? false,
+                                  attended: rec.attended !== false,
+                                  reported_by_user_id: uid,
+                                });
+                              }
+                            }
+                          }
+                          setSaving(false);
+                          setIsEditMode(false);
+                          setExcludedMemberIds(new Set());
+                          setExcludedForDeletion(new Map());
+                          setMessage("保存しました。");
+                          setRefreshTrigger((t) => t + 1);
+                        } catch {
+                          setMessage("保存に失敗しました。");
+                          setSaving(false);
+                        }
+                      }}
+                      disabled={saving}
+                      className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 touch-target disabled:opacity-50"
+                    >
+                      {saving ? "保存中…" : "保存する"}
+                    </button>
+                  </>
+                )}
+              </div>
               <div className="border border-slate-200 rounded-lg bg-white overflow-hidden">
                 <button
                   type="button"
@@ -578,7 +729,7 @@ export function PrayerMeetingAttendance({
                   className="w-full flex items-center justify-between px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 touch-target"
                   aria-expanded={accordionOpen}
                 >
-                  <span>フリー検索・並び順・グルーピング</span>
+                  <span>表示設定（フリー検索・並べ順・グルーピング）</span>
                   <svg
                     className={`w-5 h-5 text-slate-500 transition-transform ${accordionOpen ? "rotate-180" : ""}`}
                     fill="none"
@@ -590,6 +741,7 @@ export function PrayerMeetingAttendance({
                 </button>
                 {accordionOpen && (
                   <div className="border-t border-slate-200 px-4 pb-4 pt-2 space-y-4">
+                    {isEditMode && (
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">フリー検索（名前）</label>
                       <input
@@ -603,25 +755,29 @@ export function PrayerMeetingAttendance({
                         <ul className="mt-1 border border-slate-200 rounded-lg divide-y divide-slate-100 bg-white shadow-lg max-h-60 overflow-auto">
                           {searchResults
                             .filter((m) => !attendanceMap.has(m.id))
-                            .map((m) => (
-                              <li key={m.id}>
-                                <button
-                                  type="button"
-                                  onClick={() => addFromSearch(m)}
-                                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 touch-target"
-                                >
-                                  <span className="font-medium">{m.name}</span>
-                                  <span className="ml-2 text-slate-500 text-xs">
-                                    {[m.locality_name, m.district_name, m.group_name, m.age_group ? CATEGORY_LABELS[m.age_group] : ""]
-                                      .filter(Boolean)
-                                      .join(" · ")}
-                                  </span>
-                                </button>
-                              </li>
-                            ))}
+                            .map((m) => {
+                              const outOfEnrollment = !isInEnrollmentPeriod(m, refDateForEnrollment);
+                              return (
+                                <li key={m.id}>
+                                  <button
+                                    type="button"
+                                    onClick={() => addFromSearch(m)}
+                                    className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 touch-target ${outOfEnrollment ? "text-red-600" : ""}`}
+                                  >
+                                    <span className="font-medium">{m.name}</span>
+                                    <span className={`ml-2 text-xs ${outOfEnrollment ? "text-red-500" : "text-slate-500"}`}>
+                                      {[m.locality_name, m.district_name, m.group_name, m.age_group ? CATEGORY_LABELS[m.age_group] : ""]
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                    </span>
+                                  </button>
+                                </li>
+                              );
+                            })}
                         </ul>
                       )}
                     </div>
+                    )}
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
                       <div className="flex items-center gap-2">
                         <label className="text-sm font-medium text-slate-700">並び順</label>
@@ -639,7 +795,11 @@ export function PrayerMeetingAttendance({
                         <label className="text-sm font-medium text-slate-700">グルーピング1層目</label>
                         <select
                           value={group1}
-                          onChange={(e) => setGroup1(e.target.value as GroupOption | "")}
+                          onChange={(e) => {
+                            const v = e.target.value as GroupOption | "";
+                            setGroup1(v);
+                            if (v === group2) setGroup2("");
+                          }}
                           className="px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
                         >
                           <option value="">なし</option>
@@ -648,12 +808,20 @@ export function PrayerMeetingAttendance({
                           ))}
                         </select>
                       </div>
-                      {sortOrder === "furigana" && (
-                        <Toggle
-                          checked={gojuonGroup}
-                          onChange={() => setGojuonGroup((v) => !v)}
-                          label="五十音グループ"
-                        />
+                      {group1 && (
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm font-medium text-slate-700">グルーピング2層目</label>
+                          <select
+                            value={group2}
+                            onChange={(e) => setGroup2(e.target.value as GroupOption | "")}
+                            className="px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+                          >
+                            <option value="">なし</option>
+                            {group2Options.map((k) => (
+                              <option key={k} value={k}>{GROUP_LABELS[k]}</option>
+                            ))}
+                          </select>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -667,91 +835,157 @@ export function PrayerMeetingAttendance({
               <div>
                 {loading ? (
                   <p className="text-slate-500 text-sm">読み込み中…</p>
+                ) : !isEditMode && displayRoster.length === 0 ? (
+                  <p className="text-slate-500 text-sm py-8 text-center">まだ記録はありません。</p>
                 ) : (
                   <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
                     <table className="min-w-full divide-y divide-slate-200">
                       <thead className="bg-slate-50">
                         <tr>
                           <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">名前</th>
-                          <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-24">出欠（{[...attendanceMap.values()].filter((r) => r.attended !== false).length}）</th>
-                          <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-24">オンライン</th>
-                          <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-24">他地方で出席</th>
+                          <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-24">出欠({[...attendanceMap.values()].filter((r) => r.attended !== false).length})</th>
+                          <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-24">ｵﾝﾗｲﾝ({[...attendanceMap.values()].filter((r) => r.attended !== false && r.is_online).length})</th>
                           <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">メモ</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
                         {roster.length === 0 && (
                           <tr>
-                            <td colSpan={5} className="px-3 py-4 text-center text-slate-500 text-sm">
+                            <td colSpan={4} className="px-3 py-4 text-center text-slate-500 text-sm">
                               名簿がありません
                             </td>
                           </tr>
                         )}
-                        {sections.map((section, idx) => (
+                        {sections.map((section, idx) => {
+                          const hasGroup1 = Boolean(group1 && section.group1Key);
+                          const hasGroup2 = Boolean(group2);
+                          const g1Key = `g1-${section.group1Key}`;
+                          const g1Open = hasGroup1 ? isSectionOpen(g1Key) : true;
+                          return (
                           <Fragment key={`s-${section.group1Key}-${idx}`}>
-                            {(group1 || useGojuonGrouping) && section.members.length > 0 && (
+                            {hasGroup1 && section.subsections.some((s) => s.members.length > 0) && (
                               <tr className="bg-slate-100">
-                                <td colSpan={5} className="px-3 py-1 text-sm font-medium text-slate-700">
-                                  {useGojuonGrouping ? section.group1Label : (group1 ? `${GROUP_LABELS[group1]}：${section.group1Label || "—"}` : "—")}
+                                <td colSpan={4} className="px-3 py-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleSectionOpen(g1Key)}
+                                    className="w-full flex items-center justify-between px-3 py-1.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-200/70 touch-target"
+                                    aria-expanded={g1Open}
+                                  >
+                                    <span>{group1 ? `${GROUP_LABELS[group1]}：${section.group1Label || "—"}` : ""}</span>
+                                    <svg
+                                      className={`w-4 h-4 text-slate-500 transition-transform ${g1Open ? "rotate-180" : ""}`}
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </button>
                                 </td>
                               </tr>
                             )}
-                            {section.members.map((m) => {
+                            {(hasGroup1 ? g1Open : true) && section.subsections.map((sub, subIdx) => {
+                              const hasSubHeader = hasGroup2 && sub.group2Key;
+                              const g2Key = hasSubHeader ? `g1-${section.group1Key}::g2-${sub.group2Key}` : "";
+                              const g2Open = g2Key ? isSectionOpen(g2Key) : true;
+                              return (
+                                <Fragment key={`sub-${section.group1Key}-${sub.group2Key}-${subIdx}`}>
+                                  {hasSubHeader && sub.members.length > 0 && (
+                                    <tr className="bg-slate-50">
+                                      <td colSpan={4} className="px-3 py-0 pl-6">
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleSectionOpen(g2Key)}
+                                          className="w-full flex items-center justify-between px-3 py-1 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 touch-target"
+                                          aria-expanded={g2Open}
+                                        >
+                                          <span>{group2 ? `${GROUP_LABELS[group2]}：${sub.group2Label || "—"}` : ""}</span>
+                                          <svg
+                                            className={`w-4 h-4 text-slate-500 transition-transform ${g2Open ? "rotate-180" : ""}`}
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                          >
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                          </svg>
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  )}
+                                  {(!hasSubHeader || g2Open) && sub.members.map((m) => {
                         const rec = attendanceMap.get(m.id);
                         const attended = Boolean(rec && rec.attended !== false);
                         const isOnline = rec?.is_online ?? false;
-                        const isAway = rec?.is_away ?? false;
                         const memo = memos.get(m.id) ?? "";
-                        const memoPlaceholder = isAway ? "出席した地方を記載してください" : "欠席理由など";
+                        const memoPlaceholder = "欠席理由など";
                         return (
                           <tr key={m.id} className="hover:bg-slate-50">
-                            <td className="px-3 py-1.5 text-slate-800">{m.name}</td>
+                            <td className="px-3 py-1.5 text-slate-800">
+                              <div className="flex items-center gap-1">
+                                {isEditMode && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleExclude(m)}
+                                    className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-red-600 hover:bg-red-50 touch-target text-sm font-bold"
+                                    aria-label={`${m.name}を除外`}
+                                    title="除外"
+                                  >
+                                    −
+                                  </button>
+                                )}
+                                <span>{m.name}</span>
+                              </div>
+                            </td>
                             <td className="px-3 py-1.5">
-                              <Toggle
-                                checked={attended}
-                                onChange={() => toggleAttendance(m.id, m)}
-                                ariaLabel={`${m.name}の出欠`}
-                              />
+                              {isEditMode ? (
+                                <Toggle
+                                  checked={attended}
+                                  onChange={() => toggleAttendance(m.id, m)}
+                                  ariaLabel={`${m.name}の出欠`}
+                                />
+                              ) : (
+                                <span className={attended ? "text-primary-600" : "text-slate-400"}>{attended ? "○" : "×"}</span>
+                              )}
                             </td>
                             <td className="px-3 py-1.5">
                               {attended ? (
-                                <Toggle
-                                  checked={isOnline}
-                                  onChange={() => toggleOnline(m.id)}
-                                  ariaLabel={`${m.name}のオンライン`}
-                                />
+                                isEditMode ? (
+                                  <Toggle
+                                    checked={isOnline}
+                                    onChange={() => toggleOnline(m.id)}
+                                    ariaLabel={`${m.name}のオンライン`}
+                                  />
+                                ) : (
+                                  <span className={isOnline ? "text-primary-600" : "text-slate-400"}>{isOnline ? "○" : "—"}</span>
+                                )
                               ) : (
                                 <span className="text-slate-300">—</span>
                               )}
                             </td>
                             <td className="px-3 py-1.5">
-                              {attended ? (
-                                <Toggle
-                                  checked={isAway}
-                                  onChange={() => toggleIsAway(m.id)}
-                                  ariaLabel={`${m.name}の他地方`}
+                              {isEditMode ? (
+                                <input
+                                  type="text"
+                                  value={memo}
+                                  onChange={(e) => setMemos((prev) => new Map(prev).set(m.id, e.target.value))}
+                                  onBlur={() => saveMemo(m.id)}
+                                  placeholder={memoPlaceholder}
+                                  className="w-full max-w-xs px-2 py-0.5 text-sm border border-slate-300 rounded touch-target"
                                 />
                               ) : (
-                                <span className="text-slate-300">—</span>
+                                <span className="text-slate-600 text-sm">{memo || "—"}</span>
                               )}
-                            </td>
-                            <td className="px-3 py-1.5">
-                              <input
-                                type="text"
-                                value={memo}
-                                onChange={(e) => setMemos((prev) => new Map(prev).set(m.id, e.target.value))}
-                                onBlur={() => saveMemo(m.id)}
-                                placeholder={memoPlaceholder}
-                                className={`w-full max-w-xs px-2 py-0.5 text-sm border rounded touch-target ${
-                                  isAway ? "border-amber-400" : "border-slate-300"
-                                }`}
-                              />
                             </td>
                           </tr>
                         );
                     })}
+                                </Fragment>
+                              );
+                            })}
                           </Fragment>
-                        ))}
+                        );
+                      })}
                       </tbody>
                     </table>
                   </div>
@@ -760,6 +994,88 @@ export function PrayerMeetingAttendance({
             </>
           )}
         </>
+      )}
+
+      {regularListExcludePopup && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="regular-list-exclude-title"
+          onClick={() => setRegularListExcludePopup(null)}
+        >
+          <div className="w-full max-w-sm bg-white rounded-lg shadow-lg p-4" onClick={(e) => e.stopPropagation()}>
+            <h2 id="regular-list-exclude-title" className="text-sm font-medium text-slate-700 mb-2">レギュラーリストに登録されている名前です</h2>
+            <p className="text-sm text-slate-600 mb-4">
+              レギュラーリストからも削除しますか？
+              過去の記録に影響はありません。今週以降に影響します。地区のレギュラーリストから外れると、今後その地区の主日の登録モードで「レギュラーリストで補完する」を押したときに、その名前一覧に含まれなくなります。
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => setRegularListExcludePopup(null)}
+                className="w-full px-4 py-2 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg touch-target"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const { memberId, member, districtId } = regularListExcludePopup;
+                  const rec = attendanceMap.get(memberId);
+                  setExcludedMemberIds((prev) => new Set(prev).add(memberId));
+                  if (rec?.id) setExcludedForDeletion((prev) => new Map(prev).set(memberId, rec.id));
+                  setAttendanceMap((prev) => { const n = new Map(prev); n.delete(memberId); return n; });
+                  setMemos((prev) => { const n = new Map(prev); n.delete(memberId); return n; });
+                  await removeDistrictRegularMember(districtId, memberId);
+                  setRegularListExcludePopup(null);
+                }}
+                className="w-full px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg touch-target"
+              >
+                削除する
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const { memberId } = regularListExcludePopup;
+                  const rec = attendanceMap.get(memberId);
+                  setExcludedMemberIds((prev) => new Set(prev).add(memberId));
+                  if (rec?.id) setExcludedForDeletion((prev) => new Map(prev).set(memberId, rec.id));
+                  setAttendanceMap((prev) => { const n = new Map(prev); n.delete(memberId); return n; });
+                  setMemos((prev) => { const n = new Map(prev); n.delete(memberId); return n; });
+                  setRegularListExcludePopup(null);
+                }}
+                className="w-full px-4 py-2 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg touch-target"
+              >
+                削除しない
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {enrollmentBlockedMemberId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="enrollment-blocked-title"
+          onClick={() => setEnrollmentBlockedMemberId(null)}
+        >
+          <div className="w-full max-w-sm bg-white rounded-lg shadow-lg p-4" onClick={(e) => e.stopPropagation()}>
+            <h2 id="enrollment-blocked-title" className="text-sm font-medium text-slate-700 mb-2">在籍期間外</h2>
+            <p className="text-sm text-slate-600 mb-4">
+              このメンバーは在籍期間外です。名簿編集にて「ローカルメンバー転入日」や「ローカルメンバー転出日」をご確認ください。
+            </p>
+            <button
+              type="button"
+              onClick={() => setEnrollmentBlockedMemberId(null)}
+              className="w-full px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg touch-target"
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

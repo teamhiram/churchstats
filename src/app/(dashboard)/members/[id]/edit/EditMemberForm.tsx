@@ -65,6 +65,9 @@ type Props = {
     locality_id: string;
     age_group: Category | null;
     is_baptized: boolean;
+    local_member_join_date: string | null;
+    local_member_leave_date: string | null;
+    enrollment_periods?: { period_no: number; join_date: string | null; leave_date: string | null; is_uncertain: boolean }[];
   };
   districts: { id: string; name: string }[];
   groups: { id: string; name: string; district_id: string }[];
@@ -87,6 +90,24 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
   const [localityId, setLocalityId] = useState(initial.locality_id);
   const [ageGroup, setAgeGroup] = useState<Category | null>(initial.age_group);
   const [isBaptized, setIsBaptized] = useState(initial.is_baptized);
+  const initialPeriods = initial.enrollment_periods?.length
+    ? initial.enrollment_periods
+        .map((p) => ({
+          period_no: p.period_no,
+          join_date: p.join_date ?? "",
+          leave_date: p.leave_date ?? "",
+          is_uncertain: p.is_uncertain,
+        }))
+        .sort((a, b) => a.period_no - b.period_no)
+    : [
+        {
+          period_no: 1,
+          join_date: initial.local_member_join_date ?? "",
+          leave_date: initial.local_member_leave_date ?? "",
+          is_uncertain: false,
+        },
+      ];
+  const [periods, setPeriods] = useState(initialPeriods);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState(false);
@@ -114,6 +135,16 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
         locality_id: !isLocal ? (localityId || null) : null,
         age_group: ageGroup,
         is_baptized: isBaptized,
+        local_member_join_date: periods[0]?.join_date?.trim() || null,
+        local_member_leave_date: periods[0]?.leave_date?.trim() || null,
+        enrollment_periods: isLocal
+          ? periods.map((p, i) => ({
+              period_no: i + 1,
+              join_date: p.join_date?.trim() || null,
+              leave_date: p.leave_date?.trim() || null,
+              is_uncertain: p.is_uncertain,
+            }))
+          : undefined,
       },
       initialUpdatedAt
     );
@@ -329,6 +360,80 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
           ))}
         </div>
       </div>
+      {isLocal && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-slate-700">ローカル在籍期間</span>
+            <button
+              type="button"
+              onClick={() =>
+                setPeriods((prev) => [
+                  ...prev,
+                  {
+                    period_no: prev.length + 1,
+                    join_date: "",
+                    leave_date: "",
+                    is_uncertain: false,
+                  },
+                ])
+              }
+              className="text-sm text-primary-600 hover:underline touch-target"
+            >
+              ローカル在籍期間を追加する
+            </button>
+          </div>
+          {periods.map((p, i) => (
+            <div key={i} className="border border-slate-200 rounded-lg p-3 space-y-2 bg-slate-50">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-600">期間{i + 1}</span>
+                {periods.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setPeriods((prev) => prev.filter((_, j) => j !== i).map((x, j) => ({ ...x, period_no: j + 1 })))}
+                    className="text-xs text-red-600 hover:underline touch-target"
+                  >
+                    削除
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-0.5">ローカルメンバー転入日</label>
+                  <input
+                    type="date"
+                    value={p.join_date}
+                    onChange={(e) =>
+                      setPeriods((prev) => prev.map((x, j) => (j === i ? { ...x, join_date: e.target.value } : x)))
+                    }
+                    className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-0.5">ローカルメンバー転出日</label>
+                  <input
+                    type="date"
+                    value={p.leave_date}
+                    onChange={(e) =>
+                      setPeriods((prev) => prev.map((x, j) => (j === i ? { ...x, leave_date: e.target.value } : x)))
+                    }
+                    className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
+                  />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-slate-600">期間不確定</span>
+                <Toggle
+                  checked={p.is_uncertain}
+                  onChange={() =>
+                    setPeriods((prev) => prev.map((x, j) => (j === i ? { ...x, is_uncertain: !x.is_uncertain } : x)))
+                  }
+                  ariaLabel="期間不確定"
+                />
+              </label>
+            </div>
+          ))}
+        </div>
+      )}
       {error && (
         <div
           className={`rounded-lg border p-3 text-sm ${
