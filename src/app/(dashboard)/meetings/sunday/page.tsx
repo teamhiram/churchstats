@@ -39,12 +39,12 @@ export default async function SundayAttendancePage({
 
   return (
     <div className="space-y-6">
-      <p className="text-lg font-medium text-slate-800">主日：{sundayDisplay}</p>
       <SundayAttendance
         districts={districts}
         groups={groups ?? []}
         defaultDistrictId={defaultDistrictId}
         initialSundayIso={initialSundayIso}
+        sundayDisplay={sundayDisplay}
       />
     </div>
   );

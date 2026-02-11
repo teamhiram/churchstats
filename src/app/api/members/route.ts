@@ -2,6 +2,12 @@ import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import type { Category } from "@/types/database";
 
+export type EnrollmentPeriodApi = {
+  period_no: number;
+  join_date: string | null;
+  leave_date: string | null;
+};
+
 export type MembersApiRow = {
   id: string;
   name: string;
@@ -13,6 +19,9 @@ export type MembersApiRow = {
   age_group: Category | null;
   is_baptized: boolean;
   updated_at?: string;
+  local_member_join_date?: string | null;
+  local_member_leave_date?: string | null;
+  enrollment_periods?: EnrollmentPeriodApi[];
 };
 
 export type MembersApiResponse = {
@@ -50,18 +59,35 @@ export async function GET(request: NextRequest) {
 
   const membersQuery = supabase
     .from("members")
-    .select("id, name, furigana, gender, is_local, district_id, group_id, age_group, is_baptized, updated_at")
+    .select("id, name, furigana, gender, is_local, district_id, group_id, age_group, is_baptized, updated_at, local_member_join_date, local_member_leave_date")
     .order("name");
   if (since) {
     membersQuery.gt("updated_at", since);
   }
-  const [membersRes, districtsRes, groupsRes] = await Promise.all([
+  const [membersRes, districtsRes, groupsRes, periodsRes] = await Promise.all([
     membersQuery,
     supabase.from("districts").select("id, name, locality_id").order("name"),
     supabase.from("groups").select("id, name, district_id").order("name"),
+    supabase.from("member_local_enrollment_periods").select("member_id, period_no, join_date, leave_date").order("period_no"),
   ]);
 
   const members = (membersRes.data ?? []) as MembersApiRow[];
+  const periodsByMember = new Map<string, { period_no: number; join_date: string | null; leave_date: string | null }[]>();
+  for (const p of periodsRes.data ?? []) {
+    const row = p as { member_id: string; period_no: number; join_date: string | null; leave_date: string | null };
+    const list = periodsByMember.get(row.member_id) ?? [];
+    list.push({ period_no: row.period_no, join_date: row.join_date ?? null, leave_date: row.leave_date ?? null });
+    periodsByMember.set(row.member_id, list);
+  }
+  for (const m of members) {
+    const periods = periodsByMember.get(m.id);
+    if (periods && periods.length > 0) {
+      (m as MembersApiRow).enrollment_periods = periods;
+    } else if (m.is_local) {
+      (m as MembersApiRow).local_member_join_date = (m as { local_member_join_date?: string | null }).local_member_join_date ?? null;
+      (m as MembersApiRow).local_member_leave_date = (m as { local_member_leave_date?: string | null }).local_member_leave_date ?? null;
+    }
+  }
   const districts = (districtsRes.data ?? []) as { id: string; name: string; locality_id: string | null }[];
   const groups = (groupsRes.data ?? []) as { id: string; name: string; district_id: string }[];
 

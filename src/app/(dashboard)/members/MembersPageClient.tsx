@@ -49,6 +49,9 @@ export function MembersPageClient({ initialData, searchParams }: Props) {
     group_id: m.group_id,
     age_group: m.age_group as Category | null,
     is_baptized: m.is_baptized,
+    local_member_join_date: m.local_member_join_date ?? null,
+    local_member_leave_date: m.local_member_leave_date ?? null,
+    enrollment_periods: m.enrollment_periods ?? undefined,
   }));
   const byType =
     memberType === "guest"

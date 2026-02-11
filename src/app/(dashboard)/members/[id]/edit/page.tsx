@@ -17,6 +17,18 @@ export default async function EditMemberPage({
   const { data: member } = await supabase.from("members").select("*").eq("id", id).single();
   if (!member) notFound();
 
+  const { data: periods } = await supabase
+    .from("member_local_enrollment_periods")
+    .select("period_no, join_date, leave_date, is_uncertain")
+    .eq("member_id", id)
+    .order("period_no");
+  const enrollmentPeriods = (periods ?? []).map((p) => ({
+    period_no: p.period_no,
+    join_date: (p as { join_date?: string | null }).join_date ?? null,
+    leave_date: (p as { leave_date?: string | null }).leave_date ?? null,
+    is_uncertain: Boolean((p as { is_uncertain?: boolean }).is_uncertain),
+  }));
+
   let isDistrictRegular = false;
   let isGroupRegular = false;
   if (member.district_id) {
@@ -84,6 +96,9 @@ export default async function EditMemberPage({
           locality_id: String((member as { locality_id?: string | null }).locality_id ?? ""),
           age_group: (member.age_group ?? (member as { current_category?: Category | null }).current_category ?? null) as Category | null,
           is_baptized: Boolean(member.is_baptized),
+          local_member_join_date: (member as { local_member_join_date?: string | null }).local_member_join_date ?? null,
+          local_member_leave_date: (member as { local_member_leave_date?: string | null }).local_member_leave_date ?? null,
+          enrollment_periods: enrollmentPeriods.length > 0 ? enrollmentPeriods : undefined,
         }}
         districts={districts ?? []}
         groups={groups ?? []}

@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/client";
 import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
 import { formatDateYmd, getDaysInWeek } from "@/lib/weekUtils";
 import { getGojuonRowLabel, GOJUON_ROW_LABELS } from "@/lib/furigana";
-import { Toggle } from "@/components/Toggle";
 import { DISPATCH_TYPE_LABELS, CATEGORY_LABELS } from "@/types/database";
 import type { DispatchType } from "@/types/database";
 import type { Category } from "@/types/database";
@@ -13,7 +12,7 @@ type District = { id: string; name: string };
 type Group = { id: string; name: string; district_id: string };
 type WeekOption = { value: string; label: string };
 type SortOption = "furigana" | "district" | "group" | "age_group";
-type GroupOption = "district" | "group" | "age_group" | "believer";
+type GroupOption = "district" | "group" | "age_group" | "believer" | "attendance" | "gojuon";
 
 const SORT_LABELS: Record<SortOption, string> = {
   furigana: "フリガナ順",
@@ -27,6 +26,8 @@ const GROUP_LABELS: Record<GroupOption, string> = {
   group: "小組",
   age_group: "年齢層",
   believer: "信者",
+  attendance: "出欠別",
+  gojuon: "五十音別",
 };
 
 type MemberRow = {
@@ -91,7 +92,8 @@ export function OrganicDispatchForm({
   const [searchResults, setSearchResults] = useState<MemberRow[]>([]);
   const [sortOrder, setSortOrder] = useState<SortOption>("furigana");
   const [group1, setGroup1] = useState<GroupOption | "">("");
-  const [gojuonGroup, setGojuonGroup] = useState(true);
+  const [group2, setGroup2] = useState<GroupOption | "">("");
+  const [sectionOpen, setSectionOpen] = useState<Record<string, boolean>>({});
   const [accordionOpen, setAccordionOpen] = useState(false);
   const [memoPopupMemberId, setMemoPopupMemberId] = useState<string | null>(null);
 
@@ -251,20 +253,25 @@ export function OrganicDispatchForm({
     return list;
   }, [roster, sortOrder, districtMap, groupMap]);
 
-  type Section = { group1Key: string; group1Label: string; members: MemberRow[] };
   const getKey = (opt: GroupOption, m: MemberRow): string => {
     if (opt === "district") return m.district_id ?? "__none__";
     if (opt === "group") return m.group_id ?? "__none__";
     if (opt === "age_group") return m.age_group ?? "__none__";
+    if (opt === "attendance") return dispatchMap.has(m.id) ? "attended" : "absent";
+    if (opt === "gojuon") return getGojuonRowLabel(m.furigana ?? m.name);
     return m.is_baptized ? "believer" : "friend";
   };
   const getLabel = (opt: GroupOption, key: string): string => {
     if (opt === "district") return key === "__none__" ? "—" : (districtMap.get(key) ?? "");
     if (opt === "group") return key === "__none__" ? "無所属" : (groupMap.get(key) ?? "");
     if (opt === "age_group") return key === "__none__" ? "不明" : (key in CATEGORY_LABELS ? CATEGORY_LABELS[key as Category] : "");
+    if (opt === "attendance") return key === "attended" ? "出席" : "欠席";
+    if (opt === "gojuon") return key;
     return key === "believer" ? "聖徒" : "友人";
   };
   const sortKeys = (opt: GroupOption, keys: string[]): string[] => {
+    if (opt === "attendance") return ["attended", "absent"].filter((k) => keys.includes(k));
+    if (opt === "gojuon") return GOJUON_ROW_LABELS.filter((l) => keys.includes(l));
     return [...keys].sort((a, b) => {
       if (opt === "district") return new Intl.Collator("ja").compare(districtMap.get(a) ?? "", districtMap.get(b) ?? "");
       if (opt === "group") return new Intl.Collator("ja").compare(groupMap.get(a) ?? "", groupMap.get(b) ?? "");
@@ -275,22 +282,14 @@ export function OrganicDispatchForm({
       return a === "believer" ? -1 : 1;
     });
   };
-  const useGojuonGrouping = sortOrder === "furigana" && gojuonGroup;
+  const group2Options = useMemo(
+    () => (Object.keys(GROUP_LABELS) as GroupOption[]).filter((k) => k !== group1),
+    [group1]
+  );
+  type Subsection = { group2Key: string; group2Label: string; members: MemberRow[] };
+  type Section = { group1Key: string; group1Label: string; subsections: Subsection[] };
   const sections = useMemo((): Section[] => {
-    if (useGojuonGrouping) {
-      const map = new Map<string, MemberRow[]>();
-      for (const m of sortedMembers) {
-        const key = getGojuonRowLabel(m.furigana ?? m.name);
-        if (!map.has(key)) map.set(key, []);
-        map.get(key)!.push(m);
-      }
-      return GOJUON_ROW_LABELS.filter((l) => map.has(l)).map((label) => ({
-        group1Key: label,
-        group1Label: label,
-        members: map.get(label) ?? [],
-      }));
-    }
-    if (!group1) return [{ group1Key: "", group1Label: "", members: sortedMembers }];
+    if (!group1) return [{ group1Key: "", group1Label: "", subsections: [{ group2Key: "", group2Label: "", members: sortedMembers }] }];
     const map = new Map<string, MemberRow[]>();
     for (const m of sortedMembers) {
       const key = getKey(group1, m);
@@ -298,12 +297,28 @@ export function OrganicDispatchForm({
       map.get(key)!.push(m);
     }
     const group1Keys = sortKeys(group1, Array.from(map.keys()));
-    return group1Keys.map((g1Key) => ({
-      group1Key: g1Key,
-      group1Label: getLabel(group1, g1Key),
-      members: map.get(g1Key) ?? [],
-    }));
-  }, [sortedMembers, group1, districtMap, groupMap, useGojuonGrouping]);
+    return group1Keys.map((g1Key) => {
+      const members = map.get(g1Key) ?? [];
+      if (!group2) {
+        return { group1Key: g1Key, group1Label: getLabel(group1, g1Key), subsections: [{ group2Key: "", group2Label: "", members }] };
+      }
+      const subMap = new Map<string, MemberRow[]>();
+      for (const m of members) {
+        const key = getKey(group2, m);
+        if (!subMap.has(key)) subMap.set(key, []);
+        subMap.get(key)!.push(m);
+      }
+      const group2Keys = sortKeys(group2, Array.from(subMap.keys()));
+      const subsections = group2Keys.map((g2Key) => ({
+        group2Key: g2Key,
+        group2Label: getLabel(group2, g2Key),
+        members: subMap.get(g2Key) ?? [],
+      }));
+      return { group1Key: g1Key, group1Label: getLabel(group1, g1Key), subsections };
+    });
+  }, [sortedMembers, group1, group2, districtMap, groupMap, dispatchMap]);
+  const toggleSectionOpen = (key: string) => setSectionOpen((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }));
+  const isSectionOpen = (key: string) => sectionOpen[key] ?? true;
 
   const syncOne = useCallback(
     async (
@@ -452,7 +467,7 @@ export function OrganicDispatchForm({
               className="w-full flex items-center justify-between px-4 py-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 touch-target"
               aria-expanded={accordionOpen}
             >
-              <span>フリー検索・並び順・グルーピング</span>
+              <span>表示設定（フリー検索・並べ順・グルーピング）</span>
               <svg
                 className={`w-5 h-5 text-slate-500 transition-transform ${accordionOpen ? "rotate-180" : ""}`}
                 fill="none"
@@ -513,7 +528,11 @@ export function OrganicDispatchForm({
                     <label className="text-sm font-medium text-slate-700">グルーピング1層目</label>
                     <select
                       value={group1}
-                      onChange={(e) => setGroup1(e.target.value as GroupOption | "")}
+                      onChange={(e) => {
+                        const v = e.target.value as GroupOption | "";
+                        setGroup1(v);
+                        if (v === group2) setGroup2("");
+                      }}
                       className="px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
                     >
                       <option value="">なし</option>
@@ -522,12 +541,20 @@ export function OrganicDispatchForm({
                       ))}
                     </select>
                   </div>
-                  {sortOrder === "furigana" && (
-                    <Toggle
-                      checked={gojuonGroup}
-                      onChange={() => setGojuonGroup((v) => !v)}
-                      label="五十音グループ"
-                    />
+                  {group1 && (
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-medium text-slate-700">グルーピング2層目</label>
+                      <select
+                        value={group2}
+                        onChange={(e) => setGroup2(e.target.value as GroupOption | "")}
+                        className="px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+                      >
+                        <option value="">なし</option>
+                        {group2Options.map((k) => (
+                          <option key={k} value={k}>{GROUP_LABELS[k]}</option>
+                        ))}
+                      </select>
+                    </div>
                   )}
                 </div>
               </div>
@@ -557,16 +584,64 @@ export function OrganicDispatchForm({
                       </td>
                     </tr>
                   )}
-                  {sections.map((section, idx) => (
+                  {sections.map((section, idx) => {
+                    const hasGroup1 = Boolean(group1 && section.group1Key);
+                    const hasGroup2 = Boolean(group2);
+                    const g1Key = `g1-${section.group1Key}`;
+                    const g1Open = hasGroup1 ? isSectionOpen(g1Key) : true;
+                    return (
                     <Fragment key={`s-${section.group1Key}-${idx}`}>
-                      {(group1 || useGojuonGrouping) && section.members.length > 0 && (
+                      {hasGroup1 && section.subsections.some((s) => s.members.length > 0) && (
                         <tr className="bg-slate-100">
-                          <td colSpan={4} className="px-3 py-1 text-sm font-medium text-slate-700">
-                            {useGojuonGrouping ? section.group1Label : (group1 ? `${GROUP_LABELS[group1]}：${section.group1Label || "—"}` : "—")}
+                          <td colSpan={4} className="px-3 py-0">
+                            <button
+                              type="button"
+                              onClick={() => toggleSectionOpen(g1Key)}
+                              className="w-full flex items-center justify-between px-3 py-1.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-200/70 touch-target"
+                              aria-expanded={g1Open}
+                            >
+                              <span>{group1 ? `${GROUP_LABELS[group1]}：${section.group1Label || "—"}` : ""}</span>
+                              <svg
+                                className={`w-4 h-4 text-slate-500 transition-transform ${g1Open ? "rotate-180" : ""}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
                           </td>
                         </tr>
                       )}
-                      {section.members.map((m) => {
+                      {(hasGroup1 ? g1Open : true) && section.subsections.map((sub, subIdx) => {
+                        const hasSubHeader = hasGroup2 && sub.group2Key;
+                        const g2Key = hasSubHeader ? `g1-${section.group1Key}::g2-${sub.group2Key}` : "";
+                        const g2Open = g2Key ? isSectionOpen(g2Key) : true;
+                        return (
+                          <Fragment key={`sub-${section.group1Key}-${sub.group2Key}-${subIdx}`}>
+                            {hasSubHeader && sub.members.length > 0 && (
+                              <tr className="bg-slate-50">
+                                <td colSpan={4} className="px-3 py-0 pl-6">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleSectionOpen(g2Key)}
+                                    className="w-full flex items-center justify-between px-3 py-1 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 touch-target"
+                                    aria-expanded={g2Open}
+                                  >
+                                    <span>{group2 ? `${GROUP_LABELS[group2]}：${sub.group2Label || "—"}` : ""}</span>
+                                    <svg
+                                      className={`w-4 h-4 text-slate-500 transition-transform ${g2Open ? "rotate-180" : ""}`}
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                  </button>
+                                </td>
+                              </tr>
+                            )}
+                            {(!hasSubHeader || g2Open) && sub.members.map((m) => {
                     const hasType = (localType.get(m.id) ?? "") !== "";
                     const hasDate = (localDate.get(m.id) ?? "") !== "";
                     const hasMemo = (localMemo.get(m.id) ?? "").trim() !== "";
@@ -643,8 +718,12 @@ export function OrganicDispatchForm({
                     </Fragment>
                     );
                   })}
+                          </Fragment>
+                        );
+                      })}
                     </Fragment>
-                  ))}
+                  );
+                })}
                 </tbody>
               </table>
             </div>

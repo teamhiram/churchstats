@@ -73,7 +73,7 @@ export async function getCachedAbsenceAlertWeeks(): Promise<number> {
 export type MeetingsLayoutData = {
   user: { id: string } | null;
   profile: { role: Role; main_district_id: string | null } | null;
-  districts: { id: string; name: string }[];
+  districts: { id: string; name: string; locality_id?: string }[];
 };
 
 /** 集会レイアウト・集会ページ用。同一リクエストで 1 回だけ取得 */
@@ -100,10 +100,10 @@ export const getMeetingsLayoutData = cache(async (): Promise<MeetingsLayoutData>
   }
 
   const { data: districts } = canSeeAllDistricts
-    ? await supabase.from("districts").select("id, name").order("name")
+    ? await supabase.from("districts").select("id, name, locality_id").order("name")
     : await supabase
         .from("districts")
-        .select("id, name")
+        .select("id, name, locality_id")
         .in("id", districtIds.length > 0 ? districtIds : ["__none__"])
         .order("name");
 
