@@ -41,8 +41,9 @@ type DistrictWithLocality = { id: string; name: string; locality_id?: string };
 
 /**
  * 指定日の主日集会を取得または作成。
- * isCombinedPerLocality が true の地方は1集会、false の地方は地区ごとに1集会。
- * 戻り値: districtId -> meetingId（地区単位で参加する meeting を返す）
+ * 戻り値: districtId -> meetingId（常に地区集会の meeting を返す）。
+ * 合同集会トグルON時は meetings に地方集会レコード（district_id=null, locality_id=X）を作成するが、
+ * 出欠記録は地区集会に紐づけるため、戻り値は常に地区集会の meetingId。
  */
 export async function ensureSundayMeetingsBatch(
   sundayIso: string,
@@ -65,6 +66,30 @@ export async function ensureSundayMeetingsBatch(
     .eq("event_date", sundayIso)
     .eq("meeting_type", "main");
 
+  // #region agent log
+  try {
+    const existingList = (existing ?? []) as { id: string; district_id: string | null; locality_id: string | null }[];
+    const byDistrict: Record<string, string> = {};
+    const byLocality: Record<string, string> = {};
+    const allMeetings = existingList.map((r) => ({ id: r.id, district_id: r.district_id, locality_id: r.locality_id }));
+    existingList.forEach((r) => {
+      if (r.district_id) byDistrict[r.district_id] = r.id;
+      if (r.locality_id) byLocality[r.locality_id] = r.id;
+    });
+    await fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        location: "actions.ts:ensureSundayMeetingsBatch",
+        message: "existing meetings for date",
+        data: { sundayIso, districtIds, existingCount: existingList.length, byDistrict, byLocality, allMeetings },
+        timestamp: Date.now(),
+        hypothesisId: "H4",
+      }),
+    });
+  } catch (_) {}
+  // #endregion
+
   const result: Record<string, string> = {};
   const existingByDistrict = new Map<string, string>();
   const existingByLocality = new Map<string, string>();
@@ -80,8 +105,7 @@ export async function ensureSundayMeetingsBatch(
 
     if (isCombined && lid) {
       const localityId = lid;
-      let mid = existingByLocality.get(localityId);
-      if (!mid) {
+      if (!existingByLocality.get(localityId)) {
         const locName = localityNameMap.get(localityId) ?? "";
         const { data: ins, error } = await supabase
           .from("meetings")
@@ -94,57 +118,29 @@ export async function ensureSundayMeetingsBatch(
           })
           .select("id")
           .single();
-        if (!error && ins?.id) {
-          const newMid = ins.id;
-          mid = newMid;
-          existingByLocality.set(localityId, newMid);
-        }
+        if (!error && ins?.id) existingByLocality.set(localityId, ins.id);
       }
-      if (mid) result[did] = mid;
-    } else {
-      let mid = existingByDistrict.get(did);
-      if (!mid) {
-        const { data: ins, error } = await supabase
-          .from("meetings")
-          .insert({
-            event_date: sundayIso,
-            meeting_type: "main",
-            district_id: did,
-            name: district ? `${district.name}地区集会` : "主日集会",
-          })
-          .select("id")
-          .single();
-        if (!error && ins?.id) {
-          const newMid = ins.id;
-          mid = newMid;
-          existingByDistrict.set(did, newMid);
-        }
-      }
-      if (mid) result[did] = mid;
     }
+
+    let mid = existingByDistrict.get(did);
+    if (!mid) {
+      const { data: ins, error } = await supabase
+        .from("meetings")
+        .insert({
+          event_date: sundayIso,
+          meeting_type: "main",
+          district_id: did,
+          name: district ? `${district.name}地区集会` : "主日集会",
+        })
+        .select("id")
+        .single();
+      if (!error && ins?.id) {
+        mid = ins.id;
+        existingByDistrict.set(did, ins.id);
+      }
+    }
+    if (mid) result[did] = mid;
   }
   return result;
 }
 
-/** 合同モード時、地区集会の出欠を地方集会へ統合する（ plan 26 ） */
-export async function mergeDistrictAttendanceToLocality(
-  sundayIso: string,
-  localityId: string,
-  districtIdsInLocality: string[],
-  localityMeetingId: string
-): Promise<void> {
-  if (districtIdsInLocality.length === 0) return;
-  const supabase = await createClient();
-  const { data: districtMeetings } = await supabase
-    .from("meetings")
-    .select("id")
-    .eq("event_date", sundayIso)
-    .eq("meeting_type", "main")
-    .in("district_id", districtIdsInLocality);
-  const districtMeetingIds = (districtMeetings ?? []).map((r: { id: string }) => r.id).filter(Boolean);
-  if (districtMeetingIds.length === 0) return;
-  await supabase
-    .from("attendance_records")
-    .update({ meeting_id: localityMeetingId })
-    .in("meeting_id", districtMeetingIds);
-}

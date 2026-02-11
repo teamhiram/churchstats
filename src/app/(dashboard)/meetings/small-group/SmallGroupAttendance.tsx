@@ -83,7 +83,7 @@ export function SmallGroupAttendance({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<MemberRow[]>([]);
   const [sortOrder, setSortOrder] = useState<SortOption>("furigana");
-  const [group1, setGroup1] = useState<GroupOption | "">("");
+  const [group1, setGroup1] = useState<GroupOption | "">("district");
   const [group2, setGroup2] = useState<GroupOption | "">("");
   const [sectionOpen, setSectionOpen] = useState<Record<string, boolean>>({});
   const [accordionOpen, setAccordionOpen] = useState(false);
