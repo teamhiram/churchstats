@@ -424,6 +424,27 @@ export function StatisticsCharts({
     });
   }, []);
 
+  const chartData = useMemo(() => {
+    return weeklyData.map((row) => {
+      let visibleCount = 0;
+      if (colorGroupBy === "faith") {
+        if (!hiddenSeries.has("saint")) visibleCount += (row.saint as number) ?? 0;
+        if (!hiddenSeries.has("friend")) visibleCount += (row.friend as number) ?? 0;
+      } else if (colorGroupBy === "category") {
+        CATEGORY_KEYS.forEach((k) => {
+          if (!hiddenSeries.has(k)) visibleCount += (row[CATEGORY_LABELS[k]] as number) ?? 0;
+        });
+      } else if (colorGroupBy === "district") {
+        districtKeys.forEach((k) => {
+          if (!hiddenSeries.has(k)) visibleCount += (row[`district_${k}`] as number) ?? 0;
+        });
+      } else {
+        visibleCount = row.count;
+      }
+      return { ...row, visibleCount };
+    });
+  }, [weeklyData, hiddenSeries, colorGroupBy, districtKeys]);
+
   return (
     <div className="space-y-6">
       <div ref={chartRef} className="bg-white rounded-lg border border-slate-200 p-4 space-y-4">
@@ -496,7 +517,7 @@ export function StatisticsCharts({
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
             {colorGroupBy === "none" ? (
-              <BarChart data={weeklyData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+              <BarChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} domain={[0, (max: number) => Math.ceil(max * 1.15)]} />
@@ -511,11 +532,11 @@ export function StatisticsCharts({
                   )}
                 />
                 <Bar dataKey="count" fill="#0284c7" name="出席者数">
-                  <LabelList dataKey="count" position="top" fill="#475569" fontSize={12} />
+                  <LabelList dataKey="visibleCount" position="top" fill="#475569" fontSize={12} />
                 </Bar>
               </BarChart>
             ) : colorGroupBy === "faith" ? (
-              <BarChart data={weeklyData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+              <BarChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} domain={[0, (max: number) => Math.ceil(max * 1.15)]} />
@@ -534,13 +555,13 @@ export function StatisticsCharts({
                   .map((k, idx, arr) => (
                     <Bar key={k} dataKey={k} stackId="a" fill={FAITH_COLORS[k]} name={FAITH_KEYS[k]}>
                       {idx === arr.length - 1 ? (
-                        <LabelList dataKey="count" position="top" fill="#475569" fontSize={12} />
+                        <LabelList dataKey="visibleCount" position="top" fill="#475569" fontSize={12} />
                       ) : null}
                     </Bar>
                   ))}
               </BarChart>
             ) : colorGroupBy === "district" && districtKeys.length > 0 ? (
-              <BarChart data={weeklyData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+              <BarChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} domain={[0, (max: number) => Math.ceil(max * 1.15)]} />
@@ -565,14 +586,14 @@ export function StatisticsCharts({
                       name={districtId === "__none__" ? "未設定" : (districtNameMap.get(districtId) ?? districtId)}
                     >
                       {idx === arr.length - 1 ? (
-                        <LabelList dataKey="count" position="top" fill="#475569" fontSize={12} />
+                        <LabelList dataKey="visibleCount" position="top" fill="#475569" fontSize={12} />
                       ) : null}
                     </Bar>
                   ))}
               </BarChart>
             ) : colorGroupBy === "district" && districtKeys.length === 0 ? (
               // 地区別選択時、地区データがない場合は集計のみを表示
-              <BarChart data={weeklyData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+              <BarChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} domain={[0, (max: number) => Math.ceil(max * 1.15)]} />
@@ -587,11 +608,11 @@ export function StatisticsCharts({
                   )}
                 />
                 <Bar dataKey="count" fill="#0284c7" name="出席者数">
-                  <LabelList dataKey="count" position="top" fill="#475569" fontSize={12} />
+                  <LabelList dataKey="visibleCount" position="top" fill="#475569" fontSize={12} />
                 </Bar>
               </BarChart>
             ) : (
-              <BarChart data={weeklyData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+              <BarChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} domain={[0, (max: number) => Math.ceil(max * 1.15)]} />
@@ -616,7 +637,7 @@ export function StatisticsCharts({
                       name={CATEGORY_LABELS[k]}
                     >
                       {idx === arr.length - 1 ? (
-                        <LabelList dataKey="count" position="top" fill="#475569" fontSize={12} />
+                        <LabelList dataKey="visibleCount" position="top" fill="#475569" fontSize={12} />
                       ) : null}
                     </Bar>
                   ))}
