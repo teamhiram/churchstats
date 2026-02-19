@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useCallback, useMemo, useState } from "react";
+import { useRef, useCallback, useMemo, useState, useEffect } from "react";
 import { toPng } from "html-to-image";
 import {
   BarChart,
@@ -10,7 +10,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
   LabelList,
 } from "recharts";
 import { format, subWeeks, startOfWeek, endOfWeek } from "date-fns";
@@ -169,6 +168,8 @@ export function StatisticsCharts({
   const [includeGuests, setIncludeGuests] = useState(false);
   const localOnly = !includeGuests;
   const [colorGroupBy, setColorGroupBy] = useState<ColorGroupBy>("faith");
+  const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
+  useEffect(() => { setHiddenSeries(new Set()); }, [colorGroupBy]);
 
   const meetingIdToDistrictId = useMemo(() => {
     const map = new Map<string, string>();
@@ -390,6 +391,39 @@ export function StatisticsCharts({
     return base;
   }, [attendance, mainMeetings, localMemberIds, localOnly, memberIsBaptized, memberIdToName, meetingIdToDistrictId, meetingIdToDate]);
 
+  const legendItems = useMemo(() => {
+    if (colorGroupBy === "faith") {
+      return [
+        { key: "saint", label: FAITH_KEYS.saint, color: FAITH_COLORS.saint },
+        { key: "friend", label: FAITH_KEYS.friend, color: FAITH_COLORS.friend },
+      ];
+    }
+    if (colorGroupBy === "category") {
+      return CATEGORY_KEYS.map((k) => ({
+        key: k,
+        label: CATEGORY_LABELS[k],
+        color: CATEGORY_COLORS[k],
+      }));
+    }
+    if (colorGroupBy === "district" && districtKeys.length > 0) {
+      return districtKeys.map((k) => ({
+        key: k,
+        label: k === "__none__" ? "未設定" : (districtNameMap.get(k) ?? k),
+        color: districtColors.get(k) ?? "#94a3b8",
+      }));
+    }
+    return [];
+  }, [colorGroupBy, districtKeys, districtNameMap, districtColors]);
+
+  const toggleSeries = useCallback((key: string) => {
+    setHiddenSeries((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
   return (
     <div className="space-y-6">
       <div ref={chartRef} className="bg-white rounded-lg border border-slate-200 p-4 space-y-4">
@@ -433,13 +467,39 @@ export function StatisticsCharts({
           />
         </div>
 
+        {legendItems.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {legendItems.map((item) => {
+              const hidden = hiddenSeries.has(item.key);
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => toggleSeries(item.key)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border transition-all duration-150 ${
+                    hidden
+                      ? "bg-slate-50 text-slate-400 border-slate-200"
+                      : "bg-white text-slate-700 border-slate-300 shadow-sm"
+                  }`}
+                >
+                  <span
+                    className="inline-block w-3 h-3 rounded-sm shrink-0"
+                    style={{ backgroundColor: hidden ? "#cbd5e1" : item.color }}
+                  />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
             {colorGroupBy === "none" ? (
               <BarChart data={weeklyData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} domain={[0, (max: number) => Math.ceil(max * 1.15)]} />
                 <Tooltip
                   content={(props) => (
                     <WeeklyBarTooltip
@@ -458,7 +518,7 @@ export function StatisticsCharts({
               <BarChart data={weeklyData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} domain={[0, (max: number) => Math.ceil(max * 1.15)]} />
                 <Tooltip
                   content={(props) => (
                     <WeeklyBarTooltip
@@ -469,17 +529,21 @@ export function StatisticsCharts({
                     />
                   )}
                 />
-                <Legend />
-                <Bar dataKey="saint" stackId="a" fill={FAITH_COLORS.saint} name={FAITH_KEYS.saint} />
-                <Bar dataKey="friend" stackId="a" fill={FAITH_COLORS.friend} name={FAITH_KEYS.friend}>
-                  <LabelList dataKey="count" position="top" fill="#475569" fontSize={12} />
-                </Bar>
+                {(["saint", "friend"] as const)
+                  .filter((k) => !hiddenSeries.has(k))
+                  .map((k, idx, arr) => (
+                    <Bar key={k} dataKey={k} stackId="a" fill={FAITH_COLORS[k]} name={FAITH_KEYS[k]}>
+                      {idx === arr.length - 1 ? (
+                        <LabelList dataKey="count" position="top" fill="#475569" fontSize={12} />
+                      ) : null}
+                    </Bar>
+                  ))}
               </BarChart>
             ) : colorGroupBy === "district" && districtKeys.length > 0 ? (
               <BarChart data={weeklyData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} domain={[0, (max: number) => Math.ceil(max * 1.15)]} />
                 <Tooltip
                   content={(props) => (
                     <WeeklyBarTooltip
@@ -490,27 +554,28 @@ export function StatisticsCharts({
                     />
                   )}
                 />
-                <Legend />
-                {districtKeys.map((districtId, idx) => (
-                  <Bar
-                    key={districtId}
-                    dataKey={`district_${districtId}`}
-                    stackId="a"
-                    fill={districtColors.get(districtId) ?? "#94a3b8"}
-                    name={districtId === "__none__" ? "未設定" : (districtNameMap.get(districtId) ?? districtId)}
-                  >
-                    {idx === districtKeys.length - 1 ? (
-                      <LabelList dataKey="count" position="top" fill="#475569" fontSize={12} />
-                    ) : null}
-                  </Bar>
-                ))}
+                {districtKeys
+                  .filter((k) => !hiddenSeries.has(k))
+                  .map((districtId, idx, arr) => (
+                    <Bar
+                      key={districtId}
+                      dataKey={`district_${districtId}`}
+                      stackId="a"
+                      fill={districtColors.get(districtId) ?? "#94a3b8"}
+                      name={districtId === "__none__" ? "未設定" : (districtNameMap.get(districtId) ?? districtId)}
+                    >
+                      {idx === arr.length - 1 ? (
+                        <LabelList dataKey="count" position="top" fill="#475569" fontSize={12} />
+                      ) : null}
+                    </Bar>
+                  ))}
               </BarChart>
             ) : colorGroupBy === "district" && districtKeys.length === 0 ? (
               // 地区別選択時、地区データがない場合は集計のみを表示
               <BarChart data={weeklyData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} domain={[0, (max: number) => Math.ceil(max * 1.15)]} />
                 <Tooltip
                   content={(props) => (
                     <WeeklyBarTooltip
@@ -529,7 +594,7 @@ export function StatisticsCharts({
               <BarChart data={weeklyData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} domain={[0, (max: number) => Math.ceil(max * 1.15)]} />
                 <Tooltip
                   content={(props) => (
                     <WeeklyBarTooltip
@@ -540,20 +605,21 @@ export function StatisticsCharts({
                     />
                   )}
                 />
-                <Legend />
-                {CATEGORY_KEYS.map((k, idx) => (
-                  <Bar
-                    key={k}
-                    dataKey={CATEGORY_LABELS[k]}
-                    stackId="a"
-                    fill={CATEGORY_COLORS[k]}
-                    name={CATEGORY_LABELS[k]}
-                  >
-                    {idx === CATEGORY_KEYS.length - 1 ? (
-                      <LabelList dataKey="count" position="top" fill="#475569" fontSize={12} />
-                    ) : null}
-                  </Bar>
-                ))}
+                {CATEGORY_KEYS
+                  .filter((k) => !hiddenSeries.has(k))
+                  .map((k, idx, arr) => (
+                    <Bar
+                      key={k}
+                      dataKey={CATEGORY_LABELS[k]}
+                      stackId="a"
+                      fill={CATEGORY_COLORS[k]}
+                      name={CATEGORY_LABELS[k]}
+                    >
+                      {idx === arr.length - 1 ? (
+                        <LabelList dataKey="count" position="top" fill="#475569" fontSize={12} />
+                      ) : null}
+                    </Bar>
+                  ))}
               </BarChart>
             )}
           </ResponsiveContainer>
