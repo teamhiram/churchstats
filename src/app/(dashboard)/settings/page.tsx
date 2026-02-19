@@ -13,7 +13,6 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-xl font-bold text-slate-800">システム設定</h1>
       <DisplaySettingsSection />
       {canManageUsers && (
         <section>

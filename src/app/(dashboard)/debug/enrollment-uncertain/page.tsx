@@ -48,7 +48,6 @@ export default async function DebugEnrollmentUncertainPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-slate-800">デバッグ: 在籍期間不確定リスト</h1>
       <p className="text-sm text-slate-600">
         期間1の転入がNULL、または期間不確定フラグONのメンバーを表示します。編集リンクから期間を編集できます。
       </p>

@@ -12,12 +12,12 @@ const ROW_LABELS = {
   dispatch: "派",
 } as const;
 
-/** 各行の色（トグル・スクエアで共通） */
-const ROW_COLORS: Record<RowKey, { toggle: string; square: string; label: string }> = {
-  prayer: { toggle: "bg-primary-600", square: "bg-primary-500", label: "緑" },
-  main: { toggle: "bg-blue-600", square: "bg-blue-500", label: "青" },
-  group: { toggle: "bg-amber-600", square: "bg-amber-500", label: "黄" },
-  dispatch: { toggle: "bg-violet-600", square: "bg-violet-500", label: "紫" },
+/** 各行の色（トグル・スクエア・ボーダーで共通） */
+const ROW_COLORS: Record<RowKey, { toggle: string; square: string; border: string; label: string }> = {
+  prayer: { toggle: "bg-primary-600", square: "bg-primary-500", border: "border-primary-500", label: "緑" },
+  main: { toggle: "bg-blue-600", square: "bg-blue-500", border: "border-blue-500", label: "青" },
+  group: { toggle: "bg-amber-600", square: "bg-amber-500", border: "border-amber-500", label: "黄" },
+  dispatch: { toggle: "bg-violet-600", square: "bg-violet-500", border: "border-violet-500", label: "紫" },
 };
 
 type RowKey = keyof typeof ROW_LABELS;
@@ -56,6 +56,17 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear }: Pro
   const [squareSize, setSquareSize] = useState(DEFAULT_SIZE);
   const [sortBy, setSortBy] = useState<SortOption>("furigana");
   const [groupBy, setGroupBy] = useState<GroupOption>("district");
+  /** 閉じている地区の key（デフォルトは全開） */
+  const [closedGroupKeys, setClosedGroupKeys] = useState<Set<string>>(new Set());
+
+  const toggleGroup = (key: string) => {
+    setClosedGroupKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const visibleRows = useMemo((): RowKey[] => {
     const arr: RowKey[] = [];
@@ -253,6 +264,7 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear }: Pro
                         {effectiveData.weeks.map((week) => {
                           const attended = member[row][week.weekStart] === true;
                           const colorClass = attended ? ROW_COLORS[row].square : "bg-slate-200";
+                          const borderClass = attended ? ROW_COLORS[row].border : "border-slate-200";
                           return (
                             <td
                               key={week.weekStart}
@@ -260,7 +272,7 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear }: Pro
                               title={`${week.weekNumber}週目: ${attended ? "出席" : "欠席"}`}
                             >
                               <div
-                                className={`rounded-sm border border-slate-200 ${colorClass}`}
+                                className={`rounded-sm border ${borderClass} ${colorClass}`}
                                 style={squareStyle}
                               />
                             </td>
@@ -276,13 +288,27 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear }: Pro
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-        <span>■ 出席:</span>
-        <span className="text-primary-600">祈り（緑）</span>
-        <span className="text-blue-600">主日（青）</span>
-        <span className="text-amber-600">小組（黄）</span>
-        <span className="text-violet-600">派遣（紫）</span>
-        <span>· □ 欠席（グレー）</span>
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-primary-500" aria-hidden />
+          祈り
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-blue-500" aria-hidden />
+          主日
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-amber-500" aria-hidden />
+          小組
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-violet-500" aria-hidden />
+          派遣
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-slate-200" aria-hidden />
+          欠席
+        </span>
       </div>
     </section>
   );

@@ -14,7 +14,7 @@ const baseLinks: { href?: string; label: string; type?: "dropdown"; children?: {
   { href: "/settings/organization", label: "枠組設定" },
   { href: "/settings", label: "システム設定" },
   { href: "/settings/account", label: "アカウント詳細" },
-  { type: "dropdown", label: "デバッグ", children: [{ href: "/debug/tables", label: "全テーブル" }, { href: "/meetings/list/duplicates", label: "重複出席" }] },
+  { type: "dropdown", label: "デバッグ", children: [{ href: "/debug/numbers", label: "各種数値" }, { href: "/debug/tables", label: "全テーブル" }, { href: "/meetings/list/duplicates", label: "重複出席" }] },
 ];
 
 /** モバイルフッター用: 速報｜週別｜出欠｜名簿｜設定（設定はサブメニュー） */
@@ -31,7 +31,7 @@ const settingsSubItems = [
   { href: "/settings/account", label: "アカウント詳細" },
 ] as const;
 
-const debugSubItems = [{ href: "/debug/tables", label: "全テーブル" }, { href: "/meetings/list/duplicates", label: "重複出席" }] as const;
+const debugSubItems = [{ href: "/debug/numbers", label: "各種数値" }, { href: "/debug/tables", label: "全テーブル" }, { href: "/meetings/list/duplicates", label: "重複出席" }] as const;
 
 type NavProps = {
   displayName?: string | null;
@@ -139,6 +139,14 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
 
   return (
     <>
+      {/* モバイル: 薄い固定ヘッダー（アプリ名＋バージョンバッジ） */}
+      <header className="md:hidden fixed top-0 left-0 right-0 z-40 h-8 bg-slate-800 flex items-center justify-center px-3">
+        <span className="text-white text-sm font-medium">召会生活統計システム</span>
+        <span className="ml-1.5 inline-flex items-baseline">
+          <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.12</span>
+        </span>
+      </header>
+
       {/* PC: トップ固定ナビゲーション */}
       <header className="hidden md:block fixed top-0 left-0 right-0 z-40 h-12 bg-white border-b border-slate-200">
         <div className={`h-full flex items-center justify-between px-4 ${contentWidthClass(fullWidth)}`}>
@@ -209,8 +217,8 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
       </header>
 
       {/* モバイル: 固定フッター + 5ボタン */}
-      <footer className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 pb-[env(safe-area-inset-bottom)]">
-        <nav className={`flex h-8 items-stretch ${contentWidthClass(fullWidth)}`} aria-label="メインメニュー">
+      <footer className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-800 pb-[env(safe-area-inset-bottom)]">
+        <nav className={`flex h-[1.875rem] items-stretch ${contentWidthClass(fullWidth)}`} aria-label="メインメニュー">
           {footerMainItems.map(({ href, label }) => {
             const isActive =
               (href === "/dashboard" && pathname === "/dashboard") ||
@@ -222,7 +230,7 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
                 key={href}
                 href={href}
                 className={`flex-1 h-full flex items-center justify-center text-sm font-medium min-h-0 ${
-                  isActive ? "text-primary-600 bg-primary-50" : "text-slate-600 active:bg-slate-100"
+                  isActive ? "text-white bg-primary-600" : "text-slate-300 active:bg-slate-700"
                 }`}
               >
                 {label}
@@ -234,7 +242,7 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
               type="button"
               onClick={() => setSettingsSubOpen((o) => !o)}
               className={`w-full h-full flex items-center justify-center text-sm font-medium min-h-0 ${
-                isSettingsPath(pathname) ? "text-primary-600 bg-primary-50" : "text-slate-600 active:bg-slate-100"
+                isSettingsPath(pathname) ? "text-white bg-primary-600" : "text-slate-300 active:bg-slate-700"
               }`}
               aria-expanded={settingsSubOpen}
               aria-haspopup="true"
@@ -244,7 +252,7 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
             </button>
             {settingsSubOpen && (
               <div
-                className="absolute bottom-full right-4 left-auto mb-1 w-40 rounded-lg border border-slate-200 bg-white py-1 shadow-lg z-50"
+                className="absolute bottom-full right-4 left-auto mb-1 w-40 rounded-lg border border-slate-600 bg-slate-700 py-1 shadow-lg z-50"
                 role="menu"
               >
                 {settingsSubItems.map(({ href, label }) => {
@@ -258,7 +266,7 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
                       href={href}
                       onClick={() => setSettingsSubOpen(false)}
                       className={`block px-3 py-2.5 text-sm touch-target ${
-                        isActive ? "bg-primary-50 text-primary-700 font-medium" : "text-slate-700 hover:bg-slate-50"
+                        isActive ? "bg-primary-600 text-white font-medium" : "text-slate-200 hover:bg-slate-600"
                       }`}
                       role="menuitem"
                     >
@@ -270,7 +278,7 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
             )}
           </div>
           {showDebug && (
-            <div className="relative flex-1 h-full flex border-x border-amber-300 bg-amber-50/40" ref={debugRefMobile}>
+            <div className="relative flex-1 h-full flex border-x border-amber-500/30" ref={debugRefMobile}>
               <button
                 type="button"
                 onClick={() => {
@@ -278,7 +286,7 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
                   setDebugSubOpen((o) => !o);
                 }}
                 className={`w-full h-full flex items-center justify-center text-sm font-medium min-h-0 ${
-                  pathname.startsWith("/debug") || pathname.startsWith("/meetings/list/duplicates") ? "text-primary-600 bg-primary-50" : "text-amber-800/90 active:bg-amber-100/60"
+                  pathname.startsWith("/debug") || pathname.startsWith("/meetings/list/duplicates") ? "text-white bg-primary-600" : "text-amber-400 active:bg-slate-700"
                 }`}
                 aria-expanded={debugSubOpen}
                 aria-haspopup="true"
@@ -288,7 +296,7 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
               </button>
               {debugSubOpen && (
                 <div
-                  className="absolute bottom-full right-0 left-auto mb-1 w-36 rounded-lg border border-amber-200 bg-amber-50/95 py-1 shadow-lg z-50"
+                  className="absolute bottom-full right-0 left-auto mb-1 w-36 rounded-lg border border-amber-500/30 bg-slate-700 py-1 shadow-lg z-50"
                   role="menu"
                 >
                   {debugSubItems.map(({ href, label }) => {
@@ -299,7 +307,7 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
                         href={href}
                         onClick={() => setDebugSubOpen(false)}
                         className={`block px-3 py-2.5 text-sm touch-target ${
-                          isActive ? "bg-primary-50 text-primary-700 font-medium" : "text-slate-700 hover:bg-slate-50"
+                          isActive ? "bg-primary-600 text-white font-medium" : "text-slate-200 hover:bg-slate-600"
                         }`}
                         role="menuitem"
                       >

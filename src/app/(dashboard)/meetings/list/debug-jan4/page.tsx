@@ -22,7 +22,6 @@ export default async function DebugJan4Page({
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        <h1 className="text-xl font-bold text-slate-800">デバッグ: 主日出席者（ローカル／非ローカル）</h1>
         <p className="text-sm text-slate-600">
           対象日: <span className="font-mono">{data.date}</span>
           {params.date && (

@@ -72,9 +72,6 @@ export function MembersPageClient({ initialData, searchParams }: Props) {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <h1 className="text-xl font-bold text-slate-800">名簿管理</h1>
-      </div>
       {unassigned.length > 0 && !showUnassignedOnly && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-2">
           <h2 className="font-semibold text-amber-800 mb-2">無所属リスト（{unassigned.length}名）</h2>

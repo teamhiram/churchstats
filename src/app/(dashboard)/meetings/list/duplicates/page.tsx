@@ -21,7 +21,6 @@ export default async function DuplicatesPage({
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold text-slate-800">主日出席の重複登録</h1>
         <p className="text-sm text-slate-600 mt-1">
           同じ週に同一人物が複数の主日で出席登録されているレコードです。不要な方を削除してください。
         </p>

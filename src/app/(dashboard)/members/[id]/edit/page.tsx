@@ -79,7 +79,6 @@ export default async function EditMemberPage({
       >
         {search.filter || search.type ? "← 名簿に戻る" : "← メンバー詳細"}
       </Link>
-      <h1 className="text-xl font-bold text-slate-800">メンバーを編集</h1>
       <EditMemberForm
         memberId={id}
         returnSearchParams={search.filter || search.type ? search : undefined}

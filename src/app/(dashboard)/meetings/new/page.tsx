@@ -72,7 +72,6 @@ export default function NewMeetingPage() {
           ← 週別集計
         </Link>
       </div>
-      <h1 className="text-xl font-bold text-slate-800">集会を登録</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">日付</label>
