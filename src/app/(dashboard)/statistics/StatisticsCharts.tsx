@@ -447,7 +447,7 @@ export function StatisticsCharts({
 
   return (
     <div className="space-y-6">
-      <div ref={chartRef} className="bg-white rounded-lg border border-slate-200 p-4 space-y-4">
+      <div ref={chartRef} className="bg-white rounded-lg border border-slate-200 pt-4 pr-4 pb-4 pl-2 space-y-4">
         <div className="flex items-start justify-between gap-4">
           <h2 className="font-semibold text-slate-800">週別主日出席（過去12週間）</h2>
           {localityName && (
@@ -470,10 +470,10 @@ export function StatisticsCharts({
                   key={value}
                   type="button"
                   onClick={() => setColorGroupBy(value)}
-                  className={`px-4 py-1 text-sm font-medium touch-target border border-slate-300 -mr-px transition-all duration-100 first:rounded-l-md last:rounded-r-md ${
+                  className={`px-3 py-px text-sm font-medium touch-target -mr-px transition-colors duration-100 first:rounded-l last:rounded-r ${
                     colorGroupBy === value
-                      ? "bg-primary-600 text-white border-primary-600 shadow-none z-10"
-                      : "bg-slate-200 text-slate-600 shadow-[inset_0_1px_3px_rgba(0,0,0,0.15)] hover:bg-slate-300"
+                      ? "bg-primary-600 text-white"
+                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
                   }`}
                 >
                   {label}
@@ -646,15 +646,24 @@ export function StatisticsCharts({
           </ResponsiveContainer>
         </div>
       </div>
-      <div className="flex gap-2">
+      <div className="flex justify-end">
         <button
           type="button"
           onClick={downloadPng}
-          className="inline-flex items-center px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg touch-target"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg touch-target"
         >
+          <DownloadIcon className="h-4 w-4 shrink-0" />
           グラフをPNGでダウンロード
         </button>
       </div>
     </div>
+  );
+}
+
+function DownloadIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+    </svg>
   );
 }

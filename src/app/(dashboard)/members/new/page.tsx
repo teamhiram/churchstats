@@ -133,7 +133,6 @@ export default function NewMemberPage() {
       <Link href="/members" className="text-slate-600 hover:text-slate-800 text-sm">
         ← 名簿管理
       </Link>
-      <h1 className="text-xl font-bold text-slate-800">メンバーを追加</h1>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-0.5">氏名 *</label>

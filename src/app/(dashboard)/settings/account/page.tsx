@@ -8,7 +8,6 @@ export default async function AccountPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-slate-800">アカウント詳細</h1>
       <section className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
         <div className="text-sm text-slate-600 space-y-1">
           <p>

@@ -191,7 +191,6 @@ export default async function DebugMeetingDuplicatesPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-slate-800">デバッグ: 集会重複検知</h1>
       <p className="text-sm text-slate-600">
         同一キー（event_date / meeting_type / district_id / locality_id / group_id）の重複集会を一覧表示します。削除すると関連する出席記録も同時に削除されます。
       </p>
