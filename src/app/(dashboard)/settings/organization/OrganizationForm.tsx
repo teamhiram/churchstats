@@ -11,8 +11,10 @@ import {
   deleteGroupAction,
   updateDistrictAction,
   getDistrictRegularList,
+  getDistrictPoolList,
   getMembersByDistrict,
   getGroupRegularList,
+  getGroupPoolList,
   getMembersByGroup,
 } from "./actions";
 import { RegularListModal } from "./RegularListModal";
@@ -56,17 +58,17 @@ export function OrganizationForm({
   const showGroupModal = addFromUrl === "group";
   const [renameDistrictId, setRenameDistrictId] = useState<string | null>(null);
   const [renameGroup, setRenameGroup] = useState<Group | null>(null);
-  const [deleteConfirmGroup, setDeleteConfirmGroup] = useState<Group | null>(null);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const [showDeleteSection, setShowDeleteSection] = useState(false);
   const [listModal, setListModal] = useState<{ kind: "district" | "group"; id: string; name: string } | null>(null);
   const [expandedDistrictIds, setExpandedDistrictIds] = useState<Set<string>>(() => new Set());
   const [districtListCache, setDistrictListCache] = useState<
-    Record<string, { regularNames: string[]; nonRegularNames: string[] }>
+    Record<string, { regularNames: string[]; nonRegularNames: string[]; poolNames: string[] }>
   >({});
   const [districtListLoading, setDistrictListLoading] = useState<Set<string>>(new Set());
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(() => new Set());
   const [groupListCache, setGroupListCache] = useState<
-    Record<string, { regularNames: string[]; nonRegularNames: string[] }>
+    Record<string, { regularNames: string[]; nonRegularNames: string[]; poolNames: string[] }>
   >({});
   const [groupListLoading, setGroupListLoading] = useState<Set<string>>(new Set());
 
@@ -113,7 +115,7 @@ export function OrganizationForm({
     fetch("/api/organization-lists")
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed"))))
       .then(
-        (data: { districts: Record<string, { regularNames: string[]; nonRegularNames: string[] }>; groups: Record<string, { regularNames: string[]; nonRegularNames: string[] }> }) => {
+        (data: { districts: Record<string, { regularNames: string[]; nonRegularNames: string[]; poolNames: string[] }>; groups: Record<string, { regularNames: string[]; nonRegularNames: string[]; poolNames: string[] }> }) => {
           if (cancelled) return;
           setDistrictListCache((prev) => ({ ...prev, ...data.districts }));
           setGroupListCache((prev) => ({ ...prev, ...data.groups }));
@@ -133,23 +135,26 @@ export function OrganizationForm({
     setGroupListLoading((prev) => new Set([...prev, ...toLoad]));
     Promise.all(
       toLoad.map((gid) =>
-        Promise.all([getMembersByGroup(gid), getGroupRegularList(gid)]).then(([members, regularList]) => {
+        Promise.all([getMembersByGroup(gid), getGroupRegularList(gid), getGroupPoolList(gid)]).then(([members, regularList, poolList]) => {
           const regularIds = new Set(regularList.map((r) => r.member_id));
+          const poolIds = new Set(poolList.map((r) => r.member_id));
           const regularNames: string[] = [];
           const nonRegularNames: string[] = [];
+          const poolNames: string[] = [];
           members.forEach((m) => {
             if (regularIds.has(m.id)) regularNames.push(m.name);
+            else if (poolIds.has(m.id)) poolNames.push(m.name);
             else nonRegularNames.push(m.name);
           });
-          return { gid, regularNames, nonRegularNames };
+          return { gid, regularNames, nonRegularNames, poolNames };
         })
       )
     )
       .then((results) => {
         setGroupListCache((prev) => {
           const next = { ...prev };
-          results.forEach(({ gid, regularNames, nonRegularNames }) => {
-            next[gid] = { regularNames, nonRegularNames };
+          results.forEach(({ gid, regularNames, nonRegularNames, poolNames }) => {
+            next[gid] = { regularNames, nonRegularNames, poolNames };
           });
           return next;
         });
@@ -167,23 +172,26 @@ export function OrganizationForm({
     setDistrictListLoading((prev) => new Set([...prev, ...toLoad]));
     Promise.all(
       toLoad.map((did) =>
-        Promise.all([getMembersByDistrict(did), getDistrictRegularList(did)]).then(([members, regularList]) => {
+        Promise.all([getMembersByDistrict(did), getDistrictRegularList(did), getDistrictPoolList(did)]).then(([members, regularList, poolList]) => {
           const regularIds = new Set(regularList.map((r) => r.member_id));
+          const poolIds = new Set(poolList.map((r) => r.member_id));
           const regularNames: string[] = [];
           const nonRegularNames: string[] = [];
+          const poolNames: string[] = [];
           members.forEach((m) => {
             if (regularIds.has(m.id)) regularNames.push(m.name);
+            else if (poolIds.has(m.id)) poolNames.push(m.name);
             else nonRegularNames.push(m.name);
           });
-          return { did, regularNames, nonRegularNames };
+          return { did, regularNames, nonRegularNames, poolNames };
         })
       )
     )
       .then((results) => {
         setDistrictListCache((prev) => {
           const next = { ...prev };
-          results.forEach(({ did, regularNames, nonRegularNames }) => {
-            next[did] = { regularNames, nonRegularNames };
+          results.forEach(({ did, regularNames, nonRegularNames, poolNames }) => {
+            next[did] = { regularNames, nonRegularNames, poolNames };
           });
           return next;
         });
@@ -267,7 +275,7 @@ export function OrganizationForm({
           )}
         </div>
         <p className="text-sm text-slate-500 mb-3">
-          一覧の「リネーム」で地区名を変更できます。
+          一覧の「編集」で地区名を変更できます。
         </p>
         {districtsForLocality.map((d) => {
           const did = d.id ?? "";
@@ -277,10 +285,10 @@ export function OrganizationForm({
           return (
             <div
               key={did}
-              className="mb-4 rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden"
+              className="mb-4"
             >
-              <div className="p-3">
-                <div className="flex flex-wrap items-center gap-2 py-2 w-full">
+              <div className="px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2 w-full">
                   <button
                     type="button"
                     onClick={() =>
@@ -304,7 +312,7 @@ export function OrganizationForm({
                     onClick={() => setRenameDistrictId(did)}
                     className="text-primary-600 text-sm hover:underline touch-target bg-transparent border-0 cursor-pointer p-0 shrink-0"
                   >
-                    リネーム
+                    編集
                   </button>
                 </div>
                 {isExpanded && (
@@ -313,14 +321,18 @@ export function OrganizationForm({
                       <p className="text-slate-500">読み込み中…</p>
                     ) : (
                       <>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
                           <div>
-                            <p className="text-xs font-bold text-slate-700 mb-0.5">レギュラーメンバー</p>
+                            <p className="text-xs font-bold text-slate-700 mb-0.5">レギュラー</p>
                             <p className="text-slate-600">{cache?.regularNames?.length ? cache.regularNames.join("、") : "—"}</p>
                           </div>
                           <div>
-                            <p className="text-xs font-bold text-slate-700 mb-0.5">非レギュラーメンバー</p>
+                            <p className="text-xs font-bold text-slate-700 mb-0.5">準レギュラー</p>
                             <p className="text-slate-600">{cache?.nonRegularNames?.length ? cache.nonRegularNames.join("、") : "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-700 mb-0.5">プール</p>
+                            <p className="text-slate-600">{cache?.poolNames?.length ? cache.poolNames.join("、") : "—"}</p>
                           </div>
                         </div>
                         <button
@@ -361,15 +373,15 @@ export function OrganizationForm({
           )}
         </div>
         <p className="text-sm text-slate-500 mb-3">
-          一覧の「リネーム」で名前・所属地区を変更、「削除」で小組を削除できます（メンバーは無所属に移ります）。
+          一覧の「編集」で名前・所属地区の変更や小組の削除ができます（削除するとメンバーは無所属に移ります）。
         </p>
         {groupsByDistrict.map(({ district, groups: districtGroups }) => (
           <div
             key={district.id ?? ""}
-            className="mb-4 rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden"
+            className="mb-4"
           >
-            <div className="bg-slate-100 border-b border-slate-200 py-2 px-4">
-              <h3 className="font-semibold text-white rounded-md px-2 py-1 inline-block bg-primary-600 shadow-sm">
+            <div className="py-2 px-0">
+              <h3 className="font-semibold text-green-600">
                 {district.name ?? ""}
               </h3>
             </div>
@@ -405,22 +417,12 @@ export function OrganizationForm({
                         onClick={(e) => {
                           e.stopPropagation();
                           setRenameGroup(g);
+                          setShowDeleteSection(false);
+                          setDeleteConfirmName("");
                         }}
                         className="text-primary-600 text-sm hover:underline touch-target bg-transparent border-0 cursor-pointer p-0 shrink-0"
                       >
-                        リネーム
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteConfirmGroup(g);
-                          setDeleteConfirmName("");
-                        }}
-                        className="px-3 py-3 min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-red-600 hover:bg-red-50 rounded-lg text-sm touch-target shrink-0"
-                        title={`「${g.name ?? ""}」を削除（メンバーは無所属に移ります）`}
-                      >
-                        削除
+                        編集
                       </button>
                     </div>
                     {isExpanded && (
@@ -429,14 +431,18 @@ export function OrganizationForm({
                           <p className="text-slate-500">読み込み中…</p>
                         ) : (
                           <>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
                               <div>
-                                <p className="text-xs font-bold text-slate-700 mb-0.5">レギュラーメンバー</p>
+                                <p className="text-xs font-bold text-slate-700 mb-0.5">レギュラー</p>
                                 <p className="text-slate-600">{cache?.regularNames?.length ? cache.regularNames.join("、") : "—"}</p>
                               </div>
                               <div>
-                                <p className="text-xs font-bold text-slate-700 mb-0.5">非レギュラーメンバー</p>
+                                <p className="text-xs font-bold text-slate-700 mb-0.5">準レギュラー</p>
                                 <p className="text-slate-600">{cache?.nonRegularNames?.length ? cache.nonRegularNames.join("、") : "—"}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-slate-700 mb-0.5">プール</p>
+                                <p className="text-slate-600">{cache?.poolNames?.length ? cache.poolNames.join("、") : "—"}</p>
                               </div>
                             </div>
                             <button
@@ -578,7 +584,7 @@ export function OrganizationForm({
         </div>
       )}
 
-      {/* 地区リネームモーダル */}
+      {/* 地区編集モーダル */}
       {showRenameDistrictModal && renameDistrict && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
@@ -629,12 +635,14 @@ export function OrganizationForm({
         </div>
       )}
 
-      {/* 小組リネームモーダル */}
+      {/* 小組編集モーダル */}
       {showRenameGroupModal && renameGroupData && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
           onClick={() => {
             setRenameGroup(null);
+            setShowDeleteSection(false);
+            setDeleteConfirmName("");
             if (editIdFromUrl) router.replace("/settings/organization");
           }}
           role="dialog"
@@ -644,7 +652,7 @@ export function OrganizationForm({
             className="bg-white rounded-lg shadow-lg max-w-sm w-full p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="font-semibold text-slate-800 mb-4">小組名・所属地区を変更</h3>
+            <h3 className="font-semibold text-slate-800 mb-4">小組を編集</h3>
             <form action={saveEditGroupAction} className="space-y-4">
               <input type="hidden" name="groupId" value={renameGroupData.id ?? ""} />
               {errorFromUrl && editIdFromUrl === String(renameGroupData.id ?? "") && (
@@ -680,6 +688,8 @@ export function OrganizationForm({
                   type="button"
                   onClick={() => {
                     setRenameGroup(null);
+                    setShowDeleteSection(false);
+                    setDeleteConfirmName("");
                     if (editIdFromUrl) router.replace("/settings/organization");
                   }}
                   className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm"
@@ -691,63 +701,63 @@ export function OrganizationForm({
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
 
-      {/* 小組削除確認モーダル */}
-      {deleteConfirmGroup && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-          onClick={() => setDeleteConfirmGroup(null)}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="delete-group-title"
-        >
-          <div
-            className="bg-white rounded-lg shadow-lg max-w-sm w-full p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 id="delete-group-title" className="font-semibold text-slate-800 mb-3">小組を削除</h3>
-            <p className="text-sm text-slate-700 mb-4">
-              本当に削除しますか？メンバーが無所属になります。
-              <br />
-              削除する場合は、枠内に小組の名前を入力した上で削除ボタンを押してください。
-            </p>
-            <form action={deleteGroupAction} className="space-y-4">
-              <input type="hidden" name="groupId" value={deleteConfirmGroup.id ?? ""} />
-              <div>
-                <label htmlFor="delete-confirm-name" className="block text-sm font-medium text-slate-700 mb-1">
-                  小組の名前（確認用）
-                </label>
-                <input
-                  id="delete-confirm-name"
-                  type="text"
-                  name="confirmName"
-                  value={deleteConfirmName}
-                  onChange={(e) => setDeleteConfirmName(e.target.value)}
-                  placeholder={deleteConfirmGroup.name ?? ""}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target text-sm"
-                  autoComplete="off"
-                />
-              </div>
-              <div className="flex gap-2 justify-end">
+            <div className="border-t border-slate-200 mt-5 pt-4">
+              {!showDeleteSection ? (
                 <button
                   type="button"
-                  onClick={() => setDeleteConfirmGroup(null)}
-                  className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm"
+                  onClick={() => setShowDeleteSection(true)}
+                  className="text-red-600 text-sm hover:underline bg-transparent border-0 cursor-pointer p-0"
                 >
-                  キャンセル
+                  この小組を削除
                 </button>
-                <button
-                  type="submit"
-                  disabled={(deleteConfirmName.trim()) !== (deleteConfirmGroup.name ?? "").trim()}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  削除
-                </button>
-              </div>
-            </form>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-slate-700">
+                    本当に削除しますか？メンバーが無所属になります。
+                    <br />
+                    削除する場合は、枠内に小組の名前を入力した上で削除ボタンを押してください。
+                  </p>
+                  <form action={deleteGroupAction} className="space-y-3">
+                    <input type="hidden" name="groupId" value={renameGroupData.id ?? ""} />
+                    <div>
+                      <label htmlFor="delete-confirm-name" className="block text-sm font-medium text-slate-700 mb-1">
+                        小組の名前（確認用）
+                      </label>
+                      <input
+                        id="delete-confirm-name"
+                        type="text"
+                        name="confirmName"
+                        value={deleteConfirmName}
+                        onChange={(e) => setDeleteConfirmName(e.target.value)}
+                        placeholder={renameGroupData.name ?? ""}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target text-sm"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowDeleteSection(false);
+                          setDeleteConfirmName("");
+                        }}
+                        className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm"
+                      >
+                        やめる
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={(deleteConfirmName.trim()) !== (renameGroupData.name ?? "").trim()}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        削除
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -763,6 +773,12 @@ export function OrganizationForm({
             setListModal(null);
             if (was.kind === "group" && was.id) {
               setGroupListCache((prev) => {
+                const next = { ...prev };
+                delete next[was.id];
+                return next;
+              });
+            } else if (was.kind === "district" && was.id) {
+              setDistrictListCache((prev) => {
                 const next = { ...prev };
                 delete next[was.id];
                 return next;

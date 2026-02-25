@@ -75,7 +75,7 @@ function DebugDropdownPc({
   if (rect === null) return null;
   return (
     <div
-      className="fixed w-40 rounded-b-lg border border-t-0 border-amber-200 bg-amber-50/95 py-1 shadow-lg z-[100]"
+      className="fixed w-40 rounded-b-lg border border-t-0 border-amber-500/30 bg-slate-700 py-1 shadow-lg z-[100]"
       style={{ top: rect.top, left: rect.left }}
       role="menu"
     >
@@ -87,7 +87,7 @@ function DebugDropdownPc({
             href={href}
             onClick={onClose}
             className={`block px-4 py-2 text-sm touch-target ${
-              childActive ? "bg-primary-50 text-primary-700 font-medium" : "text-slate-700 hover:bg-slate-50"
+              childActive ? "bg-primary-600 text-white font-medium" : "text-slate-200 hover:bg-slate-600"
             }`}
             role="menuitem"
           >
@@ -141,21 +141,25 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
     <>
       {/* モバイル: 薄い固定ヘッダー（アプリ名＋バージョンバッジ） */}
       <header className="md:hidden fixed top-0 left-0 right-0 z-40 h-8 bg-slate-800 flex items-center justify-center px-3">
-        <span className="text-white text-sm font-medium">召会生活統計システム</span>
+        <span className="text-white text-sm font-medium">召会生活統計</span>
         <span className="ml-1.5 inline-flex items-baseline">
-          <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.13</span>
+          <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.14</span>
         </span>
       </header>
 
       {/* PC: トップ固定ナビゲーション */}
-      <header className="hidden md:block fixed top-0 left-0 right-0 z-40 h-12 bg-white border-b border-slate-200">
+      <header className="hidden md:block fixed top-0 left-0 right-0 z-40 h-12 bg-slate-800">
         <div className={`h-full flex items-center justify-between px-4 ${contentWidthClass(fullWidth)}`}>
+          <div className="flex items-center h-full shrink-0 mr-2">
+            <span className="text-white text-sm font-semibold whitespace-nowrap">召会生活統計</span>
+            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.14</span>
+          </div>
           <nav className="flex h-full overflow-x-auto">
             {links.map((item) => {
               if (item.type === "dropdown" && item.children) {
                 const isActive = item.children.some((c) => pathname.startsWith(c.href));
                 return (
-                  <div key={item.label} className="relative h-full flex items-stretch border-x-2 border-amber-300 bg-amber-50/40" ref={debugRef}>
+                  <div key={item.label} className="relative h-full flex items-stretch border-x border-amber-500/30" ref={debugRef}>
                     <button
                       type="button"
                       onClick={() => {
@@ -163,7 +167,7 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
                         setDebugSubOpen((o) => !o);
                       }}
                       className={`flex items-center h-full px-4 text-sm font-medium whitespace-nowrap touch-target ${
-                        isActive ? "bg-primary-600 text-white" : "text-amber-800/90 hover:bg-amber-100/60"
+                        isActive ? "bg-primary-600 text-white" : "text-amber-400 hover:bg-slate-700"
                       }`}
                       aria-expanded={debugSubOpen}
                       aria-haspopup="true"
@@ -201,11 +205,11 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
                 (href === "/settings/organization" && pathname.startsWith("/settings/organization")) ||
                 (href === "/settings/account" && pathname.startsWith("/settings/account"));
               return (
-                <Link
+                  <Link
                   key={href}
                   href={href}
                   className={`flex items-center h-full px-4 text-sm font-medium whitespace-nowrap touch-target ${
-                    isActive ? "bg-primary-600 text-white" : "text-slate-600 hover:bg-slate-100"
+                    isActive ? "bg-primary-600 text-white" : "text-slate-300 hover:bg-slate-700"
                   }`}
                 >
                   {label}

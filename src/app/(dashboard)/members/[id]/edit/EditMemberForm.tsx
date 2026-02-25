@@ -67,7 +67,7 @@ type Props = {
     is_baptized: boolean;
     local_member_join_date: string | null;
     local_member_leave_date: string | null;
-    enrollment_periods?: { period_no: number; join_date: string | null; leave_date: string | null; is_uncertain: boolean }[];
+    enrollment_periods?: { period_no: number; join_date: string | null; leave_date: string | null; is_uncertain: boolean; memo: string | null }[];
   };
   districts: { id: string; name: string }[];
   groups: { id: string; name: string; district_id: string }[];
@@ -97,6 +97,7 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
           join_date: p.join_date ?? "",
           leave_date: p.leave_date ?? "",
           is_uncertain: p.is_uncertain,
+          memo: p.memo ?? "",
         }))
         .sort((a, b) => a.period_no - b.period_no)
     : [
@@ -105,6 +106,7 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
           join_date: initial.local_member_join_date ?? "",
           leave_date: initial.local_member_leave_date ?? "",
           is_uncertain: false,
+          memo: "",
         },
       ];
   const [periods, setPeriods] = useState(initialPeriods);
@@ -143,6 +145,7 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
               join_date: p.join_date?.trim() || null,
               leave_date: p.leave_date?.trim() || null,
               is_uncertain: p.is_uncertain,
+              memo: p.memo?.trim() || null,
             }))
           : undefined,
       },
@@ -374,6 +377,7 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
                     join_date: "",
                     leave_date: "",
                     is_uncertain: false,
+                    memo: "",
                   },
                 ])
               }
@@ -419,6 +423,18 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
                     className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
                   />
                 </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-0.5">メモ</label>
+                <input
+                  type="text"
+                  value={p.memo}
+                  onChange={(e) =>
+                    setPeriods((prev) => prev.map((x, j) => (j === i ? { ...x, memo: e.target.value } : x)))
+                  }
+                  placeholder="転入・転出の補足など"
+                  className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
+                />
               </div>
               <label className="flex items-center gap-2 text-sm">
                 <span className="text-slate-600">期間不確定</span>

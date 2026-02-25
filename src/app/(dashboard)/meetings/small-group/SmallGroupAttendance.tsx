@@ -94,6 +94,11 @@ export function SmallGroupAttendance({
   const [excludedMemberIds, setExcludedMemberIds] = useState<Set<string>>(new Set());
   const [excludedForDeletion, setExcludedForDeletion] = useState<Map<string, string>>(new Map());
   const [regularListExcludePopup, setRegularListExcludePopup] = useState<{ memberId: string; member: MemberRow; groupId: string } | null>(null);
+  const [showSemiToggle, setShowSemiToggle] = useState(false);
+  const [showPoolToggle, setShowPoolToggle] = useState(false);
+  const [memberTierMap, setMemberTierMap] = useState<Map<string, "regular" | "semi" | "pool">>(new Map());
+  const [guestIds, setGuestIds] = useState<Set<string>>(new Set());
+  const [showDeleteRecordConfirm, setShowDeleteRecordConfirm] = useState(false);
 
   const districtMap = useMemo(() => new Map(districts.map((d) => [d.id, d.name])), [districts]);
   const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
@@ -161,13 +166,48 @@ export function SmallGroupAttendance({
     [weekStartIso, groups]
   );
 
+  const buildGroupMemberTierMap = useCallback(
+    async (
+      supabaseClient: ReturnType<typeof createClient>,
+      groupIds: string[],
+      members: MemberRow[]
+    ): Promise<Map<string, "regular" | "semi" | "pool">> => {
+      if (groupIds.length === 0 || members.length === 0) return new Map();
+      const [regRes, poolRes] = await Promise.all([
+        supabaseClient.from("group_regular_list").select("group_id, member_id").in("group_id", groupIds),
+        supabaseClient.from("group_pool_list").select("group_id, member_id").in("group_id", groupIds),
+      ]);
+      const regularByGroup = new Map<string, Set<string>>();
+      const poolByGroup = new Map<string, Set<string>>();
+      ((regRes.data ?? []) as { group_id: string; member_id: string }[]).forEach((r) => {
+        if (!regularByGroup.has(r.group_id)) regularByGroup.set(r.group_id, new Set());
+        regularByGroup.get(r.group_id)!.add(r.member_id);
+      });
+      ((poolRes.data ?? []) as { group_id: string; member_id: string }[]).forEach((r) => {
+        if (!poolByGroup.has(r.group_id)) poolByGroup.set(r.group_id, new Set());
+        poolByGroup.get(r.group_id)!.add(r.member_id);
+      });
+      const map = new Map<string, "regular" | "semi" | "pool">();
+      members.forEach((m) => {
+        const gid = m.group_id ?? "";
+        if (regularByGroup.get(gid)?.has(m.id)) map.set(m.id, "regular");
+        else if (poolByGroup.get(gid)?.has(m.id)) map.set(m.id, "pool");
+        else map.set(m.id, "semi");
+      });
+      return map;
+    },
+    []
+  );
+
   useEffect(() => {
     if (!groupId || !weekStartIso) {
       setRecordId(null);
       setEventDate("");
       setRoster([]);
+      setGuestIds(new Set());
       setAttendanceMap(new Map());
       setMemos(new Map());
+      setMemberTierMap(new Map());
       return;
     }
     let cancelled = false;
@@ -181,8 +221,10 @@ export function SmallGroupAttendance({
         setRecordId(null);
         setEventDate("");
         setRoster([]);
+        setGuestIds(new Set());
         setAttendanceMap(new Map());
         setMemos(new Map());
+        setMemberTierMap(new Map());
         setLoading(false);
         return;
       }
@@ -207,8 +249,12 @@ export function SmallGroupAttendance({
         );
 
         if (recordIds.length === 0) {
+          const tierMap = await buildGroupMemberTierMap(supabase, groupIds, districtMembers);
+          if (cancelled) return;
+          setMemberTierMap(tierMap);
           setRecordId(null);
           setEventDate("");
+          setGuestIds(new Set());
           setRoster(districtMembers);
           setAttendanceMap(new Map());
           setMemos(new Map());
@@ -228,7 +274,7 @@ export function SmallGroupAttendance({
           map.set(r.member_id, { ...r, attended: r.attended });
           memoMap.set(r.member_id, r.memo ?? "");
         });
-        const districtMemberIds = new Set(districtMembers.map((m) => m.id));
+                const districtMemberIds = new Set(districtMembers.map((m) => m.id));
         const guestIds = records.map((r) => r.member_id).filter((id) => !districtMemberIds.has(id));
         let guests: MemberRow[] = [];
         if (guestIds.length > 0) {
@@ -238,8 +284,12 @@ export function SmallGroupAttendance({
             .in("id", guestIds);
           guests = (guestData ?? []) as MemberRow[];
         }
+        const tierMap = await buildGroupMemberTierMap(supabase, groupIds, districtMembers);
+        if (cancelled) return;
+        setMemberTierMap(tierMap);
         setRecordId(null);
         setEventDate("");
+        setGuestIds(new Set(guestIds));
         setRoster([...districtMembers, ...guests]);
         setAttendanceMap(map);
         setMemos(memoMap);
@@ -267,7 +317,7 @@ export function SmallGroupAttendance({
           .select("id, name, furigana, district_id, group_id, age_group, is_baptized, local_member_join_date, local_member_leave_date")
           .eq("group_id", groupId)
           .order("name")
-          .then((membersRes) => {
+          .then(async (membersRes) => {
             if (cancelled) return;
             const evDate = (existingRecord as { id: string; event_date?: string | null } | null)?.event_date ?? "";
             const refDate = evDate || weekStartIso;
@@ -275,6 +325,10 @@ export function SmallGroupAttendance({
               isInEnrollmentPeriod(m, refDate)
             );
             if (!rid) {
+              const tierMap = await buildGroupMemberTierMap(supabase, [groupId], districtMembers);
+              if (cancelled) return;
+              setMemberTierMap(tierMap);
+              setGuestIds(new Set());
               setRoster(districtMembers);
               setAttendanceMap(new Map());
               setMemos(new Map());
@@ -305,6 +359,10 @@ export function SmallGroupAttendance({
                     .in("id", guestIds);
                   guests = (guestData ?? []) as MemberRow[];
                 }
+                const tierMap = await buildGroupMemberTierMap(supabase, [groupId], districtMembers);
+                if (cancelled) return;
+                setMemberTierMap(tierMap);
+                setGuestIds(new Set(guestIds));
                 setRoster([...districtMembers, ...guests]);
                 setAttendanceMap(map);
                 setMemos(memoMap);
@@ -400,14 +458,43 @@ export function SmallGroupAttendance({
       })
     );
     setMemos((prev) => new Map(prev).set(member.id, ""));
+    setGuestIds((prev) => new Set([...prev, member.id]));
     setRoster((prev) => (prev.some((m) => m.id === member.id) ? prev : [...prev, member]));
     setSearchQuery("");
     setSearchResults([]);
   };
 
-  const displayRoster = isEditMode
-    ? roster.filter((m) => !excludedMemberIds.has(m.id))
-    : roster.filter((m) => attendanceMap.has(m.id));
+  const hasAttendanceData = useCallback(
+    (memberId: string): boolean => {
+      const rec = attendanceMap.get(memberId);
+      if (!rec) return false;
+      return rec.attended === true || ((memos.get(memberId) ?? "").trim() !== "");
+    },
+    [attendanceMap, memos]
+  );
+
+  const displayRoster = useMemo(() => {
+    const base = isEditMode
+      ? roster.filter((m) => !excludedMemberIds.has(m.id))
+      : roster.filter((m) => attendanceMap.has(m.id));
+    return base.filter((m) => {
+      const tier = memberTierMap.get(m.id);
+      if (tier === undefined) return true;
+      if (tier === "regular") return true;
+      if (tier === "semi") return showSemiToggle || hasAttendanceData(m.id);
+      if (tier === "pool") return showPoolToggle || hasAttendanceData(m.id);
+      return true;
+    });
+  }, [
+    isEditMode,
+    roster,
+    excludedMemberIds,
+    attendanceMap,
+    memberTierMap,
+    showSemiToggle,
+    showPoolToggle,
+    hasAttendanceData,
+  ]);
   const sortedMembers = useMemo(() => {
     const list = [...displayRoster];
     const collator = new Intl.Collator("ja");
@@ -530,6 +617,7 @@ export function SmallGroupAttendance({
         })
       );
       setMemos((prev) => new Map(prev).set(memberId, ""));
+      setGuestIds((prev) => new Set([...prev, member.id]));
       setRoster((prev) => (prev.some((m) => m.id === memberId) ? prev : [...prev, member]));
     }
   };
@@ -602,13 +690,23 @@ export function SmallGroupAttendance({
         <>
           <div className="sticky top-0 z-10 flex justify-end gap-2 py-2 bg-white border-b border-slate-200 -mx-4 px-4 md:-mx-6 md:px-6">
             {!isEditMode ? (
-              <button
-                type="button"
-                onClick={() => setIsEditMode(true)}
-                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 touch-target"
-              >
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteRecordConfirm(true)}
+                  disabled={loading}
+                  className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 touch-target disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  記録を削除する
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditMode(true)}
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 touch-target"
+                >
                 記録モードに切り替える
-              </button>
+                </button>
+              </>
             ) : (
               <>
                 <button
@@ -732,6 +830,25 @@ export function SmallGroupAttendance({
             </button>
             {accordionOpen && (
               <div className="border-t border-slate-200 px-4 pb-4 pt-2 space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
+                  <span className="text-sm font-medium text-slate-700">表示リスト</span>
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <Toggle
+                      checked={showSemiToggle}
+                      onChange={() => setShowSemiToggle((prev) => !prev)}
+                      disabled={loading}
+                    />
+                    <span>準レギュラー</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <Toggle
+                      checked={showPoolToggle}
+                      onChange={() => setShowPoolToggle((prev) => !prev)}
+                      disabled={loading}
+                    />
+                    <span>プール</span>
+                  </label>
+                </div>
                 {isEditMode && (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">フリー検索（名前）</label>
@@ -875,6 +992,13 @@ export function SmallGroupAttendance({
                             </td>
                           </tr>
                         )}
+                        {hasGroup1 && g1Open && section.subsections.some((s) => s.members.length > 0) && (
+                          <tr className="bg-slate-50">
+                            <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase">名前</th>
+                            <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase w-24">出欠</th>
+                            <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase">メモ</th>
+                          </tr>
+                        )}
                         {(hasGroup1 ? g1Open : true) && section.subsections.map((sub, subIdx) => {
                           const hasSubHeader = hasGroup2 && sub.group2Key;
                           const g2Key = hasSubHeader ? `g1-${section.group1Key}::g2-${sub.group2Key}` : "";
@@ -903,13 +1027,22 @@ export function SmallGroupAttendance({
                                   </td>
                                 </tr>
                               )}
+                              {hasSubHeader && g2Open && sub.members.length > 0 && (
+                                <tr className="bg-slate-50">
+                                  <th className="px-3 py-1 pl-6 text-left text-xs font-medium text-slate-500 uppercase">名前</th>
+                                  <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase w-24">出欠</th>
+                                  <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase">メモ</th>
+                                </tr>
+                              )}
                               {(!hasSubHeader || g2Open) && sub.members.map((m) => {
                     const recRow = attendanceMap.get(m.id);
                     const attended = Boolean(recRow && recRow.attended !== false);
                     const memo = memos.get(m.id) ?? "";
+                    const tier = memberTierMap.get(m.id);
+                    const rowBgClass = tier === "semi" ? "bg-amber-50 hover:bg-amber-100" : tier === "pool" ? "bg-sky-50 hover:bg-sky-100" : "hover:bg-slate-50";
                     return (
-                      <tr key={m.id} className="hover:bg-slate-50">
-                        <td className="px-3 py-1.5 text-slate-800">
+                      <tr key={m.id} className={rowBgClass}>
+                        <td className="px-3 py-0.5 text-slate-800">
                           <div className="flex items-center gap-1">
                             {isEditMode && (
                               <button
@@ -922,10 +1055,10 @@ export function SmallGroupAttendance({
                                 −
                               </button>
                             )}
-                            <span>{m.name}</span>
+                            <span className={guestIds.has(m.id) ? "text-slate-400" : ""}>{m.name}</span>
                           </div>
                         </td>
-                        <td className="px-3 py-1.5">
+                        <td className="px-3 py-0.5">
                           {isEditMode ? (
                             <Toggle
                               checked={attended}
@@ -936,7 +1069,7 @@ export function SmallGroupAttendance({
                             <span className={attended ? "text-primary-600" : "text-slate-400"}>{attended ? "○" : "×"}</span>
                           )}
                         </td>
-                        <td className="px-3 py-1.5">
+                        <td className="px-3 py-0.5">
                           {isEditMode ? (
                             <input
                               type="text"
@@ -1045,6 +1178,62 @@ export function SmallGroupAttendance({
             >
               閉じる
             </button>
+          </div>
+        </div>
+      )}
+
+      {showDeleteRecordConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-record-title"
+          onClick={() => setShowDeleteRecordConfirm(false)}
+        >
+          <div className="w-full max-w-sm bg-white rounded-lg shadow-lg p-4" onClick={(e) => e.stopPropagation()}>
+            <h2 id="delete-record-title" className="text-sm font-medium text-slate-800 mb-2">記録を削除</h2>
+            <p className="text-sm text-slate-600 mb-4">
+              本当に記録を削除しますか？削除した出欠データは復元できません。
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowDeleteRecordConfirm(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 touch-target"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setShowDeleteRecordConfirm(false);
+                  const supabase = createClient();
+                  try {
+                    if (groupId === "__all__") {
+                      const { data: records } = await supabase
+                        .from("group_meeting_records")
+                        .select("id")
+                        .eq("week_start", weekStartIso);
+                      const ids = (records ?? []).map((r: { id: string }) => r.id);
+                      if (ids.length > 0) {
+                        await supabase.from("group_meeting_attendance").delete().in("group_meeting_record_id", ids);
+                      }
+                    } else if (recordId) {
+                      await supabase.from("group_meeting_attendance").delete().eq("group_meeting_record_id", recordId);
+                    }
+                    setAttendanceMap(new Map());
+                    setMemos(new Map());
+                    setRefreshTrigger((t) => t + 1);
+                    setMessage("記録を削除しました。");
+                  } catch {
+                    setMessage("記録の削除に失敗しました。");
+                  }
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 touch-target"
+              >
+                削除する
+              </button>
+            </div>
           </div>
         </div>
       )}

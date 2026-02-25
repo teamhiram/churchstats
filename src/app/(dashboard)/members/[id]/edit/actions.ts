@@ -15,6 +15,7 @@ export type EnrollmentPeriodInput = {
   join_date: string | null;
   leave_date: string | null;
   is_uncertain: boolean;
+  memo: string | null;
 };
 
 export type UpdateMemberResult = {
@@ -94,6 +95,7 @@ export async function updateMemberAction(
       join_date: p.join_date?.trim() || null,
       leave_date: p.leave_date?.trim() || null,
       is_uncertain: p.is_uncertain,
+      memo: p.memo?.trim() || null,
     }));
     if (rows.length > 0) {
       const { error: periodsError } = await supabase.from("member_local_enrollment_periods").insert(rows);
