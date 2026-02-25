@@ -395,19 +395,23 @@ export async function getWeekDetail(
   );
 
   let mainAttendedThisWeek = new Set<string>();
+  let mainAbsentThisWeek = new Map<string, string | null>();
   let prayerAttendedThisWeek = new Set<string>();
   let groupAttendedThisWeek = new Set<string>();
   if (mainMeetingIds.size > 0) {
     const { data: mainAttData } = await supabase
       .from("attendance_records")
-      .select("meeting_id, member_id, attended")
+      .select("meeting_id, member_id, attended, memo")
       .in("meeting_id", [...mainMeetingIds]);
-    (mainAttData ?? [])
-      .filter((a: { attended?: boolean }) => a.attended !== false)
-      .forEach((a: { meeting_id: string; member_id: string }) => {
-        if (localOnly && localMemberIds && !localMemberIds.has(a.member_id)) return;
-        if (mainMeetingIds.has(a.meeting_id)) mainAttendedThisWeek.add(a.member_id);
-      });
+    (mainAttData ?? []).forEach((a: { meeting_id: string; member_id: string; attended?: boolean; memo?: string | null }) => {
+      if (localOnly && localMemberIds && !localMemberIds.has(a.member_id)) return;
+      if (!mainMeetingIds.has(a.meeting_id)) return;
+      if (a.attended === false) {
+        mainAbsentThisWeek.set(a.member_id, a.memo ?? null);
+      } else {
+        mainAttendedThisWeek.add(a.member_id);
+      }
+    });
   }
   if (prayerRecordIdsThisWeek.size > 0) {
     const { data: prayerAttData } = await supabase
@@ -438,6 +442,10 @@ export async function getWeekDetail(
     .map((id) => ({ memberId: id, name: memberMap.get(id) ?? "" }))
     .filter((m) => m.name)
     .sort(sortByFurigana);
+  const mainAbsent: { memberId: string; name: string; memo: string | null }[] = Array.from(mainAbsentThisWeek.entries())
+    .map(([id, memo]) => ({ memberId: id, name: memberMap.get(id) ?? "", memo }))
+    .filter((m) => m.name)
+    .sort(sortByFurigana);
   const prayerAttendees: { memberId: string; name: string }[] = Array.from(prayerAttendedThisWeek)
     .map((id) => ({ memberId: id, name: memberMap.get(id) ?? "" }))
     .filter((m) => m.name)
@@ -451,7 +459,7 @@ export async function getWeekDetail(
     .filter((m) => m.name)
     .sort(sortByFurigana);
 
-  return { mainAttendees, prayerAttendees, groupAttendees, dispatchNames };
+  return { mainAttendees, mainAbsent, prayerAttendees, groupAttendees, dispatchNames };
 }
 
 /** デバッグ: 主日の出席者をローカル／非ローカル別・フリガナ順で取得 */

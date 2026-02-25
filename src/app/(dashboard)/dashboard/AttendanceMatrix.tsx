@@ -227,59 +227,121 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear }: Pro
             <tbody>
               {sortedAndGroupedMembers.map((group) => (
                 <Fragment key={group.key}>
-                  {group.label && (
-                    <tr>
-                      <td
-                        colSpan={2 + effectiveData.weeks.length}
-                        className="border-b border-slate-100 py-1 pl-2 text-sm font-medium text-slate-600"
-                      >
-                        <span className="border-l-2 border-primary-500 pl-2">{group.label}</span>
-                      </td>
-                    </tr>
-                  )}
-                  {group.members.flatMap((member) =>
-                    visibleRows.map((row, rowIdx) => (
-                      <tr key={`${member.memberId}-${row}`}>
-                        {rowIdx === 0 && (
-                          <td
-                            rowSpan={visibleRows.length}
-                            className="sticky left-0 z-10 border-b border-r border-slate-100 bg-white align-top p-1"
+                  {group.label != null ? (
+                    <>
+                      <tr>
+                        <td
+                          colSpan={2 + effectiveData.weeks.length}
+                          className="border-b border-slate-100 p-0"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleGroup(group.key)}
+                            className="flex w-full items-center gap-2 py-1.5 pl-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50"
                           >
                             <span
-                              className="text-sm text-slate-800 block truncate max-w-[6rem]"
-                              title={member.name}
+                              className="inline-block shrink-0 text-slate-400 transition-transform"
+                              aria-hidden
+                              style={{ transform: closedGroupKeys.has(group.key) ? "rotate(-90deg)" : "none" }}
                             >
-                              {member.name}
+                              ▼
+                            </span>
+                            <span className="border-l-2 border-primary-500 pl-2">{group.label}</span>
+                            <span className="text-slate-400">({group.members.length}名)</span>
+                          </button>
+                        </td>
+                      </tr>
+                      {!closedGroupKeys.has(group.key) &&
+                        group.members.flatMap((member) =>
+                          visibleRows.map((row, rowIdx) => (
+                            <tr key={`${member.memberId}-${row}`}>
+                              {rowIdx === 0 && (
+                                <td
+                                  rowSpan={visibleRows.length}
+                                  className="sticky left-0 z-10 border-b border-r border-slate-100 bg-white align-top p-1"
+                                >
+                                  <span
+                                    className="text-sm text-slate-800 block truncate max-w-[6rem]"
+                                    title={member.name}
+                                  >
+                                    {member.name}
+                                  </span>
+                                </td>
+                              )}
+                              <td className="sticky left-[6rem] z-10 border-b border-r border-slate-100 bg-white p-0 align-middle">
+                                <span
+                                  className="inline-block text-xs font-medium text-slate-600"
+                                  style={{ fontSize: squareSize * 0.7, width: 24 }}
+                                >
+                                  {ROW_LABELS[row]}
+                                </span>
+                              </td>
+                              {effectiveData.weeks.map((week) => {
+                                const attended = member[row][week.weekStart] === true;
+                                const colorClass = attended ? ROW_COLORS[row].square : "bg-slate-200";
+                                const borderClass = attended ? ROW_COLORS[row].border : "border-slate-200";
+                                return (
+                                  <td
+                                    key={week.weekStart}
+                                    className="border-b border-slate-100 p-0.5"
+                                    title={`${week.weekNumber}週目: ${attended ? "出席" : "欠席"}`}
+                                  >
+                                    <div
+                                      className={`rounded-sm border ${borderClass} ${colorClass}`}
+                                      style={squareStyle}
+                                    />
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))
+                        )}
+                    </>
+                  ) : (
+                    group.members.flatMap((member) =>
+                      visibleRows.map((row, rowIdx) => (
+                        <tr key={`${member.memberId}-${row}`}>
+                          {rowIdx === 0 && (
+                            <td
+                              rowSpan={visibleRows.length}
+                              className="sticky left-0 z-10 border-b border-r border-slate-100 bg-white align-top p-1"
+                            >
+                              <span
+                                className="text-sm text-slate-800 block truncate max-w-[6rem]"
+                                title={member.name}
+                              >
+                                {member.name}
+                              </span>
+                            </td>
+                          )}
+                          <td className="sticky left-[6rem] z-10 border-b border-r border-slate-100 bg-white p-0 align-middle">
+                            <span
+                              className="inline-block text-xs font-medium text-slate-600"
+                              style={{ fontSize: squareSize * 0.7, width: 24 }}
+                            >
+                              {ROW_LABELS[row]}
                             </span>
                           </td>
-                        )}
-                        <td className="sticky left-[6rem] z-10 border-b border-r border-slate-100 bg-white p-0 align-middle">
-                          <span
-                            className="inline-block text-xs font-medium text-slate-600"
-                            style={{ fontSize: squareSize * 0.7, width: 24 }}
-                          >
-                            {ROW_LABELS[row]}
-                          </span>
-                        </td>
-                        {effectiveData.weeks.map((week) => {
-                          const attended = member[row][week.weekStart] === true;
-                          const colorClass = attended ? ROW_COLORS[row].square : "bg-slate-200";
-                          const borderClass = attended ? ROW_COLORS[row].border : "border-slate-200";
-                          return (
-                            <td
-                              key={week.weekStart}
-                              className="border-b border-slate-100 p-0.5"
-                              title={`${week.weekNumber}週目: ${attended ? "出席" : "欠席"}`}
-                            >
-                              <div
-                                className={`rounded-sm border ${borderClass} ${colorClass}`}
-                                style={squareStyle}
-                              />
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))
+                          {effectiveData.weeks.map((week) => {
+                            const attended = member[row][week.weekStart] === true;
+                            const colorClass = attended ? ROW_COLORS[row].square : "bg-slate-200";
+                            const borderClass = attended ? ROW_COLORS[row].border : "border-slate-200";
+                            return (
+                              <td
+                                key={week.weekStart}
+                                className="border-b border-slate-100 p-0.5"
+                                title={`${week.weekNumber}週目: ${attended ? "出席" : "欠席"}`}
+                              >
+                                <div
+                                  className={`rounded-sm border ${borderClass} ${colorClass}`}
+                                  style={squareStyle}
+                                />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))
+                    )
                   )}
                 </Fragment>
               ))}

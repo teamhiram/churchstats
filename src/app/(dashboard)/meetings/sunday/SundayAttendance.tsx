@@ -958,6 +958,18 @@ const { data: guestData } = await supabase
                     for (const [, recId] of excludedForDeletion) {
                       await supabase.from("attendance_records").delete().eq("id", recId);
                     }
+                    for (const m of roster) {
+                      if (!attendanceMap.has(m.id) && !excludedMemberIds.has(m.id)) {
+                        attendanceMap.set(m.id, {
+                          id: "",
+                          member_id: m.id,
+                          memo: (memos.get(m.id) ?? "").trim() || null,
+                          is_online: false,
+                          is_away: false,
+                          attended: false,
+                        });
+                      }
+                    }
                     if (isAll) {
                       const meetingIdMap = await ensureSundayMeetingsBatch(sundayIso, districts, isCombinedPerLocality);
                       for (const [, rec] of attendanceMap) {
