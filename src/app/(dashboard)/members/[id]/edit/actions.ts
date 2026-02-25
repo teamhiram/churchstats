@@ -37,6 +37,8 @@ export async function updateMemberAction(
     locality_id: string | null;
     age_group: Category | null;
     is_baptized: boolean;
+    language_main: string | null;
+    language_sub: string | null;
     local_member_join_date: string | null;
     local_member_leave_date: string | null;
     enrollment_periods?: EnrollmentPeriodInput[];
@@ -58,6 +60,8 @@ export async function updateMemberAction(
     locality_id: !data.is_local ? data.locality_id : null,
     age_group: data.age_group,
     is_baptized: data.is_baptized,
+    language_main: data.language_main?.trim() || null,
+    language_sub: data.language_sub?.trim() || null,
     local_member_join_date: (period1?.join_date ?? data.local_member_join_date) || null,
     local_member_leave_date: (period1?.leave_date ?? data.local_member_leave_date) || null,
     updated_at: now,

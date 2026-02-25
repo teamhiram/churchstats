@@ -173,15 +173,21 @@ export function SmallGroupAttendance({
       members: MemberRow[]
     ): Promise<Map<string, "regular" | "semi" | "pool">> => {
       if (groupIds.length === 0 || members.length === 0) return new Map();
-      const [regRes, poolRes] = await Promise.all([
+      const [regRes, semiRes, poolRes] = await Promise.all([
         supabaseClient.from("group_regular_list").select("group_id, member_id").in("group_id", groupIds),
+        supabaseClient.from("group_semi_regular_list").select("group_id, member_id").in("group_id", groupIds),
         supabaseClient.from("group_pool_list").select("group_id, member_id").in("group_id", groupIds),
       ]);
       const regularByGroup = new Map<string, Set<string>>();
+      const semiByGroup = new Map<string, Set<string>>();
       const poolByGroup = new Map<string, Set<string>>();
       ((regRes.data ?? []) as { group_id: string; member_id: string }[]).forEach((r) => {
         if (!regularByGroup.has(r.group_id)) regularByGroup.set(r.group_id, new Set());
         regularByGroup.get(r.group_id)!.add(r.member_id);
+      });
+      ((semiRes.data ?? []) as { group_id: string; member_id: string }[]).forEach((r) => {
+        if (!semiByGroup.has(r.group_id)) semiByGroup.set(r.group_id, new Set());
+        semiByGroup.get(r.group_id)!.add(r.member_id);
       });
       ((poolRes.data ?? []) as { group_id: string; member_id: string }[]).forEach((r) => {
         if (!poolByGroup.has(r.group_id)) poolByGroup.set(r.group_id, new Set());
@@ -191,6 +197,7 @@ export function SmallGroupAttendance({
       members.forEach((m) => {
         const gid = m.group_id ?? "";
         if (regularByGroup.get(gid)?.has(m.id)) map.set(m.id, "regular");
+        else if (semiByGroup.get(gid)?.has(m.id)) map.set(m.id, "semi");
         else if (poolByGroup.get(gid)?.has(m.id)) map.set(m.id, "pool");
         else map.set(m.id, "semi");
       });

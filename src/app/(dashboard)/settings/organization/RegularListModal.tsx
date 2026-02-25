@@ -4,14 +4,20 @@ import { useState, useEffect, useRef } from "react";
 import {
   getDistrictRegularList,
   getGroupRegularList,
+  getDistrictSemiRegularList,
+  getGroupSemiRegularList,
   getDistrictPoolList,
   getGroupPoolList,
   addDistrictRegularMember,
   removeDistrictRegularMember,
-  addGroupRegularMember,
-  removeGroupRegularMember,
+  addDistrictSemiRegularMember,
+  removeDistrictSemiRegularMember,
   addDistrictPoolMember,
   removeDistrictPoolMember,
+  addGroupRegularMember,
+  removeGroupRegularMember,
+  addGroupSemiRegularMember,
+  removeGroupSemiRegularMember,
   addGroupPoolMember,
   removeGroupPoolMember,
   getMembersByDistrict,
@@ -48,16 +54,18 @@ export function RegularListModal({ kind, id, name, onClose }: Props) {
     setMessage("");
 
     const fetchData = async () => {
-      const [members, regularList, poolList] =
+      const [members, regularList, semiList, poolList] =
         kind === "district"
-          ? await Promise.all([getMembersByDistrict(id), getDistrictRegularList(id), getDistrictPoolList(id)])
-          : await Promise.all([getMembersByGroup(id), getGroupRegularList(id), getGroupPoolList(id)]);
+          ? await Promise.all([getMembersByDistrict(id), getDistrictRegularList(id), getDistrictSemiRegularList(id), getDistrictPoolList(id)])
+          : await Promise.all([getMembersByGroup(id), getGroupRegularList(id), getGroupSemiRegularList(id), getGroupPoolList(id)]);
 
       const regularIds = new Set(regularList.map((r) => r.member_id));
+      const semiIds = new Set(semiList.map((r) => r.member_id));
       const poolIds = new Set(poolList.map((r) => r.member_id));
       const tiers = new Map<string, Tier>();
       members.forEach((m) => {
         if (regularIds.has(m.id)) tiers.set(m.id, "regular");
+        else if (semiIds.has(m.id)) tiers.set(m.id, "semi");
         else if (poolIds.has(m.id)) tiers.set(m.id, "pool");
         else tiers.set(m.id, "semi");
       });
@@ -91,6 +99,11 @@ export function RegularListModal({ kind, id, name, onClose }: Props) {
           ? await removeDistrictRegularMember(id, member.id)
           : await removeGroupRegularMember(id, member.id);
         if (err.error) throw new Error(err.error);
+      } else if (from === "semi") {
+        const err = kind === "district"
+          ? await removeDistrictSemiRegularMember(id, member.id)
+          : await removeGroupSemiRegularMember(id, member.id);
+        if (err.error) throw new Error(err.error);
       } else if (from === "pool") {
         const err = kind === "district"
           ? await removeDistrictPoolMember(id, member.id)
@@ -102,6 +115,11 @@ export function RegularListModal({ kind, id, name, onClose }: Props) {
         const err = kind === "district"
           ? await addDistrictRegularMember(id, member.id)
           : await addGroupRegularMember(id, member.id);
+        if (err.error) throw new Error(err.error);
+      } else if (to === "semi") {
+        const err = kind === "district"
+          ? await addDistrictSemiRegularMember(id, member.id)
+          : await addGroupSemiRegularMember(id, member.id);
         if (err.error) throw new Error(err.error);
       } else if (to === "pool") {
         const err = kind === "district"

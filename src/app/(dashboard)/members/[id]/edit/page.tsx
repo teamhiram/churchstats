@@ -30,25 +30,27 @@ export default async function EditMemberPage({
     memo: (p as { memo?: string | null }).memo ?? null,
   }));
 
-  let isDistrictRegular = false;
-  let isGroupRegular = false;
+  let districtTier: "regular" | "semi" | "pool" = "semi";
+  let groupTier: "regular" | "semi" | "pool" = "semi";
   if (member.district_id) {
-    const { data: dr } = await supabase
-      .from("district_regular_list")
-      .select("id")
-      .eq("district_id", member.district_id)
-      .eq("member_id", id)
-      .maybeSingle();
-    isDistrictRegular = !!dr;
+    const [dr, ds, dp] = await Promise.all([
+      supabase.from("district_regular_list").select("id").eq("district_id", member.district_id).eq("member_id", id).maybeSingle(),
+      supabase.from("district_semi_regular_list").select("id").eq("district_id", member.district_id).eq("member_id", id).maybeSingle(),
+      supabase.from("district_pool_list").select("id").eq("district_id", member.district_id).eq("member_id", id).maybeSingle(),
+    ]);
+    if (dr.data) districtTier = "regular";
+    else if (ds.data) districtTier = "semi";
+    else if (dp.data) districtTier = "pool";
   }
   if (member.group_id) {
-    const { data: gr } = await supabase
-      .from("group_regular_list")
-      .select("id")
-      .eq("group_id", member.group_id)
-      .eq("member_id", id)
-      .maybeSingle();
-    isGroupRegular = !!gr;
+    const [gr, gs, gp] = await Promise.all([
+      supabase.from("group_regular_list").select("id").eq("group_id", member.group_id).eq("member_id", id).maybeSingle(),
+      supabase.from("group_semi_regular_list").select("id").eq("group_id", member.group_id).eq("member_id", id).maybeSingle(),
+      supabase.from("group_pool_list").select("id").eq("group_id", member.group_id).eq("member_id", id).maybeSingle(),
+    ]);
+    if (gr.data) groupTier = "regular";
+    else if (gs.data) groupTier = "semi";
+    else if (gp.data) groupTier = "pool";
   }
 
   const LOCALITY_NAMES = [
@@ -72,6 +74,12 @@ export default async function EditMemberPage({
     return `/members${q}`;
   })();
 
+  const ALLOWED_LANGUAGES = new Set(["Japanese", "English", "Chinese", "Spanish", "French"]);
+  const rawMain = (member as { language_main?: string | null }).language_main;
+  const rawSub = (member as { language_sub?: string | null }).language_sub;
+  const language_main = rawMain && ALLOWED_LANGUAGES.has(rawMain) ? rawMain : "";
+  const language_sub = rawSub && ALLOWED_LANGUAGES.has(rawSub) ? rawSub : "";
+
   return (
     <div className="space-y-3 max-w-lg">
       <Link
@@ -91,11 +99,13 @@ export default async function EditMemberPage({
           is_local: Boolean(member.is_local),
           district_id: String(member.district_id ?? ""),
           group_id: member.group_id ?? null,
-          is_district_regular: isDistrictRegular,
-          is_group_regular: isGroupRegular,
+          district_tier: districtTier,
+          group_tier: groupTier,
           locality_id: String((member as { locality_id?: string | null }).locality_id ?? ""),
           age_group: (member.age_group ?? (member as { current_category?: Category | null }).current_category ?? null) as Category | null,
           is_baptized: Boolean(member.is_baptized),
+          language_main,
+          language_sub,
           local_member_join_date: (member as { local_member_join_date?: string | null }).local_member_join_date ?? null,
           local_member_leave_date: (member as { local_member_leave_date?: string | null }).local_member_leave_date ?? null,
           enrollment_periods: enrollmentPeriods.length > 0 ? enrollmentPeriods : undefined,

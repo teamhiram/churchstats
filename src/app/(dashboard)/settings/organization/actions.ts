@@ -292,6 +292,76 @@ export async function removeGroupPoolMember(groupId: string, memberId: string): 
   return error ? { error: error.message } : {};
 }
 
+export async function getDistrictSemiRegularList(districtId: string): Promise<RegularListItem[]> {
+  if (!districtId) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("district_semi_regular_list")
+    .select("id, member_id, sort_order")
+    .eq("district_id", districtId)
+    .order("sort_order");
+  const rows = (data ?? []) as { id: string; member_id: string; sort_order: number }[];
+  if (rows.length === 0) return [];
+  const memberIds = [...new Set(rows.map((r) => r.member_id))];
+  const { data: membersData } = await supabase.from("members").select("id, name").in("id", memberIds);
+  const nameMap = new Map(((membersData ?? []) as { id: string; name: string }[]).map((m) => [m.id, m.name]));
+  return rows.map((r) => ({ id: r.id, member_id: r.member_id, sort_order: r.sort_order, name: nameMap.get(r.member_id) ?? "" }));
+}
+
+export async function getGroupSemiRegularList(groupId: string): Promise<RegularListItem[]> {
+  if (!groupId) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("group_semi_regular_list")
+    .select("id, member_id, sort_order")
+    .eq("group_id", groupId)
+    .order("sort_order");
+  const rows = (data ?? []) as { id: string; member_id: string; sort_order: number }[];
+  if (rows.length === 0) return [];
+  const memberIds = [...new Set(rows.map((r) => r.member_id))];
+  const { data: membersData } = await supabase.from("members").select("id, name").in("id", memberIds);
+  const nameMap = new Map(((membersData ?? []) as { id: string; name: string }[]).map((m) => [m.id, m.name]));
+  return rows.map((r) => ({ id: r.id, member_id: r.member_id, sort_order: r.sort_order, name: nameMap.get(r.member_id) ?? "" }));
+}
+
+export async function addDistrictSemiRegularMember(districtId: string, memberId: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("district_semi_regular_list").select("id").eq("district_id", districtId).eq("member_id", memberId).maybeSingle();
+  if (existing) return {};
+  const maxOrder = await supabase
+    .from("district_semi_regular_list").select("sort_order").eq("district_id", districtId)
+    .order("sort_order", { ascending: false }).limit(1).maybeSingle();
+  const nextOrder = (maxOrder.data?.sort_order ?? -1) + 1;
+  const { error } = await supabase.from("district_semi_regular_list").insert({ district_id: districtId, member_id: memberId, sort_order: nextOrder });
+  return error ? { error: error.message } : {};
+}
+
+export async function removeDistrictSemiRegularMember(districtId: string, memberId: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("district_semi_regular_list").delete().eq("district_id", districtId).eq("member_id", memberId);
+  return error ? { error: error.message } : {};
+}
+
+export async function addGroupSemiRegularMember(groupId: string, memberId: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("group_semi_regular_list").select("id").eq("group_id", groupId).eq("member_id", memberId).maybeSingle();
+  if (existing) return {};
+  const maxOrder = await supabase
+    .from("group_semi_regular_list").select("sort_order").eq("group_id", groupId)
+    .order("sort_order", { ascending: false }).limit(1).maybeSingle();
+  const nextOrder = (maxOrder.data?.sort_order ?? -1) + 1;
+  const { error } = await supabase.from("group_semi_regular_list").insert({ group_id: groupId, member_id: memberId, sort_order: nextOrder });
+  return error ? { error: error.message } : {};
+}
+
+export async function removeGroupSemiRegularMember(groupId: string, memberId: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("group_semi_regular_list").delete().eq("group_id", groupId).eq("member_id", memberId);
+  return error ? { error: error.message } : {};
+}
+
 export async function getMembersByDistrict(districtId: string): Promise<{ id: string; name: string; furigana: string }[]> {
   if (!districtId) return [];
   const supabase = await createClient();

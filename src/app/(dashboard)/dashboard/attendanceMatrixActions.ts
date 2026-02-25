@@ -34,6 +34,9 @@ export type AttendanceMatrixMember = {
   furigana: string;
   districtId: string | null;
   districtName: string | null;
+  isLocal: boolean;
+  /** regular | semi | pool (地区のレギュラー/準レギュラー/プールリストに基づく) */
+  tier: "regular" | "semi" | "pool";
   /** weekStart -> true if attended */
   prayer: Record<string, boolean>;
   main: Record<string, boolean>;
@@ -80,7 +83,7 @@ export async function getAttendanceMatrixData(
         .select("member_id, week_start, dispatch_type, dispatch_date, dispatch_memo")
         .gte("week_start", weekStartRangeMin)
         .lte("week_start", weekStartRangeMax),
-      supabase.from("members").select("id, name, furigana, district_id"),
+      supabase.from("members").select("id, name, furigana, district_id, is_local"),
       supabase.from("districts").select("id, name").order("id"),
     ]);
 
@@ -104,9 +107,51 @@ export async function getAttendanceMatrixData(
     name: string;
     furigana: string | null;
     district_id: string | null;
+    is_local: boolean | null;
   }[];
   const districts = (districtsRes.data ?? []) as { id: string; name: string }[];
   const districtMap = new Map(districts.map((d) => [d.id, d.name]));
+
+  const districtIdsInUse = new Set(
+    membersList.map((m) => m.district_id).filter((id): id is string => id != null)
+  );
+  const districtIdsArr = [...districtIdsInUse];
+  let districtRegularList: { district_id: string; member_id: string }[] = [];
+  let districtSemiList: { district_id: string; member_id: string }[] = [];
+  let districtPoolList: { district_id: string; member_id: string }[] = [];
+  if (districtIdsArr.length > 0) {
+    const [regRes, semiRes, poolRes] = await Promise.all([
+      supabase.from("district_regular_list").select("district_id, member_id").in("district_id", districtIdsArr),
+      supabase.from("district_semi_regular_list").select("district_id, member_id").in("district_id", districtIdsArr),
+      supabase.from("district_pool_list").select("district_id, member_id").in("district_id", districtIdsArr),
+    ]);
+    districtRegularList = (regRes.data ?? []) as { district_id: string; member_id: string }[];
+    districtSemiList = (semiRes.data ?? []) as { district_id: string; member_id: string }[];
+    districtPoolList = (poolRes.data ?? []) as { district_id: string; member_id: string }[];
+  }
+  const regularSetByDistrict = new Map<string, Set<string>>();
+  districtRegularList.forEach((r) => {
+    if (!regularSetByDistrict.has(r.district_id)) regularSetByDistrict.set(r.district_id, new Set());
+    regularSetByDistrict.get(r.district_id)!.add(r.member_id);
+  });
+  const semiSetByDistrict = new Map<string, Set<string>>();
+  districtSemiList.forEach((r) => {
+    if (!semiSetByDistrict.has(r.district_id)) semiSetByDistrict.set(r.district_id, new Set());
+    semiSetByDistrict.get(r.district_id)!.add(r.member_id);
+  });
+  const poolSetByDistrict = new Map<string, Set<string>>();
+  districtPoolList.forEach((r) => {
+    if (!poolSetByDistrict.has(r.district_id)) poolSetByDistrict.set(r.district_id, new Set());
+    poolSetByDistrict.get(r.district_id)!.add(r.member_id);
+  });
+
+  function getTier(districtId: string | null, memberId: string): "regular" | "semi" | "pool" {
+    if (!districtId) return "semi";
+    if (regularSetByDistrict.get(districtId)?.has(memberId)) return "regular";
+    if (semiSetByDistrict.get(districtId)?.has(memberId)) return "semi";
+    if (poolSetByDistrict.get(districtId)?.has(memberId)) return "pool";
+    return "semi";
+  }
 
   const mainMeetingIds = new Set(meetings.map((m) => m.id));
   const meetingIdToDate = new Map(meetings.map((m) => [m.id, m.event_date]));
@@ -237,6 +282,8 @@ export async function getAttendanceMatrixData(
       furigana: furiganaMap.get(m.id) ?? m.name,
       districtId: m.district_id,
       districtName: m.district_id ? districtMap.get(m.district_id) ?? null : null,
+      isLocal: m.is_local === true,
+      tier: getTier(m.district_id, m.id),
       prayer: prayerByMember.get(m.id) ?? {},
       main: mainByMember.get(m.id) ?? {},
       group: groupByMember.get(m.id) ?? {},

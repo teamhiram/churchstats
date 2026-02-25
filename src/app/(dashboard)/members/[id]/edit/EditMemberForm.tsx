@@ -9,10 +9,19 @@ import type { Category } from "@/types/database";
 import {
   addDistrictRegularMember,
   removeDistrictRegularMember,
+  addDistrictSemiRegularMember,
+  removeDistrictSemiRegularMember,
+  addDistrictPoolMember,
+  removeDistrictPoolMember,
   addGroupRegularMember,
   removeGroupRegularMember,
+  addGroupSemiRegularMember,
+  removeGroupSemiRegularMember,
+  addGroupPoolMember,
+  removeGroupPoolMember,
 } from "@/app/(dashboard)/settings/organization/actions";
 import { QUERY_KEYS } from "@/lib/queryClient";
+import { LANGUAGE_OPTIONS } from "@/lib/languages";
 import { Toggle } from "@/components/Toggle";
 import { updateMemberAction } from "./actions";
 
@@ -49,6 +58,8 @@ function ButtonGroup<T extends string>({
   );
 }
 
+type Tier = "regular" | "semi" | "pool";
+
 type Props = {
   memberId: string;
   /** 楽観ロック用。編集中に取得した updated_at。他ユーザーが更新していると保存時にコンフリクトとして理由を表示する。 */
@@ -60,11 +71,13 @@ type Props = {
     is_local: boolean;
     district_id: string;
     group_id: string | null;
-    is_district_regular: boolean;
-    is_group_regular: boolean;
+    district_tier: Tier;
+    group_tier: Tier;
     locality_id: string;
     age_group: Category | null;
     is_baptized: boolean;
+    language_main: string;
+    language_sub: string;
     local_member_join_date: string | null;
     local_member_leave_date: string | null;
     enrollment_periods?: { period_no: number; join_date: string | null; leave_date: string | null; is_uncertain: boolean; memo: string | null }[];
@@ -85,11 +98,13 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
   const [isLocal, setIsLocal] = useState(initial.is_local);
   const [districtId, setDistrictId] = useState(initial.district_id);
   const [groupId, setGroupId] = useState<string | null>(initial.group_id ?? null);
-  const [isDistrictRegular, setIsDistrictRegular] = useState(initial.is_district_regular);
-  const [isGroupRegular, setIsGroupRegular] = useState(initial.is_group_regular);
+  const [districtTier, setDistrictTier] = useState<Tier>(initial.district_tier);
+  const [groupTier, setGroupTier] = useState<Tier>(initial.group_tier);
   const [localityId, setLocalityId] = useState(initial.locality_id);
   const [ageGroup, setAgeGroup] = useState<Category | null>(initial.age_group);
   const [isBaptized, setIsBaptized] = useState(initial.is_baptized);
+  const [languageMain, setLanguageMain] = useState(initial.language_main);
+  const [languageSub, setLanguageSub] = useState(initial.language_sub);
   const initialPeriods = initial.enrollment_periods?.length
     ? initial.enrollment_periods
         .map((p) => ({
@@ -137,6 +152,8 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
         locality_id: !isLocal ? (localityId || null) : null,
         age_group: ageGroup,
         is_baptized: isBaptized,
+        language_main: languageMain || null,
+        language_sub: languageSub || null,
         local_member_join_date: periods[0]?.join_date?.trim() || null,
         local_member_leave_date: periods[0]?.leave_date?.trim() || null,
         enrollment_periods: isLocal
@@ -159,28 +176,32 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
     }
     try {
       if (isLocal) {
-        if (initial.district_id && (initial.district_id !== districtId || !isDistrictRegular)) {
+        if (initial.district_id) {
           await removeDistrictRegularMember(initial.district_id, memberId);
+          await removeDistrictSemiRegularMember(initial.district_id, memberId);
+          await removeDistrictPoolMember(initial.district_id, memberId);
         }
-        if (districtId && isDistrictRegular) {
-          await addDistrictRegularMember(districtId, memberId);
+        if (districtId) {
+          if (districtTier === "regular") await addDistrictRegularMember(districtId, memberId);
+          else if (districtTier === "semi") await addDistrictSemiRegularMember(districtId, memberId);
+          else if (districtTier === "pool") await addDistrictPoolMember(districtId, memberId);
         }
-        if (initial.group_id && (initial.group_id !== groupId || !isGroupRegular)) {
+        if (initial.group_id) {
           await removeGroupRegularMember(initial.group_id, memberId);
+          await removeGroupSemiRegularMember(initial.group_id, memberId);
+          await removeGroupPoolMember(initial.group_id, memberId);
         }
-        if (groupId && isGroupRegular) {
-          await addGroupRegularMember(groupId, memberId);
+        if (groupId) {
+          if (groupTier === "regular") await addGroupRegularMember(groupId, memberId);
+          else if (groupTier === "semi") await addGroupSemiRegularMember(groupId, memberId);
+          else if (groupTier === "pool") await addGroupPoolMember(groupId, memberId);
         }
       }
     } finally {
       setLoading(false);
     }
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.members });
-    const q = new URLSearchParams();
-    if (returnSearchParams?.filter) q.set("filter", returnSearchParams.filter);
-    if (returnSearchParams?.type) q.set("type", returnSearchParams.type);
-    const membersHref = q.toString() ? `/members?${q.toString()}` : "/members";
-    router.push(membersHref);
+    router.push(`/members/${memberId}`);
     // 遷移するため refresh は呼ばない（refresh すると現在ページの再検証で遷移が打ち消される）
   };
 
@@ -206,16 +227,16 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
           className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
         />
       </div>
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">性別</label>
-        <ButtonGroup
-          value={gender}
-          onChange={setGender}
-          options={["male", "female"]}
-          getLabel={(v) => (v === "male" ? "男" : "女")}
-        />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="flex flex-wrap items-end gap-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">性別</label>
+          <ButtonGroup
+            value={gender}
+            onChange={setGender}
+            options={["male", "female"]}
+            getLabel={(v) => (v === "male" ? "男" : "女")}
+          />
+        </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">ローカル</label>
           <Toggle
@@ -253,19 +274,23 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
                 onChange={(v) => {
                   setDistrictId(v);
                   setGroupId(null);
+                  setDistrictTier("semi");
+                  setGroupTier("semi");
                 }}
                 options={["", ...districts.map((d) => d.id)]}
                 getLabel={(v) => (v ? districts.find((d) => d.id === v)?.name ?? "" : "選択")}
               />
               {districtId ? (
-                <>
-                  <span className="text-slate-500 text-sm">レギュラー</span>
-                  <Toggle
-                    checked={isDistrictRegular}
-                    onChange={() => setIsDistrictRegular((b) => !b)}
-                    ariaLabel="地区レギュラー"
-                  />
-                </>
+                <select
+                  value={districtTier}
+                  onChange={(e) => setDistrictTier(e.target.value as Tier)}
+                  className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700"
+                  aria-label="地区リスト"
+                >
+                  <option value="regular">レギュラー</option>
+                  <option value="semi">準レギュラー</option>
+                  <option value="pool">プール</option>
+                </select>
               ) : null}
             </div>
           </div>
@@ -278,7 +303,7 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
                 <div className="flex flex-wrap gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setGroupId(null)}
+                    onClick={() => { setGroupId(null); setGroupTier("semi"); }}
                     className={`rounded-lg px-2 py-[0.5em] text-sm font-medium transition-colors ${
                       groupId === null
                         ? "bg-primary-600 text-white"
@@ -291,7 +316,10 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
                     <button
                       key={g.id}
                       type="button"
-                      onClick={() => setGroupId(g.id)}
+                      onClick={() => {
+                        setGroupId(g.id);
+                        setGroupTier("semi");
+                      }}
                       className={`rounded-lg px-2 py-[0.5em] text-sm font-medium transition-colors ${
                         groupId === g.id
                           ? "bg-primary-600 text-white"
@@ -303,14 +331,16 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
                   ))}
                 </div>
                 {groupId ? (
-                  <>
-                    <span className="text-slate-500 text-sm">レギュラー</span>
-                    <Toggle
-                      checked={isGroupRegular}
-                      onChange={() => setIsGroupRegular((b) => !b)}
-                      ariaLabel="小組レギュラー"
-                    />
-                  </>
+                  <select
+                    value={groupTier}
+                    onChange={(e) => setGroupTier(e.target.value as Tier)}
+                    className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700"
+                    aria-label="小組リスト"
+                  >
+                    <option value="regular">レギュラー</option>
+                    <option value="semi">準レギュラー</option>
+                    <option value="pool">プール</option>
+                  </select>
                 ) : null}
               </div>
             )}
@@ -361,6 +391,38 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
               {CATEGORY_LABELS[c]}
             </button>
           ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-0.5">主言語</label>
+          <select
+            value={languageMain}
+            onChange={(e) => setLanguageMain(e.target.value)}
+            className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm bg-white"
+            aria-label="主言語"
+          >
+            {LANGUAGE_OPTIONS.map((opt) => (
+              <option key={opt.value || "empty"} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-0.5">副言語</label>
+          <select
+            value={languageSub}
+            onChange={(e) => setLanguageSub(e.target.value)}
+            className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm bg-white"
+            aria-label="副言語"
+          >
+            {LANGUAGE_OPTIONS.map((opt) => (
+              <option key={opt.value || "empty"} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
       {isLocal && (

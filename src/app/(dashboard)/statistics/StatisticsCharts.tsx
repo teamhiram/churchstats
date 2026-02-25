@@ -199,7 +199,11 @@ export function StatisticsCharts({
   const downloadPng = useCallback(async () => {
     if (!chartRef.current) return;
     try {
-      const dataUrl = await toPng(chartRef.current, { quality: 1, pixelRatio: 2 });
+      const dataUrl = await toPng(chartRef.current, {
+        quality: 1,
+        pixelRatio: 2,
+        filter: (node) => !(node instanceof HTMLElement && node.hasAttribute("data-exclude-from-png")),
+      });
       const a = document.createElement("a");
       a.href = dataUrl;
       a.download = `churchstats-${format(new Date(), "yyyy-MM-dd-HHmm")}.png`;
@@ -626,16 +630,19 @@ export function StatisticsCharts({
             )}
           </ResponsiveContainer>
         </div>
-      </div>
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={downloadPng}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg touch-target"
+        <div
+          data-exclude-from-png
+          className="flex justify-end -mt-3"
         >
-          <DownloadIcon className="h-4 w-4 shrink-0" />
-          グラフをPNGでダウンロード
-        </button>
+          <button
+            type="button"
+            onClick={downloadPng}
+            className="inline-flex items-center gap-1.5 px-2 py-1 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors touch-target"
+          >
+            <DownloadIcon className="h-3.5 w-3.5 shrink-0" />
+            グラフをPNGでダウンロード
+          </button>
+        </div>
       </div>
     </div>
   );
