@@ -149,15 +149,21 @@ export function PrayerMeetingAttendance({
       members: MemberRow[]
     ): Promise<Map<string, "regular" | "semi" | "pool">> => {
       if (districtIds.length === 0 || members.length === 0) return new Map();
-      const [regRes, poolRes] = await Promise.all([
+      const [regRes, semiRes, poolRes] = await Promise.all([
         supabaseClient.from("district_regular_list").select("district_id, member_id").in("district_id", districtIds),
+        supabaseClient.from("district_semi_regular_list").select("district_id, member_id").in("district_id", districtIds),
         supabaseClient.from("district_pool_list").select("district_id, member_id").in("district_id", districtIds),
       ]);
       const regularByDistrict = new Map<string, Set<string>>();
+      const semiByDistrict = new Map<string, Set<string>>();
       const poolByDistrict = new Map<string, Set<string>>();
       ((regRes.data ?? []) as { district_id: string; member_id: string }[]).forEach((r) => {
         if (!regularByDistrict.has(r.district_id)) regularByDistrict.set(r.district_id, new Set());
         regularByDistrict.get(r.district_id)!.add(r.member_id);
+      });
+      ((semiRes.data ?? []) as { district_id: string; member_id: string }[]).forEach((r) => {
+        if (!semiByDistrict.has(r.district_id)) semiByDistrict.set(r.district_id, new Set());
+        semiByDistrict.get(r.district_id)!.add(r.member_id);
       });
       ((poolRes.data ?? []) as { district_id: string; member_id: string }[]).forEach((r) => {
         if (!poolByDistrict.has(r.district_id)) poolByDistrict.set(r.district_id, new Set());
@@ -167,6 +173,7 @@ export function PrayerMeetingAttendance({
       members.forEach((m) => {
         const did = m.district_id ?? "";
         if (regularByDistrict.get(did)?.has(m.id)) map.set(m.id, "regular");
+        else if (semiByDistrict.get(did)?.has(m.id)) map.set(m.id, "semi");
         else if (poolByDistrict.get(did)?.has(m.id)) map.set(m.id, "pool");
         else map.set(m.id, "semi");
       });

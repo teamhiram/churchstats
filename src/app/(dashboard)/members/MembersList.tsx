@@ -4,6 +4,8 @@ import Link from "next/link";
 import { Fragment, useState, useMemo } from "react";
 import { CATEGORY_LABELS } from "@/types/database";
 import type { Category } from "@/types/database";
+import { getLanguageLabel } from "@/lib/languages";
+import { EnrollmentMemoHtml } from "@/components/EnrollmentMemoHtml";
 
 function Modal({
   open,
@@ -62,6 +64,21 @@ const GROUP_LABELS: Record<GroupOption, string> = {
   believer: "信者",
 };
 
+const BAPTISM_PRECISION_LABELS: Record<string, string> = {
+  exact: "日付確定",
+  unknown: "不明",
+  approximate: "おおよそ",
+};
+
+function formatBaptismDate(m: MemberRow): string {
+  if (m.baptism_year != null && m.baptism_month != null && m.baptism_day != null) {
+    return `${m.baptism_year}-${String(m.baptism_month).padStart(2, "0")}-${String(m.baptism_day).padStart(2, "0")}`;
+  }
+  if (m.baptism_year != null && m.baptism_month != null) return `${m.baptism_year}-${String(m.baptism_month).padStart(2, "0")}`;
+  if (m.baptism_year != null) return String(m.baptism_year);
+  return "—";
+}
+
 type MemberRow = {
   id: string;
   name: string;
@@ -70,11 +87,19 @@ type MemberRow = {
   is_local: boolean;
   district_id: string | null;
   group_id: string | null;
+  locality_id: string | null;
   age_group: Category | null;
   is_baptized: boolean;
+  baptism_year: number | null;
+  baptism_month: number | null;
+  baptism_day: number | null;
+  baptism_date_precision: string | null;
+  language_main: string | null;
+  language_sub: string | null;
+  follower_id: string | null;
   local_member_join_date?: string | null;
   local_member_leave_date?: string | null;
-  enrollment_periods?: { period_no: number; join_date: string | null; leave_date: string | null }[];
+  enrollment_periods?: { period_no: number; join_date: string | null; leave_date: string | null; is_uncertain: boolean; memo: string | null }[];
 };
 
 type DistrictRow = { id: string; name: string; locality_id: string | null };
@@ -196,6 +221,8 @@ export function MembersList({
       return a === "believer" ? -1 : 1;
     });
   };
+
+  const memberNameMap = useMemo(() => new Map(members.map((m) => [m.id, m.name])), [members]);
 
   const sections = useMemo((): Section[] => {
     if (!group1) return [{ group1Key: "", group1Label: "", group2Key: "", group2Label: "", members: sortedMembers }];
@@ -643,6 +670,32 @@ export function MembersList({
                                 <span className="text-slate-800">{m.gender === "male" ? "男" : "女"}</span>
                                 <span className="text-slate-500">ローカル/ゲスト</span>
                                 <span className="text-slate-800">{m.is_local ? "ローカル" : "ゲスト"}</span>
+                                <span className="text-slate-500">地区</span>
+                                <span className="text-slate-800">{districtMap.get(m.district_id ?? "") ?? "—"}</span>
+                                <span className="text-slate-500">小組</span>
+                                <span className="text-slate-800">{groupMap.get(m.group_id ?? "") ?? (m.is_local ? "未所属" : "—")}</span>
+                                <span className="text-slate-500">区分</span>
+                                <span className="text-slate-800">{m.age_group ? CATEGORY_LABELS[m.age_group] : "—"}</span>
+                                <span className="text-slate-500">聖徒/友人</span>
+                                <span className="text-slate-800">{m.is_baptized ? "聖徒" : "友人"}</span>
+                                <span className="text-slate-500">バプテスマ日</span>
+                                <span className="text-slate-800">{formatBaptismDate(m)}</span>
+                                {m.baptism_date_precision && (
+                                  <>
+                                    <span className="text-slate-500">バプテスマ日精度</span>
+                                    <span className="text-slate-800">{BAPTISM_PRECISION_LABELS[m.baptism_date_precision] ?? m.baptism_date_precision}</span>
+                                  </>
+                                )}
+                                <span className="text-slate-500">主言語</span>
+                                <span className="text-slate-800">{getLanguageLabel(m.language_main)}</span>
+                                <span className="text-slate-500">副言語</span>
+                                <span className="text-slate-800">{getLanguageLabel(m.language_sub)}</span>
+                                {m.follower_id && (
+                                  <>
+                                    <span className="text-slate-500">フォロー担当</span>
+                                    <span className="text-slate-800">{memberNameMap.get(m.follower_id) ?? m.follower_id}</span>
+                                  </>
+                                )}
                                 {m.is_local && (
                                   <>
                                     <span className="text-slate-500">ローカルメンバー転入日</span>
@@ -650,7 +703,7 @@ export function MembersList({
                                       {m.enrollment_periods?.length
                                         ? m.enrollment_periods
                                             .sort((a, b) => a.period_no - b.period_no)
-                                            .map((p, i) => `期間${i + 1}: ${p.join_date ?? "—"}`)
+                                            .map((p, i) => `期間${i + 1}: ${p.join_date ?? "—"}${p.is_uncertain ? " (不確定)" : ""}`)
                                             .join(" / ")
                                         : m.local_member_join_date ?? "—"}
                                     </span>
@@ -665,6 +718,26 @@ export function MembersList({
                                                 .map((p) => `期間${p.period_no}: ${p.leave_date}`)
                                                 .join(" / ")
                                             : m.local_member_leave_date ?? ""}
+                                        </span>
+                                      </>
+                                    )}
+                                    {m.enrollment_periods?.some((p) => p.memo) && (
+                                      <>
+                                        <span className="text-slate-500">在籍メモ</span>
+                                        <span className="text-slate-800">
+                                          {m.enrollment_periods
+                                            ?.sort((a, b) => a.period_no - b.period_no)
+                                            .map((p, i) =>
+                                              p.memo ? (
+                                                <Fragment key={p.period_no}>
+                                                  {i > 0 && <span className="block mt-1" />}
+                                                  <span className="block">
+                                                    <span className="text-slate-500 font-medium">期間{i + 1}: </span>
+                                                    <EnrollmentMemoHtml memo={p.memo} />
+                                                  </span>
+                                                </Fragment>
+                                              ) : null
+                                            )}
                                         </span>
                                       </>
                                     )}

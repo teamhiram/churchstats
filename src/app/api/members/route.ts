@@ -6,6 +6,8 @@ export type EnrollmentPeriodApi = {
   period_no: number;
   join_date: string | null;
   leave_date: string | null;
+  is_uncertain: boolean;
+  memo: string | null;
 };
 
 export type MembersApiRow = {
@@ -16,8 +18,16 @@ export type MembersApiRow = {
   is_local: boolean;
   district_id: string | null;
   group_id: string | null;
+  locality_id: string | null;
   age_group: Category | null;
   is_baptized: boolean;
+  baptism_year: number | null;
+  baptism_month: number | null;
+  baptism_day: number | null;
+  baptism_date_precision: string | null;
+  language_main: string | null;
+  language_sub: string | null;
+  follower_id: string | null;
   updated_at?: string;
   local_member_join_date?: string | null;
   local_member_leave_date?: string | null;
@@ -59,7 +69,7 @@ export async function GET(request: NextRequest) {
 
   const membersQuery = supabase
     .from("members")
-    .select("id, name, furigana, gender, is_local, district_id, group_id, age_group, is_baptized, updated_at, local_member_join_date, local_member_leave_date")
+    .select("id, name, furigana, gender, is_local, district_id, group_id, locality_id, age_group, is_baptized, baptism_year, baptism_month, baptism_day, baptism_date_precision, language_main, language_sub, follower_id, updated_at, local_member_join_date, local_member_leave_date")
     .order("name");
   if (since) {
     membersQuery.gt("updated_at", since);
@@ -68,15 +78,21 @@ export async function GET(request: NextRequest) {
     membersQuery,
     supabase.from("districts").select("id, name, locality_id").order("name"),
     supabase.from("groups").select("id, name, district_id").order("name"),
-    supabase.from("member_local_enrollment_periods").select("member_id, period_no, join_date, leave_date").order("period_no"),
+    supabase.from("member_local_enrollment_periods").select("member_id, period_no, join_date, leave_date, is_uncertain, memo").order("period_no"),
   ]);
 
   const members = (membersRes.data ?? []) as MembersApiRow[];
-  const periodsByMember = new Map<string, { period_no: number; join_date: string | null; leave_date: string | null }[]>();
+  const periodsByMember = new Map<string, { period_no: number; join_date: string | null; leave_date: string | null; is_uncertain: boolean; memo: string | null }[]>();
   for (const p of periodsRes.data ?? []) {
-    const row = p as { member_id: string; period_no: number; join_date: string | null; leave_date: string | null };
+    const row = p as { member_id: string; period_no: number; join_date: string | null; leave_date: string | null; is_uncertain?: boolean; memo?: string | null };
     const list = periodsByMember.get(row.member_id) ?? [];
-    list.push({ period_no: row.period_no, join_date: row.join_date ?? null, leave_date: row.leave_date ?? null });
+    list.push({
+      period_no: row.period_no,
+      join_date: row.join_date ?? null,
+      leave_date: row.leave_date ?? null,
+      is_uncertain: Boolean(row.is_uncertain),
+      memo: row.memo ?? null,
+    });
     periodsByMember.set(row.member_id, list);
   }
   for (const m of members) {

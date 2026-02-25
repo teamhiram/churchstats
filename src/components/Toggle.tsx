@@ -40,10 +40,10 @@ export function Toggle({ checked, onChange, ariaLabel, label, disabled = false, 
   );
   if (label == null) return button;
   return (
-    <div className="flex items-center gap-1 min-h-5">
+    <div className="flex items-center gap-1 min-h-5 w-fit">
       {button}
       <label
-        className={`flex items-center text-sm font-medium text-slate-700 touch-target select-none leading-none shrink-0 ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+        className={`flex items-center text-sm font-medium text-slate-700 select-none leading-none shrink-0 ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
         onClick={disabled ? undefined : onChange}
       >
         {label}

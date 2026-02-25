@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, Fragment } from "react";
+import Link from "next/link";
 import { Toggle } from "@/components/Toggle";
 import { getAttendanceMatrixData } from "./attendanceMatrixActions";
 import type { AttendanceMatrixData, AttendanceMatrixMember } from "./attendanceMatrixActions";
@@ -12,18 +13,18 @@ const ROW_LABELS = {
   dispatch: "派",
 } as const;
 
-/** 各行の色（トグル・スクエア・ボーダーで共通） */
-const ROW_COLORS: Record<RowKey, { toggle: string; square: string; border: string; label: string }> = {
-  prayer: { toggle: "bg-primary-600", square: "bg-primary-500", border: "border-primary-500", label: "緑" },
-  main: { toggle: "bg-blue-600", square: "bg-blue-500", border: "border-blue-500", label: "青" },
-  group: { toggle: "bg-amber-600", square: "bg-amber-500", border: "border-amber-500", label: "黄" },
-  dispatch: { toggle: "bg-violet-600", square: "bg-violet-500", border: "border-violet-500", label: "紫" },
+/** 各行の色（ボタン・スクエア・ボーダーで共通） */
+const ROW_COLORS: Record<RowKey, { btn: string; square: string; border: string; label: string }> = {
+  prayer: { btn: "bg-primary-600", square: "bg-primary-500", border: "border-primary-500", label: "緑" },
+  main: { btn: "bg-blue-600", square: "bg-blue-500", border: "border-blue-500", label: "青" },
+  group: { btn: "bg-amber-600", square: "bg-amber-500", border: "border-amber-500", label: "黄" },
+  dispatch: { btn: "bg-violet-600", square: "bg-violet-500", border: "border-violet-500", label: "紫" },
 };
 
 type RowKey = keyof typeof ROW_LABELS;
 
-type SortOption = "furigana" | "name";
-type GroupOption = "district" | "none";
+type SortOption = "furigana";
+type GroupOption = "district" | "none" | "list";
 
 type Props = AttendanceMatrixData & { initialYear?: number };
 
@@ -53,6 +54,7 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear }: Pro
   const [showMain, setShowMain] = useState(true);
   const [showGroup, setShowGroup] = useState(true);
   const [showDispatch, setShowDispatch] = useState(true);
+  const [includeGuests, setIncludeGuests] = useState(false);
   const [squareSize, setSquareSize] = useState(DEFAULT_SIZE);
   const [sortBy, setSortBy] = useState<SortOption>("furigana");
   const [groupBy, setGroupBy] = useState<GroupOption>("district");
@@ -77,15 +79,30 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear }: Pro
     return arr;
   }, [showPrayer, showMain, showGroup, showDispatch]);
 
-  const sortedAndGroupedMembers = useMemo(() => {
+  const filteredMembers = useMemo(() => {
     const list = effectiveData.members;
+    return includeGuests ? list : list.filter((m) => m.isLocal);
+  }, [effectiveData.members, includeGuests]);
+
+  const sortedAndGroupedMembers = useMemo(() => {
+    const list = filteredMembers;
     const distList = effectiveData.districts;
-    const sorted = [...list].sort((a, b) => {
-      if (sortBy === "furigana") {
-        return (a.furigana || a.name).localeCompare(b.furigana || b.name, "ja");
-      }
-      return a.name.localeCompare(b.name, "ja");
-    });
+    const sorted = [...list].sort((a, b) =>
+      (a.furigana || a.name).localeCompare(b.furigana || b.name, "ja")
+    );
+
+    if (groupBy === "list") {
+      const order: { key: "regular" | "semi" | "pool"; label: string }[] = [
+        { key: "regular", label: "レギュラー" },
+        { key: "semi", label: "準レギュラー" },
+        { key: "pool", label: "プール" },
+      ];
+      return order.map(({ key, label }) => ({
+        key: `tier-${key}`,
+        label,
+        members: sorted.filter((m) => m.tier === key),
+      }));
+    }
 
     if (groupBy === "none") {
       return [{ key: "_all", label: null, members: sorted }];
@@ -118,7 +135,7 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear }: Pro
     }
 
     return result;
-  }, [effectiveData.members, effectiveData.districts, sortBy, groupBy]);
+  }, [filteredMembers, effectiveData.districts, groupBy]);
 
   const squareStyle = {
     width: squareSize,
@@ -131,47 +148,43 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear }: Pro
     <section className="bg-white rounded-lg border border-slate-200 p-4">
       <h2 className="font-semibold text-slate-800 mb-3">出欠マトリクス</h2>
 
-      <div className="flex flex-wrap items-center gap-4 mb-4">
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-600">表示行:</span>
-          <Toggle checked={showPrayer} onChange={() => setShowPrayer((v) => !v)} label="祈り" checkedClassName={ROW_COLORS.prayer.toggle} />
-          <Toggle checked={showMain} onChange={() => setShowMain((v) => !v)} label="主日" checkedClassName={ROW_COLORS.main.toggle} />
-          <Toggle checked={showGroup} onChange={() => setShowGroup((v) => !v)} label="小組" checkedClassName={ROW_COLORS.group.toggle} />
-          <Toggle checked={showDispatch} onChange={() => setShowDispatch((v) => !v)} label="派遣" checkedClassName={ROW_COLORS.dispatch.toggle} />
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 sm:gap-4 mb-4">
+        <div className="flex items-center gap-1 sm:gap-2">
+          <span className="text-sm text-slate-600 shrink-0">表示行:</span>
+          {(["prayer", "main", "group", "dispatch"] as const).map((key) => {
+            const checked = key === "prayer" ? showPrayer : key === "main" ? showMain : key === "group" ? showGroup : showDispatch;
+            const setChecked = key === "prayer" ? setShowPrayer : key === "main" ? setShowMain : key === "group" ? setShowGroup : setShowDispatch;
+            const label = key === "prayer" ? "祈り" : key === "main" ? "主日" : key === "group" ? "小組" : "派遣";
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setChecked((v) => !v)}
+                className={`px-2 py-1 text-sm font-medium rounded border transition-colors ${
+                  checked
+                    ? `${ROW_COLORS[key].btn} text-white border-transparent`
+                    : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-600">スクエア:</span>
-          <button
-            type="button"
-            onClick={() => setSquareSize((s) => Math.max(MIN_SIZE, s - 2))}
-            disabled={squareSize <= MIN_SIZE}
-            className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            −
-          </button>
-          <span className="text-sm text-slate-600 w-8 text-center tabular-nums">{squareSize}</span>
-          <button
-            type="button"
-            onClick={() => setSquareSize((s) => Math.min(MAX_SIZE, s + 2))}
-            disabled={squareSize >= MAX_SIZE}
-            className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            ＋
-          </button>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-600">並び順:</span>
+        <div className="flex items-center gap-1 sm:gap-2">
           <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortOption)}
+            value={squareSize}
+            onChange={(e) => setSquareSize(Number(e.target.value))}
             className="rounded border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700"
           >
-            <option value="furigana">フリガナ順</option>
-            <option value="name">名前順</option>
+            {Array.from({ length: (MAX_SIZE - MIN_SIZE) / 2 + 1 }, (_, i) => MIN_SIZE + i * 2).map((size) => (
+              <option key={size} value={size}>
+                {size}px
+              </option>
+            ))}
           </select>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-600">年:</span>
+        <div className="flex items-center gap-1 sm:gap-2">
           <select
             value={selectedYear}
             onChange={(e) => handleYearChange(Number(e.target.value))}
@@ -185,22 +198,36 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear }: Pro
             ))}
           </select>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-600">グルーピング:</span>
+        <div className="flex items-center gap-1 sm:gap-2">
           <select
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value as GroupOption)}
             className="rounded border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700"
           >
             <option value="district">地区別</option>
+            <option value="list">リスト別</option>
             <option value="none">なし</option>
           </select>
         </div>
+        <div className="flex items-center gap-1 sm:gap-2">
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortOption)}
+            className="rounded border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700"
+          >
+            <option value="furigana">フリガナ順</option>
+          </select>
+        </div>
+        <Toggle
+          checked={includeGuests}
+          onChange={() => setIncludeGuests((v) => !v)}
+          label="ゲストを含む"
+        />
       </div>
 
       {visibleRows.length === 0 ? (
         <p className="text-sm text-slate-500">表示する行を選択してください</p>
-      ) : effectiveData.members.length === 0 ? (
+      ) : filteredMembers.length === 0 ? (
         <p className="text-sm text-slate-500">表示期間内に出席データがありません</p>
       ) : (
         <div className="overflow-x-auto">
@@ -253,22 +280,30 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear }: Pro
                       </tr>
                       {!closedGroupKeys.has(group.key) &&
                         group.members.flatMap((member) =>
-                          visibleRows.map((row, rowIdx) => (
-                            <tr key={`${member.memberId}-${row}`}>
+                          visibleRows.map((row, rowIdx) => {
+                            const rowBgClass =
+                              member.tier === "semi"
+                                ? "bg-amber-50 hover:bg-amber-100"
+                                : member.tier === "pool"
+                                  ? "bg-sky-50 hover:bg-sky-100"
+                                  : "hover:bg-slate-50";
+                            return (
+                            <tr key={`${member.memberId}-${row}`} className={rowBgClass}>
                               {rowIdx === 0 && (
                                 <td
                                   rowSpan={visibleRows.length}
-                                  className="sticky left-0 z-10 border-b border-r border-slate-100 bg-white align-top p-1"
+                                  className={`sticky left-0 z-10 border-b border-r border-slate-100 align-top p-1 ${member.tier === "semi" ? "bg-amber-50" : member.tier === "pool" ? "bg-sky-50" : "bg-white"}`}
                                 >
-                                  <span
-                                    className="text-sm text-slate-800 block truncate max-w-[6rem]"
+                                  <Link
+                                    href={`/members/${member.memberId}/edit`}
+                                    className="text-sm text-slate-800 block truncate max-w-[6rem] text-primary-600 hover:underline"
                                     title={member.name}
                                   >
                                     {member.name}
-                                  </span>
+                                  </Link>
                                 </td>
                               )}
-                              <td className="sticky left-[6rem] z-10 border-b border-r border-slate-100 bg-white p-0 align-middle">
+                              <td className={`sticky left-[6rem] z-10 border-b border-r border-slate-100 p-0 align-middle ${member.tier === "semi" ? "bg-amber-50" : member.tier === "pool" ? "bg-sky-50" : "bg-white"}`}>
                                 <span
                                   className="inline-block text-xs font-medium text-slate-600"
                                   style={{ fontSize: squareSize * 0.7, width: 24 }}
@@ -294,27 +329,36 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear }: Pro
                                 );
                               })}
                             </tr>
-                          ))
+                            );
+                          })
                         )}
                     </>
                   ) : (
                     group.members.flatMap((member) =>
-                      visibleRows.map((row, rowIdx) => (
-                        <tr key={`${member.memberId}-${row}`}>
+                      visibleRows.map((row, rowIdx) => {
+                        const rowBgClass =
+                          member.tier === "semi"
+                            ? "bg-amber-50 hover:bg-amber-100"
+                            : member.tier === "pool"
+                              ? "bg-sky-50 hover:bg-sky-100"
+                              : "hover:bg-slate-50";
+                        return (
+                        <tr key={`${member.memberId}-${row}`} className={rowBgClass}>
                           {rowIdx === 0 && (
                             <td
                               rowSpan={visibleRows.length}
-                              className="sticky left-0 z-10 border-b border-r border-slate-100 bg-white align-top p-1"
+                              className={`sticky left-0 z-10 border-b border-r border-slate-100 align-top p-1 ${member.tier === "semi" ? "bg-amber-50" : member.tier === "pool" ? "bg-sky-50" : "bg-white"}`}
                             >
-                              <span
-                                className="text-sm text-slate-800 block truncate max-w-[6rem]"
+                              <Link
+                                href={`/members/${member.memberId}/edit`}
+                                className="text-sm text-slate-800 block truncate max-w-[6rem] text-primary-600 hover:underline"
                                 title={member.name}
                               >
                                 {member.name}
-                              </span>
+                              </Link>
                             </td>
                           )}
-                          <td className="sticky left-[6rem] z-10 border-b border-r border-slate-100 bg-white p-0 align-middle">
+                          <td className={`sticky left-[6rem] z-10 border-b border-r border-slate-100 p-0 align-middle ${member.tier === "semi" ? "bg-amber-50" : member.tier === "pool" ? "bg-sky-50" : "bg-white"}`}>
                             <span
                               className="inline-block text-xs font-medium text-slate-600"
                               style={{ fontSize: squareSize * 0.7, width: 24 }}
@@ -340,7 +384,8 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear }: Pro
                             );
                           })}
                         </tr>
-                      ))
+                        );
+                      })
                     )
                   )}
                 </Fragment>
