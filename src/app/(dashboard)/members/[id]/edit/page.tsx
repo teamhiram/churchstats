@@ -19,7 +19,7 @@ export default async function EditMemberPage({
 
   const { data: periods } = await supabase
     .from("member_local_enrollment_periods")
-    .select("period_no, join_date, leave_date, is_uncertain")
+    .select("period_no, join_date, leave_date, is_uncertain, memo")
     .eq("member_id", id)
     .order("period_no");
   const enrollmentPeriods = (periods ?? []).map((p) => ({
@@ -27,6 +27,7 @@ export default async function EditMemberPage({
     join_date: (p as { join_date?: string | null }).join_date ?? null,
     leave_date: (p as { leave_date?: string | null }).leave_date ?? null,
     is_uncertain: Boolean((p as { is_uncertain?: boolean }).is_uncertain),
+    memo: (p as { memo?: string | null }).memo ?? null,
   }));
 
   let isDistrictRegular = false;

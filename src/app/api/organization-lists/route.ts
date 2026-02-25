@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
-export type ListNames = { regularNames: string[]; nonRegularNames: string[] };
+export type ListNames = { regularNames: string[]; nonRegularNames: string[]; poolNames: string[] };
 
 export type OrganizationListsResponse = {
   districts: Record<string, ListNames>;
@@ -71,7 +71,7 @@ export async function GET() {
     return NextResponse.json({ districts: {}, groups: {} } satisfies OrganizationListsResponse);
   }
 
-  const [districtListRows, groupListRows, membersByDistrict, membersByGroup] = await Promise.all([
+  const [districtListRows, groupListRows, districtPoolRows, groupPoolRows, membersByDistrict, membersByGroup] = await Promise.all([
     districtIdsSet.size > 0
       ? supabase
           .from("district_regular_list")
@@ -87,6 +87,20 @@ export async function GET() {
           .order("sort_order")
       : Promise.resolve({ data: [] }),
     districtIdsSet.size > 0
+      ? supabase
+          .from("district_pool_list")
+          .select("district_id, member_id, sort_order")
+          .in("district_id", [...districtIdsSet])
+          .order("sort_order")
+      : Promise.resolve({ data: [] }),
+    groupIdsSet.size > 0
+      ? supabase
+          .from("group_pool_list")
+          .select("group_id, member_id, sort_order")
+          .in("group_id", [...groupIdsSet])
+          .order("sort_order")
+      : Promise.resolve({ data: [] }),
+    districtIdsSet.size > 0
       ? supabase.from("members").select("id, name, district_id").in("district_id", [...districtIdsSet])
       : Promise.resolve({ data: [] }),
     groupIdsSet.size > 0
@@ -96,18 +110,30 @@ export async function GET() {
 
   const dList = (districtListRows.data ?? []) as { district_id: string; member_id: string; sort_order: number }[];
   const gList = (groupListRows.data ?? []) as { group_id: string; member_id: string; sort_order: number }[];
+  const dPoolList = (districtPoolRows.data ?? []) as { district_id: string; member_id: string; sort_order: number }[];
+  const gPoolList = (groupPoolRows.data ?? []) as { group_id: string; member_id: string; sort_order: number }[];
   const membersD = (membersByDistrict.data ?? []) as { id: string; name: string; district_id: string }[];
   const membersG = (membersByGroup.data ?? []) as { id: string; name: string; group_id: string }[];
 
   const districtRegularByDistrict = new Map<string, Set<string>>();
+  const districtPoolByDistrict = new Map<string, Set<string>>();
   const groupRegularByGroup = new Map<string, Set<string>>();
+  const groupPoolByGroup = new Map<string, Set<string>>();
   dList.forEach((r) => {
     if (!districtRegularByDistrict.has(r.district_id)) districtRegularByDistrict.set(r.district_id, new Set());
     districtRegularByDistrict.get(r.district_id)!.add(r.member_id);
   });
+  dPoolList.forEach((r) => {
+    if (!districtPoolByDistrict.has(r.district_id)) districtPoolByDistrict.set(r.district_id, new Set());
+    districtPoolByDistrict.get(r.district_id)!.add(r.member_id);
+  });
   gList.forEach((r) => {
     if (!groupRegularByGroup.has(r.group_id)) groupRegularByGroup.set(r.group_id, new Set());
     groupRegularByGroup.get(r.group_id)!.add(r.member_id);
+  });
+  gPoolList.forEach((r) => {
+    if (!groupPoolByGroup.has(r.group_id)) groupPoolByGroup.set(r.group_id, new Set());
+    groupPoolByGroup.get(r.group_id)!.add(r.member_id);
   });
 
   const membersByName = new Map<string, string>();
@@ -116,27 +142,33 @@ export async function GET() {
   const districtsResult: Record<string, ListNames> = {};
   districts.forEach((d) => {
     const regularIds = districtRegularByDistrict.get(d.id) ?? new Set();
+    const poolIds = districtPoolByDistrict.get(d.id) ?? new Set();
     const regularNames: string[] = [];
     const nonRegularNames: string[] = [];
+    const poolNames: string[] = [];
     membersD.filter((m) => m.district_id === d.id).forEach((m) => {
       const name = membersByName.get(m.id) ?? m.name ?? "";
       if (regularIds.has(m.id)) regularNames.push(name);
+      else if (poolIds.has(m.id)) poolNames.push(name);
       else nonRegularNames.push(name);
     });
-    districtsResult[d.id] = { regularNames, nonRegularNames };
+    districtsResult[d.id] = { regularNames, nonRegularNames, poolNames };
   });
 
   const groupsResult: Record<string, ListNames> = {};
   groups.forEach((g) => {
     const regularIds = groupRegularByGroup.get(g.id) ?? new Set();
+    const poolIds = groupPoolByGroup.get(g.id) ?? new Set();
     const regularNames: string[] = [];
     const nonRegularNames: string[] = [];
+    const poolNames: string[] = [];
     membersG.filter((m) => m.group_id === g.id).forEach((m) => {
       const name = membersByName.get(m.id) ?? m.name ?? "";
       if (regularIds.has(m.id)) regularNames.push(name);
+      else if (poolIds.has(m.id)) poolNames.push(name);
       else nonRegularNames.push(name);
     });
-    groupsResult[g.id] = { regularNames, nonRegularNames };
+    groupsResult[g.id] = { regularNames, nonRegularNames, poolNames };
   });
 
   return NextResponse.json({

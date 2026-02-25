@@ -169,6 +169,7 @@ export function StatisticsCharts({
   const localOnly = !includeGuests;
   const [colorGroupBy, setColorGroupBy] = useState<ColorGroupBy>("faith");
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
+  const [sideBySide, setSideBySide] = useState(false);
   useEffect(() => { setHiddenSeries(new Set()); }, [colorGroupBy]);
 
   const meetingIdToDistrictId = useMemo(() => {
@@ -265,9 +266,6 @@ export function StatisticsCharts({
         const eventIso = m.event_date;
         if (eventIso >= startIso && eventIso <= endIso) meetingIdsInWeek.add(m.id);
       });
-      let countAttendedOnly = 0;
-      let saintAttendedOnly = 0;
-      let friendAttendedOnly = 0;
       meetingIdsInWeek.forEach((mid) => {
         const districtId = meetingIdToDistrictId.get(mid) ?? "__none__";
         if (!countByDistrict[districtId]) {
@@ -275,7 +273,7 @@ export function StatisticsCharts({
           districtMemberIds[districtId] = new Set();
         }
         attendance
-          .filter((a) => a.meeting_id === mid)
+          .filter((a) => a.meeting_id === mid && a.attended !== false)
           .filter((a) => !localOnly || localMemberIds.has(a.member_id))
           .forEach((a) => {
             total += 1;
@@ -289,11 +287,6 @@ export function StatisticsCharts({
             categoryMemberIds[cat].add(a.member_id);
             countByDistrict[districtId] += 1;
             districtMemberIds[districtId].add(a.member_id);
-            if (a.attended !== false) {
-              countAttendedOnly += 1;
-              if (saint) saintAttendedOnly += 1;
-              else friendAttendedOnly += 1;
-            }
           });
       });
 
@@ -303,66 +296,6 @@ export function StatisticsCharts({
       const friendNames = Array.from(friendMemberIds)
         .map((id) => memberIdToName.get(id) ?? "(不明)")
         .sort((a, b) => a.localeCompare(b, "ja"));
-
-      // #region agent log — 2/1 信仰別不整合
-      const rowDate = format(start, "yyyy-MM-dd");
-      if (rowDate === "2026-02-01" || rowDate === "2025-02-01") {
-        fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            location: "StatisticsCharts.tsx:weeklyData",
-            message: "week faith breakdown (chart)",
-            data: {
-              weekLabel: format(start, "M/d", { locale: ja }),
-              date: rowDate,
-              meetingIdsInWeek: meetingIdsInWeek.size,
-              total,
-              saint: countByFaith.saint,
-              friend: countByFaith.friend,
-              totalAttendedOnly: countAttendedOnly,
-              saintAttendedOnly,
-              friendAttendedOnly,
-              localOnly,
-            },
-            timestamp: Date.now(),
-            hypothesisId: "A,B,E",
-          }),
-        }).catch(() => {});
-      }
-      // #endregion
-
-      // #region agent log — 2/8 実体確認
-      if (rowDate === "2026-02-08") {
-        const meetingDetailsInWeek = Array.from(meetingIdsInWeek).map((id) => ({
-          id,
-          event_date: meetingIdToDate.get(id) ?? null,
-          district_id: meetingIdToDistrictId.get(id) ?? null,
-        }));
-        fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            location: "StatisticsCharts.tsx:weeklyData",
-            message: "week 2/8 breakdown (chart)",
-            data: {
-              rowDate,
-              weekLabel: format(start, "M/d", { locale: ja }),
-              meetingIdsInWeek: Array.from(meetingIdsInWeek),
-              meetingDetailsInWeek,
-              total,
-              saint: countByFaith.saint,
-              friend: countByFaith.friend,
-              totalAttendedOnly: countAttendedOnly,
-              countByDistrict,
-              localOnly,
-            },
-            timestamp: Date.now(),
-            hypothesisId: "H12",
-          }),
-        }).catch(() => {});
-      }
-      // #endregion
 
       const row: WeeklyRow = {
         week: weekLabel,
@@ -392,10 +325,20 @@ export function StatisticsCharts({
   }, [attendance, mainMeetings, localMemberIds, localOnly, memberIsBaptized, memberIdToName, meetingIdToDistrictId, meetingIdToDate]);
 
   const legendItems = useMemo(() => {
+    if (colorGroupBy === "none") {
+      return [
+        {
+          key: "count",
+          label: localityName && localityName !== "" ? localityName : "全体",
+          color: "#0284c7",
+          dataKey: "count" as const,
+        },
+      ];
+    }
     if (colorGroupBy === "faith") {
       return [
-        { key: "saint", label: FAITH_KEYS.saint, color: FAITH_COLORS.saint },
-        { key: "friend", label: FAITH_KEYS.friend, color: FAITH_COLORS.friend },
+        { key: "saint", label: FAITH_KEYS.saint, color: FAITH_COLORS.saint, dataKey: "saint" as const },
+        { key: "friend", label: FAITH_KEYS.friend, color: FAITH_COLORS.friend, dataKey: "friend" as const },
       ];
     }
     if (colorGroupBy === "category") {
@@ -403,6 +346,7 @@ export function StatisticsCharts({
         key: k,
         label: CATEGORY_LABELS[k],
         color: CATEGORY_COLORS[k],
+        dataKey: CATEGORY_LABELS[k as Category] as string,
       }));
     }
     if (colorGroupBy === "district" && districtKeys.length > 0) {
@@ -410,10 +354,24 @@ export function StatisticsCharts({
         key: k,
         label: k === "__none__" ? "未設定" : (districtNameMap.get(k) ?? k),
         color: districtColors.get(k) ?? "#94a3b8",
+        dataKey: `district_${k}` as string,
       }));
     }
     return [];
-  }, [colorGroupBy, districtKeys, districtNameMap, districtColors]);
+  }, [colorGroupBy, districtKeys, districtNameMap, districtColors, localityName]);
+
+  const legendAverages = useMemo(() => {
+    const map = new Map<string, number>();
+    if (weeklyData.length === 0) return map;
+    legendItems.forEach((item) => {
+      const sum = weeklyData.reduce((acc, row) => {
+        const v = row[item.dataKey];
+        return acc + (typeof v === "number" ? v : 0);
+      }, 0);
+      map.set(item.key, Math.round((sum / weeklyData.length) * 10) / 10);
+    });
+    return map;
+  }, [weeklyData, legendItems]);
 
   const toggleSeries = useCallback((key: string) => {
     setHiddenSeries((prev) => {
@@ -486,13 +444,35 @@ export function StatisticsCharts({
             onChange={() => setIncludeGuests((v) => !v)}
             label="ゲストを含む"
           />
+          {colorGroupBy !== "none" && (
+            <Toggle
+              checked={sideBySide}
+              onChange={() => setSideBySide((v) => !v)}
+              label="横並び"
+            />
+          )}
         </div>
 
         {legendItems.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
             {legendItems.map((item) => {
-              const hidden = hiddenSeries.has(item.key);
-              return (
+              const hidden = colorGroupBy !== "none" && hiddenSeries.has(item.key);
+              const avg = legendAverages.get(item.key);
+              const avgText = avg !== undefined ? `(${avg})` : "";
+              const isAggregateOnly = colorGroupBy === "none";
+              return isAggregateOnly ? (
+                <div
+                  key={item.key}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-slate-300 bg-white text-slate-700 shadow-sm"
+                >
+                  <span
+                    className="inline-block w-3 h-3 rounded-sm shrink-0"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  {item.label}
+                  {avgText ? <span className="text-slate-500 font-normal">{avgText}</span> : null}
+                </div>
+              ) : (
                 <button
                   key={item.key}
                   type="button"
@@ -508,6 +488,7 @@ export function StatisticsCharts({
                     style={{ backgroundColor: hidden ? "#cbd5e1" : item.color }}
                   />
                   {item.label}
+                  {avg !== undefined ? <span className="text-slate-500 font-normal">({avg})</span> : null}
                 </button>
               );
             })}
@@ -553,9 +534,9 @@ export function StatisticsCharts({
                 {(["saint", "friend"] as const)
                   .filter((k) => !hiddenSeries.has(k))
                   .map((k, idx, arr) => (
-                    <Bar key={k} dataKey={k} stackId="a" fill={FAITH_COLORS[k]} name={FAITH_KEYS[k]}>
-                      {idx === arr.length - 1 ? (
-                        <LabelList dataKey="visibleCount" position="top" fill="#475569" fontSize={12} />
+                    <Bar key={k} dataKey={k} stackId={sideBySide ? undefined : "a"} fill={FAITH_COLORS[k]} name={FAITH_KEYS[k]}>
+                      {(!sideBySide && idx === arr.length - 1) || sideBySide ? (
+                        <LabelList dataKey={sideBySide ? k : "visibleCount"} position="top" fill="#475569" fontSize={12} />
                       ) : null}
                     </Bar>
                   ))}
@@ -581,12 +562,12 @@ export function StatisticsCharts({
                     <Bar
                       key={districtId}
                       dataKey={`district_${districtId}`}
-                      stackId="a"
+                      stackId={sideBySide ? undefined : "a"}
                       fill={districtColors.get(districtId) ?? "#94a3b8"}
                       name={districtId === "__none__" ? "未設定" : (districtNameMap.get(districtId) ?? districtId)}
                     >
-                      {idx === arr.length - 1 ? (
-                        <LabelList dataKey="visibleCount" position="top" fill="#475569" fontSize={12} />
+                      {(!sideBySide && idx === arr.length - 1) || sideBySide ? (
+                        <LabelList dataKey={sideBySide ? `district_${districtId}` : "visibleCount"} position="top" fill="#475569" fontSize={12} />
                       ) : null}
                     </Bar>
                   ))}
@@ -632,12 +613,12 @@ export function StatisticsCharts({
                     <Bar
                       key={k}
                       dataKey={CATEGORY_LABELS[k]}
-                      stackId="a"
+                      stackId={sideBySide ? undefined : "a"}
                       fill={CATEGORY_COLORS[k]}
                       name={CATEGORY_LABELS[k]}
                     >
-                      {idx === arr.length - 1 ? (
-                        <LabelList dataKey="visibleCount" position="top" fill="#475569" fontSize={12} />
+                      {(!sideBySide && idx === arr.length - 1) || sideBySide ? (
+                        <LabelList dataKey={sideBySide ? CATEGORY_LABELS[k] : "visibleCount"} position="top" fill="#475569" fontSize={12} />
                       ) : null}
                     </Bar>
                   ))}

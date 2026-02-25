@@ -222,24 +222,102 @@ export async function removeGroupRegularMember(groupId: string, memberId: string
   return error ? { error: error.message } : {};
 }
 
-export async function getMembersByDistrict(districtId: string): Promise<{ id: string; name: string }[]> {
+export async function getDistrictPoolList(districtId: string): Promise<RegularListItem[]> {
+  if (!districtId) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("district_pool_list")
+    .select("id, member_id, sort_order")
+    .eq("district_id", districtId)
+    .order("sort_order");
+  const rows = (data ?? []) as { id: string; member_id: string; sort_order: number }[];
+  if (rows.length === 0) return [];
+  const memberIds = [...new Set(rows.map((r) => r.member_id))];
+  const { data: membersData } = await supabase.from("members").select("id, name").in("id", memberIds);
+  const nameMap = new Map(((membersData ?? []) as { id: string; name: string }[]).map((m) => [m.id, m.name]));
+  return rows.map((r) => ({ id: r.id, member_id: r.member_id, sort_order: r.sort_order, name: nameMap.get(r.member_id) ?? "" }));
+}
+
+export async function getGroupPoolList(groupId: string): Promise<RegularListItem[]> {
+  if (!groupId) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("group_pool_list")
+    .select("id, member_id, sort_order")
+    .eq("group_id", groupId)
+    .order("sort_order");
+  const rows = (data ?? []) as { id: string; member_id: string; sort_order: number }[];
+  if (rows.length === 0) return [];
+  const memberIds = [...new Set(rows.map((r) => r.member_id))];
+  const { data: membersData } = await supabase.from("members").select("id, name").in("id", memberIds);
+  const nameMap = new Map(((membersData ?? []) as { id: string; name: string }[]).map((m) => [m.id, m.name]));
+  return rows.map((r) => ({ id: r.id, member_id: r.member_id, sort_order: r.sort_order, name: nameMap.get(r.member_id) ?? "" }));
+}
+
+export async function addDistrictPoolMember(districtId: string, memberId: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("district_pool_list").select("id").eq("district_id", districtId).eq("member_id", memberId).maybeSingle();
+  if (existing) return {};
+  const maxOrder = await supabase
+    .from("district_pool_list").select("sort_order").eq("district_id", districtId)
+    .order("sort_order", { ascending: false }).limit(1).maybeSingle();
+  const nextOrder = (maxOrder.data?.sort_order ?? -1) + 1;
+  const { error } = await supabase.from("district_pool_list").insert({ district_id: districtId, member_id: memberId, sort_order: nextOrder });
+  return error ? { error: error.message } : {};
+}
+
+export async function removeDistrictPoolMember(districtId: string, memberId: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("district_pool_list").delete().eq("district_id", districtId).eq("member_id", memberId);
+  return error ? { error: error.message } : {};
+}
+
+export async function addGroupPoolMember(groupId: string, memberId: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("group_pool_list").select("id").eq("group_id", groupId).eq("member_id", memberId).maybeSingle();
+  if (existing) return {};
+  const maxOrder = await supabase
+    .from("group_pool_list").select("sort_order").eq("group_id", groupId)
+    .order("sort_order", { ascending: false }).limit(1).maybeSingle();
+  const nextOrder = (maxOrder.data?.sort_order ?? -1) + 1;
+  const { error } = await supabase.from("group_pool_list").insert({ group_id: groupId, member_id: memberId, sort_order: nextOrder });
+  return error ? { error: error.message } : {};
+}
+
+export async function removeGroupPoolMember(groupId: string, memberId: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("group_pool_list").delete().eq("group_id", groupId).eq("member_id", memberId);
+  return error ? { error: error.message } : {};
+}
+
+export async function getMembersByDistrict(districtId: string): Promise<{ id: string; name: string; furigana: string }[]> {
   if (!districtId) return [];
   const supabase = await createClient();
   const { data } = await supabase
     .from("members")
-    .select("id, name")
+    .select("id, name, furigana")
     .eq("district_id", districtId)
-    .order("name");
-  return data ?? [];
+    .order("furigana");
+  return ((data ?? []) as { id: string; name: string; furigana: string | null }[]).map((m) => ({
+    id: m.id,
+    name: m.name,
+    furigana: (m.furigana ?? m.name).trim() || m.name,
+  }));
 }
 
-export async function getMembersByGroup(groupId: string): Promise<{ id: string; name: string }[]> {
+export async function getMembersByGroup(groupId: string): Promise<{ id: string; name: string; furigana: string }[]> {
   if (!groupId) return [];
   const supabase = await createClient();
   const { data } = await supabase
     .from("members")
-    .select("id, name")
+    .select("id, name, furigana")
     .eq("group_id", groupId)
-    .order("name");
-  return data ?? [];
+    .order("furigana");
+  return ((data ?? []) as { id: string; name: string; furigana: string | null }[]).map((m) => ({
+    id: m.id,
+    name: m.name,
+    furigana: (m.furigana ?? m.name).trim() || m.name,
+  }));
 }
