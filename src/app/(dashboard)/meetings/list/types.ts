@@ -11,6 +11,7 @@ export type WeekRow = {
 
 export type WeekDetail = {
   mainAttendees: { memberId: string; name: string }[];
+  mainAbsent: { memberId: string; name: string; memo: string | null }[];
   prayerAttendees: { memberId: string; name: string }[];
   groupAttendees: { memberId: string; name: string }[];
   dispatchNames: { memberId: string; name: string }[];

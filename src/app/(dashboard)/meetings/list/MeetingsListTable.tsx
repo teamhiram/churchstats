@@ -1,8 +1,17 @@
 "use client";
 
 import { Fragment, useState } from "react";
+import Link from "next/link";
 import { getWeekDetail } from "./actions";
 import type { WeekRow, WeekDetail } from "./types";
+
+function PencilIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+      <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
+    </svg>
+  );
+}
 
 type Props = {
   weeks: WeekRow[];
@@ -81,15 +90,50 @@ export function MeetingsListTable({
                         <div className="grid gap-4 sm:grid-cols-2 text-sm">
                           <div className="space-y-3">
                             <div>
-                              <p className="font-bold text-slate-700 mb-1">主日集会</p>
-                              <p className="text-slate-800">
-                                {detail.mainAttendees.length === 0
-                                  ? "—"
-                                  : detail.mainAttendees.map((m) => m.name).join("、")}
+                              <p className="font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                                主日集会
+                                <Link
+                                  href={`/meetings/sunday?week_start=${row.weekStart}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-slate-400 hover:text-primary-600 transition-colors"
+                                  title="出欠を編集"
+                                >
+                                  <PencilIcon />
+                                </Link>
                               </p>
+                              <div className="space-y-1.5">
+                                <p className="text-slate-800">
+                                  <span className="text-xs text-slate-500 mr-1">出席({detail.mainAttendees.length})</span>
+                                  {detail.mainAttendees.length === 0
+                                    ? "—"
+                                    : detail.mainAttendees.map((m) => m.name).join("、")}
+                                </p>
+                                {detail.mainAbsent.length > 0 && (
+                                  <p>
+                                    <span className="text-xs text-slate-500 mr-1">欠席({detail.mainAbsent.length})</span>
+                                    {detail.mainAbsent.map((m, i) => (
+                                      <span key={m.memberId}>
+                                        {i > 0 && "、"}
+                                        <span className="text-red-600">{m.name}</span>
+                                        {m.memo && <span className="text-xs text-slate-500 ml-0.5">({m.memo})</span>}
+                                      </span>
+                                    ))}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                             <div>
-                              <p className="font-bold text-slate-700 mb-1">祈りの集会</p>
+                              <p className="font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                                祈りの集会
+                                <Link
+                                  href={`/meetings/prayer?week_start=${row.weekStart}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-slate-400 hover:text-primary-600 transition-colors"
+                                  title="出欠を編集"
+                                >
+                                  <PencilIcon />
+                                </Link>
+                              </p>
                               <p className="text-slate-800">
                                 {detail.prayerAttendees.length === 0
                                   ? "—"
@@ -99,7 +143,17 @@ export function MeetingsListTable({
                           </div>
                           <div className="space-y-3">
                             <div>
-                              <p className="font-bold text-slate-700 mb-1">小組</p>
+                              <p className="font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                                小組
+                                <Link
+                                  href={`/meetings/small-group?week_start=${row.weekStart}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-slate-400 hover:text-primary-600 transition-colors"
+                                  title="出欠を編集"
+                                >
+                                  <PencilIcon />
+                                </Link>
+                              </p>
                               <p className="text-slate-800">
                                 {detail.groupAttendees.length === 0
                                   ? "—"
@@ -107,7 +161,17 @@ export function MeetingsListTable({
                               </p>
                             </div>
                             <div>
-                              <p className="font-bold text-slate-700 mb-1">派遣先</p>
+                              <p className="font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                                派遣先
+                                <Link
+                                  href={`/meetings/organic?week_start=${row.weekStart}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-slate-400 hover:text-primary-600 transition-colors"
+                                  title="出欠を編集"
+                                >
+                                  <PencilIcon />
+                                </Link>
+                              </p>
                               <p className="text-slate-800">
                                 {detail.dispatchNames.length === 0
                                   ? "—"
