@@ -143,7 +143,7 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
       <header className="md:hidden fixed top-0 left-0 right-0 z-40 h-8 bg-slate-800 flex items-center justify-center px-3">
         <span className="text-white text-sm font-medium">召会生活統計</span>
         <span className="ml-1.5 inline-flex items-baseline">
-          <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.14</span>
+          <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.15</span>
         </span>
       </header>
 
@@ -152,7 +152,7 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
         <div className={`h-full flex items-center justify-between px-4 ${contentWidthClass(fullWidth)}`}>
           <div className="flex items-center h-full shrink-0 mr-2">
             <span className="text-white text-sm font-semibold whitespace-nowrap">召会生活統計</span>
-            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.14</span>
+            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.15</span>
           </div>
           <nav className="flex h-full overflow-x-auto">
             {links.map((item) => {
