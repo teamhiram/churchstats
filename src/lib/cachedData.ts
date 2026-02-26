@@ -74,14 +74,22 @@ export const getCachedLocalities = cache(async (): Promise<{
     .select("id, name, prefecture_id, prefectures(name, area_id)")
     .order("name")
     .limit(500);
-  const rows = (data ?? []) as { id: string; name: string; prefecture_id: string | null; prefectures: { name: string; area_id: string } | null }[];
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    area_id: r.prefectures?.area_id ?? null,
-    prefecture_id: r.prefecture_id ?? null,
-    prefecture_name: r.prefectures?.name ?? null,
-  }));
+  const rows = (data ?? []) as unknown as {
+    id: string;
+    name: string;
+    prefecture_id: string | null;
+    prefectures: { name: string; area_id: string } | { name: string; area_id: string }[] | null;
+  }[];
+  return rows.map((r) => {
+    const pref = Array.isArray(r.prefectures) ? r.prefectures[0] : r.prefectures;
+    return {
+      id: r.id,
+      name: r.name,
+      area_id: pref?.area_id ?? null,
+      prefecture_id: r.prefecture_id ?? null,
+      prefecture_name: pref?.name ?? null,
+    };
+  });
 });
 
 /** 都道府県一覧。地域(area)順・都道府県 sort_order 順。地方ポップアップの都道府県セクションに利用。同一リクエスト内で重複呼び出しを抑止。 */
