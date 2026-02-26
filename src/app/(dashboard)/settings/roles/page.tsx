@@ -26,7 +26,7 @@ export default async function RolesPage() {
     main_district_id: string | null;
     districts: { locality_id: string | null; localities: { name: string } | null } | null;
   };
-  const profiles = ((profilesRaw ?? []) as Row[]).map((row) => ({
+  const profiles = ((profilesRaw ?? []) as unknown as Row[]).map((row) => ({
     id: row.id,
     email: row.email,
     full_name: row.full_name,

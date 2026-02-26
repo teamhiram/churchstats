@@ -96,11 +96,11 @@ export function SettingsSidebar({
             {debugSidebarItems.map((item) => {
               const active = isItemActive(item.href, pathname);
               const badgeCount =
-                item.badgeCount === "meetingDuplicates"
+                "badgeCount" in item && item.badgeCount === "meetingDuplicates"
                   ? meetingDuplicateGroupCount
-                  : item.badgeCount === "duplicateAttendance"
+                  : "badgeCount" in item && item.badgeCount === "duplicateAttendance"
                     ? duplicateAttendanceGroupCount
-                    : item.badgeCount === "enrollmentUncertain"
+                    : "badgeCount" in item && item.badgeCount === "enrollmentUncertain"
                       ? enrollmentUncertainCount
                       : 0;
               return (
