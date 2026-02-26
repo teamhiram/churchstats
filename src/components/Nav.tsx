@@ -4,35 +4,22 @@ import { useDisplaySettings } from "@/contexts/DisplaySettingsContext";
 import { useLocality } from "@/contexts/LocalityContext";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createPortal } from "react-dom";
-import { useState, useRef, useEffect, useLayoutEffect, type RefObject } from "react";
+import { useState, useRef, useEffect } from "react";
 
-const baseLinks: { href?: string; label: string; type?: "dropdown"; children?: { href: string; label: string }[] }[] = [
+const baseLinks: { href: string; label: string }[] = [
   { href: "/dashboard", label: "ダッシュボード" },
   { href: "/meetings/list", label: "週別集計" },
   { href: "/meetings", label: "出欠登録" },
   { href: "/members", label: "名簿管理" },
-  { href: "/settings/organization", label: "枠組設定" },
-  { href: "/settings", label: "システム設定" },
-  { href: "/settings/account", label: "アカウント詳細" },
-  { type: "dropdown", label: "デバッグ", children: [{ href: "/debug/numbers", label: "各種数値" }, { href: "/debug/tables", label: "全テーブル" }, { href: "/meetings/list/duplicates", label: "重複出席" }] },
 ];
 
-/** モバイルフッター用: 速報｜週別｜出欠｜名簿｜設定（設定はサブメニュー） */
+/** モバイルフッター用: 速報｜週別｜出欠｜名簿｜設定 */
 const footerMainItems = [
   { href: "/dashboard", label: "速報" },
   { href: "/meetings/list", label: "週別" },
   { href: "/meetings", label: "出欠" },
   { href: "/members", label: "名簿" },
 ] as const;
-
-const settingsSubItems = [
-  { href: "/settings/organization", label: "枠組設定" },
-  { href: "/settings", label: "システム設定" },
-  { href: "/settings/account", label: "アカウント詳細" },
-] as const;
-
-const debugSubItems = [{ href: "/debug/numbers", label: "各種数値" }, { href: "/debug/tables", label: "全テーブル" }, { href: "/meetings/list/duplicates", label: "重複出席" }] as const;
 
 type NavProps = {
   displayName?: string | null;
@@ -43,61 +30,22 @@ type NavProps = {
   showDebug?: boolean;
 };
 
-function isSettingsPath(pathname: string) {
-  return pathname.startsWith("/settings");
+/** 設定画面（サイドバー付き）のパスか */
+function isSettingsSectionPath(pathname: string, showDebug: boolean) {
+  if (pathname.startsWith("/settings")) return true;
+  if (showDebug && (pathname.startsWith("/debug") || pathname.startsWith("/meetings/list/duplicates"))) return true;
+  return false;
 }
 
 const contentWidthClass = (fullWidth: boolean) =>
   fullWidth ? "w-full" : "w-full max-w-7xl mx-auto";
 
-function DebugDropdownPc({
-  children,
-  pathname,
-  onClose,
-  anchorRef,
-}: {
-  children: { href: string; label: string }[];
-  pathname: string;
-  onClose: () => void;
-  anchorRef: RefObject<HTMLDivElement | null>;
-}) {
-  const [rect, setRect] = useState<{ top: number; left: number } | null>(null);
-  useLayoutEffect(() => {
-    const el = anchorRef.current;
-    if (!el) return;
-    const update = () => {
-      const r = el.getBoundingClientRect();
-      setRect({ top: r.bottom, left: r.left });
-    };
-    update();
-    const obs = new ResizeObserver(update);
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [anchorRef]);
-  if (rect === null) return null;
+/** アカウント詳細用の人物アイコン（24x24 viewBox） */
+function PersonIcon({ className }: { className?: string }) {
   return (
-    <div
-      className="fixed w-40 rounded-b-lg border border-t-0 border-amber-500/30 bg-slate-700 py-1 shadow-lg z-[100]"
-      style={{ top: rect.top, left: rect.left }}
-      role="menu"
-    >
-      {children.map(({ href, label }) => {
-        const childActive = pathname.startsWith(href);
-        return (
-          <Link
-            key={href}
-            href={href}
-            onClick={onClose}
-            className={`block px-4 py-2 text-sm touch-target ${
-              childActive ? "bg-primary-600 text-white font-medium" : "text-slate-200 hover:bg-slate-600"
-            }`}
-            role="menuitem"
-          >
-            {label}
-          </Link>
-        );
-      })}
-    </div>
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+    </svg>
   );
 }
 
@@ -108,16 +56,11 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
   const showLocalitySwitcher =
     localitiesByArea.some((s) => s.prefectures.some((p) => p.localities.length > 0)) &&
     localitiesByArea.flatMap((s) => s.prefectures).flatMap((p) => p.localities).length > 1;
+  /** その他タブを隠した表示用セクション */
+  const visibleSections = localitiesByArea.filter((s) => s.areaName !== "その他");
   const [localityPopupOpen, setLocalityPopupOpen] = useState(false);
   const [localityPopupAreaIndex, setLocalityPopupAreaIndex] = useState(0);
   const localityPopupRef = useRef<HTMLDivElement>(null);
-  const [settingsSubOpen, setSettingsSubOpen] = useState(false);
-  const [debugSubOpen, setDebugSubOpen] = useState(false);
-  const links = showDebug ? baseLinks : baseLinks.filter((item) => item.type !== "dropdown" || item.label !== "デバッグ");
-  const settingsRef = useRef<HTMLDivElement>(null);
-  const debugRef = useRef<HTMLDivElement>(null);
-  const debugRefMobile = useRef<HTMLDivElement>(null);
-  const debugJustOpenedRef = useRef(false);
 
   useEffect(() => {
     if (!localityPopupOpen) return;
@@ -141,49 +84,32 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
   }, [localityPopupOpen]);
 
   useEffect(() => {
-    if (localityPopupOpen && currentLocalityId) {
-      const idx = localitiesByArea.findIndex((s) =>
+    if (localityPopupOpen && currentLocalityId && visibleSections.length > 0) {
+      const idx = visibleSections.findIndex((s) =>
         s.prefectures.some((p) => p.localities.some((l) => l.id === currentLocalityId))
       );
       if (idx >= 0) setLocalityPopupAreaIndex(idx);
+      else setLocalityPopupAreaIndex(0);
     }
-  }, [localityPopupOpen, currentLocalityId, localitiesByArea]);
-
-  useEffect(() => {
-    if (!settingsSubOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
-        setSettingsSubOpen(false);
-      }
-    };
-    document.addEventListener("click", handleClickOutside);
-    return () => document.removeEventListener("click", handleClickOutside);
-  }, [settingsSubOpen]);
-
-  useEffect(() => {
-    if (!debugSubOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (debugJustOpenedRef.current) {
-        debugJustOpenedRef.current = false;
-        return;
-      }
-      const target = e.target as Node;
-      const insidePc = debugRef.current?.contains(target);
-      const insideMobile = debugRefMobile.current?.contains(target);
-      if (!insidePc && !insideMobile) setDebugSubOpen(false);
-    };
-    document.addEventListener("click", handleClickOutside);
-    return () => document.removeEventListener("click", handleClickOutside);
-  }, [debugSubOpen]);
+  }, [localityPopupOpen, currentLocalityId, visibleSections]);
 
   return (
     <>
-      {/* モバイル: 薄い固定ヘッダー（アプリ名＋バージョンバッジ） */}
-      <header className="md:hidden fixed top-0 left-0 right-0 z-40 h-8 bg-slate-800 flex items-center justify-center px-3">
-        <span className="text-white text-sm font-medium">召会生活統計</span>
-        <span className="ml-1.5 inline-flex items-baseline">
-          <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.17</span>
-        </span>
+      {/* モバイル: 薄い固定ヘッダー（アプリ名＋バージョンバッジ＋アカウントアイコン） */}
+      <header className="md:hidden fixed top-0 left-0 right-0 z-40 h-8 bg-slate-800 flex items-center justify-between px-3">
+        <div className="flex items-center">
+          <span className="text-white text-sm font-medium">召会生活統計</span>
+          <span className="ml-1.5 inline-flex items-baseline">
+            <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.18</span>
+          </span>
+        </div>
+        <Link
+          href="/settings/account"
+          aria-label="アカウント詳細"
+          className={`p-1.5 rounded touch-target ${pathname.startsWith("/settings/account") ? "text-primary-400 bg-slate-700" : "text-slate-300 hover:bg-slate-700"}`}
+        >
+          <PersonIcon className="w-5 h-5" />
+        </Link>
       </header>
 
       {/* PC: トップ固定ナビゲーション */}
@@ -191,7 +117,7 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
         <div className={`h-full flex items-center justify-between px-4 ${contentWidthClass(fullWidth)}`}>
           <div className="flex items-center h-full shrink-0 mr-2 gap-2">
             <span className="text-white text-sm font-semibold whitespace-nowrap">召会生活統計</span>
-            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.17</span>
+            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.18</span>
             {showLocalitySwitcher && (
               <div className="relative">
                 <button
@@ -216,15 +142,15 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
                   >
                     <div
                       ref={localityPopupRef}
-                      className="w-full max-w-md max-h-[80vh] overflow-hidden rounded-xl border border-slate-600 bg-slate-800 shadow-xl flex flex-col"
+                      className="w-full max-w-md max-h-[80vh] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl flex flex-col"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-600 bg-slate-800 px-4 py-3 shrink-0">
-                        <h2 className="text-sm font-semibold text-white">地方を選択</h2>
+                      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 shrink-0">
+                        <h2 className="text-sm font-semibold text-slate-800">地方を選択</h2>
                         <button
                           type="button"
                           onClick={() => setLocalityPopupOpen(false)}
-                          className="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-white"
+                          className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                           aria-label="閉じる"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -233,8 +159,8 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
                         </button>
                       </div>
                       {/* 地域タブ */}
-                      <div className="flex border-b border-slate-600 overflow-x-auto shrink-0" role="tablist" aria-label="地域">
-                        {localitiesByArea.map((section, idx) => (
+                      <div className="flex border-b border-slate-200 overflow-x-auto shrink-0" role="tablist" aria-label="地域">
+                        {visibleSections.map((section, idx) => (
                           <button
                             key={section.areaId ?? `other-${idx}`}
                             type="button"
@@ -243,10 +169,10 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
                             aria-controls={`locality-panel-${idx}`}
                             id={`locality-tab-${idx}`}
                             onClick={() => setLocalityPopupAreaIndex(idx)}
-                            className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap touch-target border-b-2 -mb-px transition-colors ${
+                            className={`px-3 py-2 text-xs font-medium whitespace-nowrap touch-target border-b-2 -mb-px transition-colors ${
                               localityPopupAreaIndex === idx
-                                ? "border-primary-500 text-white bg-slate-700"
-                                : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                                ? "border-primary-500 text-primary-600 bg-slate-50"
+                                : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50"
                             }`}
                           >
                             {section.areaName}
@@ -254,8 +180,8 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
                         ))}
                       </div>
                       {/* 都道府県は小ラベル、地方は横並びボタン（選択中タブ内） */}
-                      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden py-3">
-                        {localitiesByArea.map((section, sectionIdx) => (
+                      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden py-3 bg-white">
+                        {visibleSections.map((section, sectionIdx) => (
                           <div
                             key={section.areaId ?? `other-${sectionIdx}`}
                             id={`locality-panel-${sectionIdx}`}
@@ -281,7 +207,7 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
                                       className={`inline-flex items-center rounded-lg px-3 py-2 text-sm touch-target transition-colors ${
                                         loc.id === currentLocalityId
                                           ? "bg-primary-600 text-white font-medium"
-                                          : "bg-slate-700 text-slate-200 hover:bg-slate-600"
+                                          : "bg-slate-100 text-slate-800 hover:bg-slate-200"
                                       }`}
                                       role="menuitemradio"
                                       aria-checked={loc.id === currentLocalityId}
@@ -302,60 +228,18 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
             )}
           </div>
           <nav className="flex h-full overflow-x-auto">
-            {links.map((item) => {
-              if (item.type === "dropdown" && item.children) {
-                const isActive = item.children.some((c) => pathname.startsWith(c.href));
-                return (
-                  <div key={item.label} className="relative h-full flex items-stretch border-x border-amber-500/30" ref={debugRef}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        debugJustOpenedRef.current = true;
-                        setDebugSubOpen((o) => !o);
-                      }}
-                      className={`flex items-center h-full px-4 text-sm font-medium whitespace-nowrap touch-target ${
-                        isActive ? "bg-primary-600 text-white" : "text-amber-400 hover:bg-slate-700"
-                      }`}
-                      aria-expanded={debugSubOpen}
-                      aria-haspopup="true"
-                    >
-                      {item.label}
-                      <svg
-                        className={`ml-1 w-4 h-4 transition-transform ${debugSubOpen ? "rotate-180" : ""}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {debugSubOpen &&
-                      createPortal(
-                        <DebugDropdownPc
-                          children={item.children}
-                          pathname={pathname}
-                          onClose={() => setDebugSubOpen(false)}
-                          anchorRef={debugRef}
-                        />,
-                        document.body
-                      )}
-                  </div>
-                );
-              }
-              const { href, label } = item as { href: string; label: string };
+            {baseLinks.map((item) => {
+              const { href, label } = item;
               const isActive =
                 pathname === href ||
                 (href === "/meetings" &&
                   pathname.startsWith("/meetings") &&
-                  !pathname.startsWith("/meetings/list")) ||
-                (href === "/settings" && pathname === "/settings") ||
-                (href === "/settings/organization" && pathname.startsWith("/settings/organization")) ||
-                (href === "/settings/account" && pathname.startsWith("/settings/account"));
+                  !pathname.startsWith("/meetings/list"));
               return (
-                  <Link
+                <Link
                   key={href}
                   href={href}
-                  className={`flex items-center h-full px-4 text-sm font-medium whitespace-nowrap touch-target ${
+                  className={`flex items-center h-full px-4 text-sm font-medium whitespace-nowrap touch-target border-r border-slate-600/50 ${
                     isActive ? "bg-primary-600 text-white" : "text-slate-300 hover:bg-slate-700"
                   }`}
                 >
@@ -363,6 +247,27 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
                 </Link>
               );
             })}
+            <Link
+              href="/settings"
+              className={`flex items-center h-full px-4 text-sm font-medium whitespace-nowrap touch-target border-r border-slate-600/50 ${
+                isSettingsSectionPath(pathname, !!showDebug) && !pathname.startsWith("/settings/account")
+                  ? "bg-primary-600 text-white"
+                  : "text-slate-300 hover:bg-slate-700"
+              }`}
+            >
+              設定
+            </Link>
+            <Link
+              href="/settings/account"
+              aria-label="アカウント詳細"
+              className={`flex items-center justify-center h-full px-4 touch-target ${
+                pathname.startsWith("/settings/account")
+                  ? "bg-primary-600 text-white"
+                  : "text-slate-300 hover:bg-slate-700"
+              }`}
+            >
+              <PersonIcon className="w-5 h-5" />
+            </Link>
           </nav>
         </div>
       </header>
@@ -388,88 +293,17 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
               </Link>
             );
           })}
-          <div className="relative flex-1 h-full flex" ref={settingsRef}>
-            <button
-              type="button"
-              onClick={() => setSettingsSubOpen((o) => !o)}
-              className={`w-full h-full flex items-center justify-center text-sm font-medium min-h-0 ${
-                isSettingsPath(pathname) ? "text-white bg-primary-600" : "text-slate-300 active:bg-slate-700"
-              }`}
-              aria-expanded={settingsSubOpen}
-              aria-haspopup="true"
-              aria-label="設定"
-            >
-              設定
-            </button>
-            {settingsSubOpen && (
-              <div
-                className="absolute bottom-full right-4 left-auto mb-1 w-40 rounded-lg border border-slate-600 bg-slate-700 py-1 shadow-lg z-50"
-                role="menu"
-              >
-                {settingsSubItems.map(({ href, label }) => {
-                  const isActive =
-                    (href === "/settings/organization" && pathname.startsWith("/settings/organization")) ||
-                    (href === "/settings" && pathname === "/settings") ||
-                    (href === "/settings/account" && pathname.startsWith("/settings/account"));
-                  return (
-                    <Link
-                      key={href}
-                      href={href}
-                      onClick={() => setSettingsSubOpen(false)}
-                      className={`block px-3 py-2.5 text-sm touch-target ${
-                        isActive ? "bg-primary-600 text-white font-medium" : "text-slate-200 hover:bg-slate-600"
-                      }`}
-                      role="menuitem"
-                    >
-                      {label}
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          {showDebug && (
-            <div className="relative flex-1 h-full flex border-x border-amber-500/30" ref={debugRefMobile}>
-              <button
-                type="button"
-                onClick={() => {
-                  debugJustOpenedRef.current = true;
-                  setDebugSubOpen((o) => !o);
-                }}
-                className={`w-full h-full flex items-center justify-center text-sm font-medium min-h-0 ${
-                  pathname.startsWith("/debug") || pathname.startsWith("/meetings/list/duplicates") ? "text-white bg-primary-600" : "text-amber-400 active:bg-slate-700"
-                }`}
-                aria-expanded={debugSubOpen}
-                aria-haspopup="true"
-                aria-label="デバッグ"
-              >
-                デバッグ
-              </button>
-              {debugSubOpen && (
-                <div
-                  className="absolute bottom-full right-0 left-auto mb-1 w-36 rounded-lg border border-amber-500/30 bg-slate-700 py-1 shadow-lg z-50"
-                  role="menu"
-                >
-                  {debugSubItems.map(({ href, label }) => {
-                    const isActive = pathname.startsWith(href);
-                    return (
-                      <Link
-                        key={href}
-                        href={href}
-                        onClick={() => setDebugSubOpen(false)}
-                        className={`block px-3 py-2.5 text-sm touch-target ${
-                          isActive ? "bg-primary-600 text-white font-medium" : "text-slate-200 hover:bg-slate-600"
-                        }`}
-                        role="menuitem"
-                      >
-                        {label}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+          <Link
+            href="/settings"
+            className={`flex-1 h-full flex items-center justify-center text-sm font-medium min-h-0 ${
+              isSettingsSectionPath(pathname, !!showDebug) && !pathname.startsWith("/settings/account")
+                ? "text-white bg-primary-600"
+                : "text-slate-300 active:bg-slate-700"
+            }`}
+            aria-label="設定"
+          >
+            設定
+          </Link>
         </nav>
       </footer>
     </>
