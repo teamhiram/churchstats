@@ -18,7 +18,7 @@ export default async function MembersPage({
     .select("id, name, furigana, gender, is_local, district_id, group_id, locality_id, age_group, is_baptized, baptism_year, baptism_month, baptism_day, baptism_date_precision, language_main, language_sub, follower_id, updated_at, local_member_join_date, local_member_leave_date")
     .order("name");
   if (currentLocalityId != null) {
-    membersQuery.or(`locality_id.eq.${currentLocalityId},locality_id.is.null`);
+    membersQuery.eq("locality_id", currentLocalityId);
   }
   const { data: members } = await membersQuery;
 

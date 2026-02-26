@@ -21,7 +21,7 @@ export default async function DashboardPage() {
   const membersCountQuery = supabase.from("members").select("id", { count: "exact", head: true });
   const districtsCountQuery = supabase.from("districts").select("id", { count: "exact", head: true });
   if (currentLocalityId != null) {
-    membersCountQuery.or(`locality_id.eq.${currentLocalityId},locality_id.is.null`);
+    membersCountQuery.eq("locality_id", currentLocalityId);
     districtsCountQuery.eq("locality_id", currentLocalityId);
   }
 
@@ -52,7 +52,7 @@ export default async function DashboardPage() {
       supabase
         .from("members")
         .select("id, name, is_local, district_id, group_id, is_baptized")
-        .or(`locality_id.eq.${currentLocalityId},locality_id.is.null`),
+        .eq("locality_id", currentLocalityId),
     ]);
   } else if (currentLocalityId != null) {
     groupsCountRes = { count: 0 };

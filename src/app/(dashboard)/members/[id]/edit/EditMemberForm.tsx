@@ -83,15 +83,15 @@ type Props = {
     local_member_leave_date: string | null;
     enrollment_periods?: { period_no: number; join_date: string | null; leave_date: string | null; is_uncertain: boolean; memo: string | null }[];
   };
-  districts: { id: string; name: string }[];
+  districts: { id: string; name: string; locality_id: string }[];
   groups: { id: string; name: string; district_id: string }[];
-  /** 編集画面用。ゲスト時は地方ドロップダウンを出さないため未使用。 */
+  /** 編集画面用。所属地方の表示と地区フィルタに使用。 */
   localities?: { id: string; name: string }[];
   /** 名簿一覧から編集に来たときのクエリ（保存後・キャンセルで /members?filter=unassigned 等に戻す） */
   returnSearchParams?: { filter?: string; type?: string };
 };
 
-export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts, groups, localities: _localities, returnSearchParams }: Props) {
+export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts, groups, localities, returnSearchParams }: Props) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { currentLocalityId } = useLocality();
@@ -132,6 +132,24 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
   const [conflict, setConflict] = useState(false);
 
   const filteredGroups = districtId ? groups.filter((g) => g.district_id === districtId) : groups;
+  /** 選択した地方に属する地区のみ（所属地方で絞り込み） */
+  const districtsInLocality = initial.locality_id
+    ? districts.filter((d) => d.locality_id === initial.locality_id)
+    : [];
+  /** 地区の選択肢：所属地方の地区 + 現在選択中の地区（他地方の場合は表示用に含める） */
+  const districtOptions = [
+    "",
+    ...districtsInLocality.map((d) => d.id),
+    ...(districtId && !districtsInLocality.some((d) => d.id === districtId) ? [districtId] : []),
+  ];
+  const getDistrictLabel = (v: string) => {
+    if (!v) return "選択";
+    const d = districtsInLocality.find((x) => x.id === v) ?? districts.find((x) => x.id === v);
+    return d?.name ?? "（他地方）";
+  };
+  const localityName = initial.locality_id && localities?.length
+    ? (localities.find((l) => l.id === initial.locality_id)?.name ?? "（不明）")
+    : "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -266,6 +284,14 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
       </div>
       {isLocal ? (
         <>
+          {initial.locality_id && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">所属地方</label>
+              <p className="text-sm text-slate-800 py-1" aria-live="polite">
+                {localityName || "（不明）"}
+              </p>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">地区</label>
             <div className="flex flex-wrap items-center gap-2">
@@ -277,8 +303,8 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
                   setDistrictTier("semi");
                   setGroupTier("semi");
                 }}
-                options={["", ...districts.map((d) => d.id)]}
-                getLabel={(v) => (v ? districts.find((d) => d.id === v)?.name ?? "" : "選択")}
+                options={districtOptions}
+                getLabel={getDistrictLabel}
               />
               {districtId ? (
                 <select

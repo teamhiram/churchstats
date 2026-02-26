@@ -76,6 +76,7 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const localityPopupRef = useRef<HTMLDivElement>(null);
   const settingsModalRef = useRef<HTMLDivElement>(null);
+  const prevLocalityPopupOpen = useRef(false);
 
   useEffect(() => {
     if (!localityPopupOpen) return;
@@ -110,7 +111,9 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
   }, [localityPopupOpen, settingsModalOpen]);
 
   useEffect(() => {
-    if (localityPopupOpen && currentLocalityId && visibleSections.length > 0) {
+    const justOpened = localityPopupOpen && !prevLocalityPopupOpen.current;
+    prevLocalityPopupOpen.current = localityPopupOpen;
+    if (justOpened && currentLocalityId && visibleSections.length > 0) {
       const idx = visibleSections.findIndex((s) =>
         s.prefectures.some((p) => p.localities.some((l) => l.id === currentLocalityId))
       );
@@ -126,7 +129,7 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
         <div className="flex items-center min-w-0">
           <span className="text-white text-sm font-medium">召会生活統計</span>
           <span className="ml-1.5 inline-flex items-baseline shrink-0">
-            <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.19</span>
+            <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.20</span>
           </span>
         </div>
         {showLocalitySwitcher && (
@@ -151,7 +154,7 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
         <div className={`h-full flex items-center justify-between px-4 ${contentWidthClass(fullWidth)}`}>
           <div className="flex items-center h-full shrink-0 mr-2 gap-2">
             <span className="text-white text-sm font-semibold whitespace-nowrap">召会生活統計</span>
-            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.19</span>
+            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.20</span>
             {showLocalitySwitcher && (
               <div className="relative">
                 <button
@@ -222,10 +225,13 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
           role="dialog"
           aria-modal="true"
           aria-label="地方を選択"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setLocalityPopupOpen(false);
+          }}
         >
           <div
             ref={localityPopupRef}
-            className="w-full max-w-md max-h-[80vh] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl flex flex-col"
+            className="relative z-[101] w-full max-w-md max-h-[80vh] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 shrink-0">
@@ -252,7 +258,8 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
                   aria-controls={`locality-panel-${idx}`}
                   id={`locality-tab-${idx}`}
                   onClick={() => setLocalityPopupAreaIndex(idx)}
-                  className={`px-3 py-2 text-xs font-medium whitespace-nowrap touch-target border-b-2 -mb-px transition-colors ${
+                  onPointerDown={() => setLocalityPopupAreaIndex(idx)}
+                  className={`px-3 py-2 text-xs font-medium whitespace-nowrap touch-target border-b-2 -mb-px transition-colors cursor-pointer ${
                     localityPopupAreaIndex === idx
                       ? "border-primary-500 text-primary-600 bg-slate-50"
                       : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50"

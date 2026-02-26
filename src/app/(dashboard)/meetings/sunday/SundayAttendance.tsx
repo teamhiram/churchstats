@@ -42,6 +42,7 @@ type MemberRow = {
   age_group: Category | null;
   is_baptized: boolean;
   is_local?: boolean;
+  locality_id?: string | null;
   local_member_join_date?: string | null;
   local_member_leave_date?: string | null;
   locality_name?: string;
@@ -317,7 +318,7 @@ export function SundayAttendance({
 
         const { data: membersData } = await supabase
           .from("members")
-          .select("id, name, furigana, district_id, group_id, age_group, is_baptized, is_local, local_member_join_date, local_member_leave_date")
+          .select("id, name, furigana, district_id, group_id, age_group, is_baptized, locality_id, local_member_join_date, local_member_leave_date")
           .in("district_id", districtIdsToLoad)
           .order("name");
         if (cancelled) return;
@@ -355,7 +356,7 @@ export function SundayAttendance({
         if (guestIds.length > 0) {
 const { data: guestData } = await supabase
           .from("members")
-          .select("id, name, furigana, district_id, group_id, age_group, is_baptized, is_local, local_member_join_date, local_member_leave_date")
+          .select("id, name, furigana, district_id, group_id, age_group, is_baptized, locality_id, local_member_join_date, local_member_leave_date")
           .in("id", guestIds);
         guests = (guestData ?? []) as MemberRow[];
       }
@@ -405,7 +406,7 @@ const { data: guestData } = await supabase
         // #endregion
         const { data: membersData } = await supabase
           .from("members")
-          .select("id, name, furigana, district_id, group_id, age_group, is_baptized, is_local, local_member_join_date, local_member_leave_date")
+          .select("id, name, furigana, district_id, group_id, age_group, is_baptized, locality_id, local_member_join_date, local_member_leave_date")
           .in("district_id", districtIdsInLocality)
           .order("name");
         if (cancelled) return;
@@ -441,7 +442,7 @@ const { data: guestData } = await supabase
         if (guestIds.length > 0) {
           const { data: guestData } = await supabase
             .from("members")
-            .select("id, name, furigana, district_id, group_id, age_group, is_baptized, is_local, local_member_join_date, local_member_leave_date")
+            .select("id, name, furigana, district_id, group_id, age_group, is_baptized, locality_id, local_member_join_date, local_member_leave_date")
             .in("id", guestIds);
           guests = (guestData ?? []) as MemberRow[];
         }
@@ -545,7 +546,7 @@ const { data: guestData } = await supabase
       setMeetingId(mid);
       const { data: membersRes } = await supabase
         .from("members")
-        .select("id, name, furigana, district_id, group_id, age_group, is_baptized, is_local, local_member_join_date, local_member_leave_date")
+        .select("id, name, furigana, district_id, group_id, age_group, is_baptized, locality_id, local_member_join_date, local_member_leave_date")
         .eq("district_id", districtId)
         .order("name");
       if (cancelled) return;
@@ -676,7 +677,7 @@ const { data: guestData } = await supabase
       if (guestIds.length > 0) {
         const { data: guestData } = await supabase
           .from("members")
-          .select("id, name, furigana, district_id, group_id, age_group, is_baptized, is_local, local_member_join_date, local_member_leave_date")
+          .select("id, name, furigana, district_id, group_id, age_group, is_baptized, locality_id, local_member_join_date, local_member_leave_date")
           .in("id", guestIds);
         guests = (guestData ?? []) as MemberRow[];
       }
@@ -774,7 +775,7 @@ const { data: guestData } = await supabase
     supabase
       .from("members")
       .select(
-        "id, name, furigana, district_id, group_id, age_group, is_baptized, is_local, local_member_join_date, local_member_leave_date, districts(name, localities(name)), groups(name)"
+        "id, name, furigana, district_id, group_id, age_group, is_baptized, locality_id, local_member_join_date, local_member_leave_date, districts(name, localities(name)), groups(name)"
       )
       .ilike("name", `%${searchQuery.trim()}%`)
       .limit(15)
@@ -789,6 +790,7 @@ const { data: guestData } = await supabase
             group_id: row.group_id as string | null,
             age_group: row.age_group as Category | null,
             is_baptized: Boolean(row.is_baptized),
+            locality_id: (row.locality_id as string | null) ?? null,
             local_member_join_date: (row.local_member_join_date as string | null) ?? null,
             local_member_leave_date: (row.local_member_leave_date as string | null) ?? null,
             district_name: dist?.name,
@@ -1113,6 +1115,8 @@ const { data: guestData } = await supabase
                         const did = member?.district_id ?? "";
                         const meetId = did ? meetingIdMap[did] : null;
                         if (!meetId) continue;
+                        const meetingLocalityId = did ? districts.find((d) => d.id === did)?.locality_id : null;
+                        const recordedIsLocal = Boolean(member?.locality_id != null && meetingLocalityId != null && member.locality_id === meetingLocalityId);
                         if (rec.id) {
                           await supabase.from("lordsday_meeting_attendance").upsert({
                             id: rec.id,
@@ -1122,7 +1126,7 @@ const { data: guestData } = await supabase
                             is_online: rec.is_online ?? false,
                             is_away: rec.is_away ?? false,
                             attended: rec.attended ?? true,
-                            recorded_is_local: Boolean(member?.is_local ?? true),
+                            recorded_is_local: recordedIsLocal,
                           }, { onConflict: "id" });
                         } else {
                           const { data: { user } } = await supabase.auth.getUser();
@@ -1131,7 +1135,7 @@ const { data: guestData } = await supabase
                             member_id: rec.member_id,
                             recorded_category: member?.age_group ?? null,
                             recorded_is_baptized: Boolean(member?.is_baptized),
-                            recorded_is_local: Boolean(member?.is_local ?? true),
+                            recorded_is_local: recordedIsLocal,
                             district_id: member?.district_id ?? null,
                             group_id: member?.group_id ?? null,
                             memo: memos.get(rec.member_id) || null,
@@ -1143,6 +1147,7 @@ const { data: guestData } = await supabase
                         }
                       }
                     } else if (mid) {
+                      const currentLocalityId = localityId ?? districts.find((d) => d.id === districtId)?.locality_id ?? null;
                       const meetingIdMap =
                         localityId && isCombined
                           ? await ensureSundayMeetingsBatch(
@@ -1154,6 +1159,7 @@ const { data: guestData } = await supabase
                       for (const [, rec] of attendanceMap) {
                         const member = roster.find((m) => m.id === rec.member_id);
                         const meetId = meetingIdMap[member?.district_id ?? ""] ?? mid;
+                        const recordedIsLocal = Boolean(currentLocalityId != null && member?.locality_id != null && member.locality_id === currentLocalityId);
                         if (rec.id) {
                           await supabase.from("lordsday_meeting_attendance").update({
                             meeting_id: meetId,
@@ -1161,7 +1167,7 @@ const { data: guestData } = await supabase
                             is_online: rec.is_online ?? false,
                             is_away: rec.is_away ?? false,
                             attended: rec.attended ?? true,
-                            recorded_is_local: Boolean(member?.is_local ?? true),
+                            recorded_is_local: recordedIsLocal,
                           }).eq("id", rec.id);
                         } else {
                           const { data: { user } } = await supabase.auth.getUser();
@@ -1170,7 +1176,7 @@ const { data: guestData } = await supabase
                             member_id: rec.member_id,
                             recorded_category: member?.age_group ?? null,
                             recorded_is_baptized: Boolean(member?.is_baptized),
-                            recorded_is_local: Boolean(member?.is_local ?? true),
+                            recorded_is_local: recordedIsLocal,
                             district_id: member?.district_id ?? null,
                             group_id: member?.group_id ?? null,
                             memo: memos.get(rec.member_id) || null,

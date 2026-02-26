@@ -60,7 +60,7 @@ export default async function EditMemberPage({
     "岐阜", "名古屋", "豊川", "鈴鹿", "大阪", "東大阪", "京都", "神戸", "奈良", "広島",
     "徳島", "北九州", "福岡", "那覇",
   ];
-  const { data: districts } = await supabase.from("districts").select("id, name").order("name");
+  const { data: districts } = await supabase.from("districts").select("id, name, locality_id").order("name");
   const { data: groups } = await supabase.from("groups").select("id, name, district_id").order("name");
   const { data: localitiesRaw } = await supabase.from("localities").select("id, name");
   const byName = new Map((localitiesRaw ?? []).map((l) => [l.name, l]));
