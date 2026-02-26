@@ -10,7 +10,8 @@ function parseYmd(s: string): Date {
 }
 
 function getWeekStartForDate(dateStr: string): string {
-  const d = parseYmd(dateStr);
+  const dateOnly = dateStr.slice(0, 10);
+  const d = parseYmd(dateOnly);
   const sunday = addDays(d, -getDay(d));
   return format(sunday, "yyyy-MM-dd");
 }
@@ -63,7 +64,7 @@ export async function getAttendanceMatrixData(
   const [meetingsRes, groupRecordsRes, prayerRecordsRes, dispatchRes, membersRes, districtsRes] =
     await Promise.all([
       supabase
-        .from("meetings")
+        .from("lordsday_meeting_records")
         .select("id, event_date, meeting_type, district_id")
         .eq("meeting_type", "main")
         .gte("event_date", weekStartRangeMin)
@@ -171,7 +172,7 @@ export async function getAttendanceMatrixData(
     const results = await Promise.all(
       chunks.map((ids) =>
         supabase
-          .from("attendance_records")
+          .from("lordsday_meeting_attendance")
           .select("meeting_id, member_id, attended")
           .in("meeting_id", ids)
       )
@@ -291,4 +292,368 @@ export async function getAttendanceMatrixData(
     }));
 
   return { weeks, members, districts };
+}
+
+/** 個人出欠マトリクス用: 1メンバーの指定年の週別・種別出欠 */
+export type MemberAttendanceMatrixData = {
+  weeks: AttendanceMatrixWeek[];
+  prayer: Record<string, boolean>;
+  main: Record<string, boolean>;
+  group: Record<string, boolean>;
+  dispatch: Record<string, boolean>;
+  /** 祈りの週別メモ（weekStart -> メモ） */
+  prayerMemos: Record<string, string>;
+  /** 主日の週別メモ（weekStart -> メモ） */
+  mainMemos: Record<string, string>;
+  /** 小組の週別メモ（weekStart -> メモ） */
+  groupMemos: Record<string, string>;
+  /** 派遣の週別メモ（weekStart -> メモ）。派遣が「完了」の週のみ */
+  dispatchMemos: Record<string, string>;
+};
+
+export async function getMemberAttendanceMatrixData(
+  memberId: string,
+  year: number
+): Promise<MemberAttendanceMatrixData> {
+  const supabase = await createClient();
+  const weeksData = getSundayWeeksInYear(year);
+  const weekStarts = weeksData.map((w) => formatDateYmd(w.weekStart));
+  const weekStartRangeMin = weekStarts[0] ?? `${year}-01-01`;
+  const weekStartRangeMax = weekStarts[weekStarts.length - 1] ?? `${year}-12-31`;
+  const weekSet = new Set(weekStarts);
+
+  const [meetingsRes, groupRecordsRes, prayerRecordsRes, dispatchRes] = await Promise.all([
+    supabase
+      .from("lordsday_meeting_records")
+      .select("id, event_date, meeting_type")
+      .eq("meeting_type", "main")
+      .gte("event_date", weekStartRangeMin)
+      .lte("event_date", weekStartRangeMax),
+    supabase
+      .from("group_meeting_records")
+      .select("id, week_start")
+      .gte("week_start", weekStartRangeMin)
+      .lte("week_start", weekStartRangeMax),
+    supabase
+      .from("prayer_meeting_records")
+      .select("id, week_start")
+      .gte("week_start", weekStartRangeMin)
+      .lte("week_start", weekStartRangeMax),
+    supabase
+      .from("organic_dispatch_records")
+      .select("member_id, week_start, dispatch_type, dispatch_date, dispatch_memo")
+      .eq("member_id", memberId)
+      .gte("week_start", weekStartRangeMin)
+      .lte("week_start", weekStartRangeMax),
+  ]);
+
+  const meetings = (meetingsRes.data ?? []) as { id: string; event_date: string }[];
+  const groupRecords = (groupRecordsRes.data ?? []) as { id: string; week_start: string }[];
+  const prayerRecords = (prayerRecordsRes.data ?? []) as { id: string; week_start: string }[];
+  const dispatchRows = (dispatchRes.data ?? []) as {
+    member_id: string;
+    week_start: string;
+    dispatch_type: string | null;
+    dispatch_date: string | null;
+    dispatch_memo: string | null;
+  }[];
+
+  const mainMeetingIds = new Set(meetings.map((m) => m.id));
+  const meetingIdToDate = new Map(meetings.map((m) => [m.id, m.event_date]));
+  const groupRecordIdToWeekStart = new Map(groupRecords.map((r) => [r.id, r.week_start]));
+  const prayerRecordIdToWeekStart = new Map(prayerRecords.map((r) => [r.id, r.week_start]));
+
+  const prayer: Record<string, boolean> = {};
+  const main: Record<string, boolean> = {};
+  const mainMemos: Record<string, string> = {};
+  const group: Record<string, boolean> = {};
+  const dispatch: Record<string, boolean> = {};
+  const prayerMemos: Record<string, string> = {};
+  const groupMemos: Record<string, string> = {};
+
+  if (prayerRecords.length > 0) {
+    const recordIds = prayerRecords.map((r) => r.id);
+    const chunks = chunk(recordIds, CHUNK_SIZE);
+    const results = await Promise.all(
+      chunks.map((ids) =>
+        supabase
+          .from("prayer_meeting_attendance")
+          .select("prayer_meeting_record_id, attended, memo")
+          .eq("member_id", memberId)
+          .in("prayer_meeting_record_id", ids)
+      )
+    );
+    const raw = results.flatMap(
+      (r) => (r.data ?? []) as { prayer_meeting_record_id: string; attended?: boolean; memo?: string | null }[]
+    );
+    raw.forEach((a) => {
+      const weekStart = prayerRecordIdToWeekStart.get(a.prayer_meeting_record_id);
+      if (!weekStart || !weekSet.has(weekStart)) return;
+      const memoTrim = a.memo?.trim();
+      if (memoTrim) prayerMemos[weekStart] = memoTrim;
+      if (a.attended !== false) prayer[weekStart] = true;
+    });
+  }
+
+  if (mainMeetingIds.size > 0) {
+    const meetingIds = [...mainMeetingIds];
+    const chunks = chunk(meetingIds, CHUNK_SIZE);
+    const results = await Promise.all(
+      chunks.map((ids) =>
+        supabase
+          .from("lordsday_meeting_attendance")
+          .select("meeting_id, attended, memo")
+          .eq("member_id", memberId)
+          .in("meeting_id", ids)
+      )
+    );
+    const raw = results.flatMap(
+      (r) => (r.data ?? []) as { meeting_id: string; attended?: boolean; memo?: string | null }[]
+    );
+    raw.forEach((a) => {
+      const eventDate = meetingIdToDate.get(a.meeting_id);
+      if (!eventDate) return;
+      const weekStart = getWeekStartForDate(eventDate);
+      if (!weekSet.has(weekStart)) return;
+      const memoTrim = a.memo?.trim();
+      if (memoTrim) mainMemos[weekStart] = memoTrim;
+      if (a.attended !== false) main[weekStart] = true;
+    });
+  }
+
+  if (groupRecords.length > 0) {
+    const recordIds = groupRecords.map((r) => r.id);
+    const chunks = chunk(recordIds, CHUNK_SIZE);
+    const results = await Promise.all(
+      chunks.map((ids) =>
+        supabase
+          .from("group_meeting_attendance")
+          .select("group_meeting_record_id, attended, memo")
+          .eq("member_id", memberId)
+          .in("group_meeting_record_id", ids)
+      )
+    );
+    const raw = results.flatMap(
+      (r) => (r.data ?? []) as { group_meeting_record_id: string; attended?: boolean; memo?: string | null }[]
+    );
+    raw.forEach((a) => {
+      const weekStart = groupRecordIdToWeekStart.get(a.group_meeting_record_id);
+      if (!weekStart || !weekSet.has(weekStart)) return;
+      const memoTrim = a.memo?.trim();
+      if (memoTrim) groupMemos[weekStart] = memoTrim;
+      if (a.attended !== false) group[weekStart] = true;
+    });
+  }
+
+  const completeDispatches = dispatchRows.filter(
+    (d) =>
+      d.dispatch_type != null &&
+      d.dispatch_type !== "" &&
+      d.dispatch_date != null &&
+      (d.dispatch_date as string) !== "" &&
+      d.dispatch_memo != null &&
+      (d.dispatch_memo as string).trim() !== ""
+  );
+  const dispatchMemos: Record<string, string> = {};
+  completeDispatches.forEach((d) => {
+    if (weekSet.has(d.week_start)) {
+      dispatch[d.week_start] = true;
+      dispatchMemos[d.week_start] = (d.dispatch_memo as string).trim();
+    }
+  });
+
+  const weeks: AttendanceMatrixWeek[] = weeksData.map((w) => ({
+    weekNumber: w.weekNumber,
+    weekStart: formatDateYmd(w.weekStart),
+  }));
+
+  return { weeks, prayer, main, group, dispatch, prayerMemos, mainMemos, groupMemos, dispatchMemos };
+}
+
+/** 個人召会生活概況用。主日統計がある週のみ集計対象とし、出席率・派遣回数を返す。 */
+export type MemberLifeOverviewResult = {
+  periodLabel: string;
+  weeksInScopeCount: number;
+  prayerAttended: number;
+  mainAttended: number;
+  groupAttended: number;
+  dispatchCount: number;
+};
+
+export async function getMemberLifeOverview(
+  memberId: string,
+  year: number
+): Promise<MemberLifeOverviewResult> {
+  const supabase = await createClient();
+  const weeksData = getSundayWeeksInYear(year);
+  const weekStarts = weeksData.map((w) => formatDateYmd(w.weekStart));
+  const weekStartRangeMin = weekStarts[0] ?? `${year}-01-01`;
+  const weekStartRangeMax = weekStarts[weekStarts.length - 1] ?? `${year}-12-31`;
+  const weekSet = new Set(weekStarts);
+  const weekStartToNumber = new Map(weeksData.map((w) => [formatDateYmd(w.weekStart), w.weekNumber]));
+  const weekStartToDate = new Map(weeksData.map((w) => [formatDateYmd(w.weekStart), w.weekStart]));
+
+  const [meetingsRes, groupRecordsRes, prayerRecordsRes, dispatchRes] = await Promise.all([
+    supabase
+      .from("lordsday_meeting_records")
+      .select("id, event_date, meeting_type")
+      .eq("meeting_type", "main")
+      .gte("event_date", weekStartRangeMin)
+      .lte("event_date", weekStartRangeMax),
+    supabase
+      .from("group_meeting_records")
+      .select("id, week_start")
+      .gte("week_start", weekStartRangeMin)
+      .lte("week_start", weekStartRangeMax),
+    supabase
+      .from("prayer_meeting_records")
+      .select("id, week_start")
+      .gte("week_start", weekStartRangeMin)
+      .lte("week_start", weekStartRangeMax),
+    supabase
+      .from("organic_dispatch_records")
+      .select("member_id, week_start, dispatch_type, dispatch_date, dispatch_memo")
+      .eq("member_id", memberId)
+      .gte("week_start", weekStartRangeMin)
+      .lte("week_start", weekStartRangeMax),
+  ]);
+
+  const meetings = (meetingsRes.data ?? []) as { id: string; event_date: string }[];
+  const groupRecords = (groupRecordsRes.data ?? []) as { id: string; week_start: string }[];
+  const prayerRecords = (prayerRecordsRes.data ?? []) as { id: string; week_start: string }[];
+  const dispatchRows = (dispatchRes.data ?? []) as {
+    member_id: string;
+    week_start: string;
+    dispatch_type: string | null;
+    dispatch_date: string | null;
+    dispatch_memo: string | null;
+  }[];
+
+  const mainMeetingIds = new Set(meetings.map((m) => m.id));
+  const meetingIdToDate = new Map(meetings.map((m) => [m.id, m.event_date]));
+  const groupRecordIdToWeekStart = new Map(groupRecords.map((r) => [r.id, r.week_start]));
+  const prayerRecordIdToWeekStart = new Map(prayerRecords.map((r) => [r.id, r.week_start]));
+
+  const weeksWithMain = new Set<string>();
+  meetings.forEach((m) => {
+    const weekStart = getWeekStartForDate(m.event_date);
+    if (weekSet.has(weekStart)) weeksWithMain.add(weekStart);
+  });
+  const inScopeWeekStarts = [...weeksWithMain].sort();
+  const cutoffWeekStart = inScopeWeekStarts[inScopeWeekStarts.length - 1] ?? null;
+  const weeksInScopeCount = inScopeWeekStarts.length;
+
+  const prayer: Record<string, boolean> = {};
+  const main: Record<string, boolean> = {};
+  const group: Record<string, boolean> = {};
+  const dispatch: Record<string, boolean> = {};
+
+  if (prayerRecords.length > 0) {
+    const recordIds = prayerRecords.map((r) => r.id);
+    const chunks = chunk(recordIds, CHUNK_SIZE);
+    const results = await Promise.all(
+      chunks.map((ids) =>
+        supabase
+          .from("prayer_meeting_attendance")
+          .select("prayer_meeting_record_id, attended")
+          .eq("member_id", memberId)
+          .in("prayer_meeting_record_id", ids)
+      )
+    );
+    const raw = results.flatMap(
+      (r) => (r.data ?? []) as { prayer_meeting_record_id: string; attended?: boolean }[]
+    );
+    raw.forEach((a) => {
+      const weekStart = prayerRecordIdToWeekStart.get(a.prayer_meeting_record_id);
+      if (!weekStart || !weekSet.has(weekStart)) return;
+      if (a.attended !== false) prayer[weekStart] = true;
+    });
+  }
+
+  if (mainMeetingIds.size > 0) {
+    const meetingIds = [...mainMeetingIds];
+    const chunks = chunk(meetingIds, CHUNK_SIZE);
+    const results = await Promise.all(
+      chunks.map((ids) =>
+        supabase
+          .from("lordsday_meeting_attendance")
+          .select("meeting_id, attended")
+          .eq("member_id", memberId)
+          .in("meeting_id", ids)
+      )
+    );
+    const raw = results.flatMap(
+      (r) => (r.data ?? []) as { meeting_id: string; attended?: boolean }[]
+    );
+    raw.forEach((a) => {
+      const eventDate = meetingIdToDate.get(a.meeting_id);
+      if (!eventDate) return;
+      const weekStart = getWeekStartForDate(eventDate);
+      if (!weekSet.has(weekStart)) return;
+      if (a.attended !== false) main[weekStart] = true;
+    });
+  }
+
+  if (groupRecords.length > 0) {
+    const recordIds = groupRecords.map((r) => r.id);
+    const chunks = chunk(recordIds, CHUNK_SIZE);
+    const results = await Promise.all(
+      chunks.map((ids) =>
+        supabase
+          .from("group_meeting_attendance")
+          .select("group_meeting_record_id, attended")
+          .eq("member_id", memberId)
+          .in("group_meeting_record_id", ids)
+      )
+    );
+    const raw = results.flatMap(
+      (r) => (r.data ?? []) as { group_meeting_record_id: string; attended?: boolean }[]
+    );
+    raw.forEach((a) => {
+      const weekStart = groupRecordIdToWeekStart.get(a.group_meeting_record_id);
+      if (!weekStart || !weekSet.has(weekStart)) return;
+      if (a.attended !== false) group[weekStart] = true;
+    });
+  }
+
+  const completeDispatches = dispatchRows.filter(
+    (d) =>
+      d.dispatch_type != null &&
+      d.dispatch_type !== "" &&
+      d.dispatch_date != null &&
+      (d.dispatch_date as string) !== "" &&
+      d.dispatch_memo != null &&
+      (d.dispatch_memo as string).trim() !== ""
+  );
+  completeDispatches.forEach((d) => {
+    if (weekSet.has(d.week_start)) dispatch[d.week_start] = true;
+  });
+
+  let periodLabel = "集計対象週なし";
+  if (cutoffWeekStart) {
+    const weekNum = weekStartToNumber.get(cutoffWeekStart);
+    const weekDate = weekStartToDate.get(cutoffWeekStart);
+    const dateStr = weekDate ? format(weekDate, "M/d") : cutoffWeekStart.slice(5).replace("-", "/");
+    periodLabel = `${year}年W${weekNum ?? "?"}（${dateStr}）まで`;
+  }
+
+  let prayerAttended = 0;
+  let mainAttended = 0;
+  let groupAttended = 0;
+  let dispatchCount = 0;
+  for (const ws of inScopeWeekStarts) {
+    if (prayer[ws]) prayerAttended += 1;
+    if (main[ws]) mainAttended += 1;
+    if (group[ws]) groupAttended += 1;
+    if (dispatch[ws]) dispatchCount += 1;
+  }
+
+  return {
+    periodLabel,
+    weeksInScopeCount,
+    prayerAttended,
+    mainAttended,
+    groupAttended,
+    dispatchCount,
+  };
 }

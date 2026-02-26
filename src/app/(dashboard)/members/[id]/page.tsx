@@ -3,8 +3,14 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { CATEGORY_LABELS } from "@/types/database";
 import type { Category } from "@/types/database";
+import { DISPATCH_TYPE_LABELS } from "@/types/database";
+import type { DispatchType } from "@/types/database";
 import { getLanguageLabel } from "@/lib/languages";
 import { EnrollmentMemoHtml } from "@/components/EnrollmentMemoHtml";
+import { MemberAttendanceMatrix } from "./MemberAttendanceMatrix";
+import { MemberNameDropdown } from "./MemberNameDropdown";
+import { format, parseISO } from "date-fns";
+import { getSundayWeeksInYear, formatDateYmd } from "@/lib/weekUtils";
 
 const BAPTISM_PRECISION_LABELS: Record<string, string> = {
   exact: "日付確定",
@@ -32,10 +38,15 @@ export default async function MemberDetailPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: member } = await supabase.from("members").select("*").eq("id", id).single();
+  const [memberRes, allMembersRes] = await Promise.all([
+    supabase.from("members").select("*").eq("id", id).single(),
+    supabase.from("members").select("id, name").order("name"),
+  ]);
+  const { data: member } = memberRes;
+  const allMembers = (allMembersRes.data ?? []) as { id: string; name: string }[];
   if (!member) notFound();
 
-  const [districtRes, groupRes, localityRes, followerRes, periodsRes] = await Promise.all([
+  const [districtRes, groupRes, localityRes, followerRes, periodsRes, dispatchRes] = await Promise.all([
     member.district_id ? supabase.from("districts").select("id, name").eq("id", member.district_id).single() : Promise.resolve({ data: null }),
     member.group_id ? supabase.from("groups").select("id, name").eq("id", member.group_id).single() : Promise.resolve({ data: null }),
     (member as { locality_id?: string | null }).locality_id
@@ -49,7 +60,71 @@ export default async function MemberDetailPage({
       .select("period_no, join_date, leave_date, is_uncertain, memo")
       .eq("member_id", id)
       .order("period_no"),
+    supabase
+      .from("organic_dispatch_records")
+      .select("id, group_id, week_start, dispatch_type, dispatch_date, dispatch_memo, visitor_ids")
+      .eq("member_id", id)
+      .order("week_start", { ascending: true }),
   ]);
+
+  const dispatchRecords = (dispatchRes.data ?? []) as {
+    id: string;
+    group_id: string;
+    week_start: string;
+    dispatch_type: DispatchType | null;
+    dispatch_date: string | null;
+    dispatch_memo: string | null;
+    visitor_ids?: string[] | null;
+  }[];
+  const dispatchGroupIds = [...new Set(dispatchRecords.map((r) => r.group_id))];
+  const visitorIds = [...new Set(dispatchRecords.flatMap((r) => r.visitor_ids ?? []))];
+  const visitorIdToName = new Map(allMembers.map((m) => [m.id, m.name]));
+  if (visitorIds.length > 0) {
+    const missing = visitorIds.filter((vid) => !visitorIdToName.has(vid));
+    if (missing.length > 0) {
+      const { data: visitorNames } = await supabase.from("members").select("id, name").in("id", missing);
+      (visitorNames ?? []).forEach((row: { id: string; name: string }) => visitorIdToName.set(row.id, row.name));
+    }
+  }
+  let dispatchGroupMap = new Map<string, string>();
+  if (dispatchGroupIds.length > 0) {
+    const { data: groupsData } = await supabase
+      .from("groups")
+      .select("id, name")
+      .in("id", dispatchGroupIds);
+    dispatchGroupMap = new Map(
+      ((groupsData ?? []) as { id: string; name: string }[]).map((g) => [g.id, g.name])
+    );
+  }
+
+  type DispatchRecord = {
+    id: string;
+    group_id: string;
+    week_start: string;
+    dispatch_type: DispatchType | null;
+    dispatch_date: string | null;
+    dispatch_memo: string | null;
+    visitor_ids?: string[] | null;
+  };
+  const weekStartToNumber = new Map<string, number>();
+  const yearsInDispatch = [...new Set(dispatchRecords.map((r) => r.week_start.slice(0, 4)))].map(
+    (y) => Number(y)
+  );
+  yearsInDispatch.forEach((year) => {
+    getSundayWeeksInYear(year).forEach((w) => {
+      weekStartToNumber.set(formatDateYmd(w.weekStart), w.weekNumber);
+    });
+  });
+  const recordsByWeek = new Map<string, DispatchRecord[]>();
+  for (const r of dispatchRecords) {
+    const list = recordsByWeek.get(r.week_start) ?? [];
+    list.push(r);
+    recordsByWeek.set(r.week_start, list);
+  }
+  for (const list of recordsByWeek.values()) {
+    list.sort((a, b) => (a.dispatch_date ?? "").localeCompare(b.dispatch_date ?? ""));
+  }
+  const sortedWeekStarts = [...recordsByWeek.keys()].sort();
 
   const district = districtRes.data as { id: string; name: string } | null;
   const group = groupRes.data as { id: string; name: string } | null;
@@ -72,14 +147,26 @@ export default async function MemberDetailPage({
 
   return (
     <div className="space-y-6 max-w-2xl">
+      <div className="bg-white rounded-lg border border-slate-200 p-3">
+        <MemberNameDropdown currentId={id} members={allMembers} />
+      </div>
       <Link href="/members" className="text-slate-600 hover:text-slate-800 text-sm">
         ← 名簿管理
       </Link>
       <div className="bg-white rounded-lg border border-slate-200 p-2 space-y-2">
-        <h1 className="text-xl font-bold text-slate-800">{member.name}</h1>
-        {member.furigana && (
-          <p className="text-sm text-slate-500">{member.furigana}</p>
-        )}
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            {member.furigana && (
+              <p className="text-sm text-slate-500">{member.furigana}</p>
+            )}
+          </div>
+          <Link
+            href={`/members/${id}/edit`}
+            className="inline-flex items-center px-3 py-1.5 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg touch-target shrink-0"
+          >
+            編集
+          </Link>
+        </div>
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
           <dt className="text-slate-500">性別</dt>
           <dd className="text-slate-800">{member.gender === "male" ? "男" : "女"}</dd>
@@ -147,14 +234,64 @@ export default async function MemberDetailPage({
           )}
         </dl>
       </div>
-      <div>
-        <Link
-          href={`/members/${id}/edit`}
-          className="inline-flex items-center px-3 py-1.5 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg touch-target"
-        >
-          編集
-        </Link>
+
+      <div className="bg-white rounded-lg border border-slate-200 p-4">
+        <h2 className="font-semibold text-slate-800 mb-3">派遣記録</h2>
+        <p className="text-xs text-slate-500 mb-3">時系列（古い→新しい）</p>
+        {dispatchRecords.length > 0 ? (
+          <div className="space-y-5">
+            {sortedWeekStarts.map((weekStart) => {
+              const weekNum = weekStartToNumber.get(weekStart);
+              const records = recordsByWeek.get(weekStart) ?? [];
+              return (
+                <section key={weekStart}>
+                  <h3 className="text-sm font-semibold text-slate-700 mb-2">
+                    W{weekNum ?? "?"}
+                  </h3>
+                  <ul className="space-y-3">
+                    {records.map((r) => (
+                      <li
+                        key={r.id}
+                        className="border-b border-slate-100 pb-3 last:border-0 last:pb-0 text-sm"
+                      >
+                        <div className="flex flex-wrap items-center gap-2 gap-y-1">
+                          <span className="inline-flex shrink-0 items-center rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+                            {r.dispatch_date
+                              ? format(parseISO(r.dispatch_date), "yyyy/M/d")
+                              : format(parseISO(r.week_start), "yyyy/M/d") + "（週）"}
+                          </span>
+                          <span className="text-slate-500">
+                            {dispatchGroupMap.get(r.group_id) ?? r.group_id}
+                          </span>
+                          {r.dispatch_type && (
+                            <span className="text-primary-600">
+                              {DISPATCH_TYPE_LABELS[r.dispatch_type]}
+                            </span>
+                          )}
+                        </div>
+                        {r.dispatch_memo && r.dispatch_memo.trim() !== "" && (
+                          <p className="mt-1.5 text-slate-600 whitespace-pre-wrap">
+                            {r.dispatch_memo.trim()}
+                          </p>
+                        )}
+                        {r.visitor_ids && r.visitor_ids.length > 0 && (
+                          <p className="mt-1.5 text-slate-600 text-xs">
+                            訪問者: {r.visitor_ids.map((vid) => visitorIdToName.get(vid) ?? vid).join("、")}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">記録がありません</p>
+        )}
       </div>
+
+      <MemberAttendanceMatrix memberId={id} />
     </div>
   );
 }

@@ -14,7 +14,7 @@ export async function deleteMeetingFromDebug(formData: FormData): Promise<void> 
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.from("meetings").delete().eq("id", meetingId);
+  const { error } = await supabase.from("lordsday_meeting_records").delete().eq("id", meetingId);
   if (error) {
     throw new Error(error.message);
   }

@@ -34,7 +34,7 @@ export function DebugMeetingDuplicatesClient() {
       const supabase = createClient();
       const [{ data: meetingsData, error: meetingsError }, { data: authData }] = await Promise.all([
         supabase
-          .from("meetings")
+          .from("lordsday_meeting_records")
           .select("id, event_date, meeting_type, name, district_id, locality_id, group_id, created_at")
           .order("event_date", { ascending: false })
           .order("created_at", { ascending: true }),
@@ -167,7 +167,7 @@ export function DebugMeetingDuplicatesClient() {
       if (duplicateMeetingIds.length === 0) return;
       const supabase = createClient();
       const { data } = await supabase
-        .from("attendance_records")
+        .from("lordsday_meeting_attendance")
         .select("meeting_id")
         .in("meeting_id", duplicateMeetingIds);
       for (const row of data ?? []) {

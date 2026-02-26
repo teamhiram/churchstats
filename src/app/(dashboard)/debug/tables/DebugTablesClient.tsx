@@ -7,10 +7,13 @@ import { getDebugTableData } from "./actions";
 export function DebugTablesClient() {
   const [tableName, setTableName] = useState<string>(DEBUG_TABLE_NAMES[0]);
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const [columnVisible, setColumnVisible] = useState<Record<string, boolean>>({});
   const [data, setData] = useState<Record<string, unknown>[]>([]);
   const [columns, setColumns] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const visibleColumns = columns.filter((col) => columnVisible[col] !== false);
 
   const load = useCallback(async () => {
     if (!tableName) return;
@@ -36,10 +39,21 @@ export function DebugTablesClient() {
       });
       return next;
     });
+    setColumnVisible((prev) => {
+      const next = { ...prev };
+      columns.forEach((col) => {
+        if (!(col in next)) next[col] = true;
+      });
+      return next;
+    });
   }, [tableName, columns]);
 
   const setFilter = (column: string, value: string) => {
     setColumnFilters((prev) => ({ ...prev, [column]: value }));
+  };
+
+  const setVisible = (column: string, visible: boolean) => {
+    setColumnVisible((prev) => ({ ...prev, [column]: visible }));
   };
 
   return (
@@ -76,7 +90,16 @@ export function DebugTablesClient() {
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {columns.map((col) => (
               <div key={col} className="min-w-0">
-                <label className="block truncate text-xs text-slate-500">{col}</label>
+                <label className="flex items-center gap-2 truncate text-xs text-slate-500">
+                  <input
+                    type="checkbox"
+                    checked={columnVisible[col] !== false}
+                    onChange={(e) => setVisible(col, e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                    aria-label={`${col} を表示`}
+                  />
+                  {col}
+                </label>
                 <input
                   type="text"
                   value={columnFilters[col] ?? ""}
@@ -111,7 +134,7 @@ export function DebugTablesClient() {
         <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
           <thead>
             <tr className="bg-slate-50">
-              {columns.map((col) => (
+              {visibleColumns.map((col) => (
                 <th
                   key={col}
                   className="whitespace-nowrap px-3 py-2 font-medium text-slate-700"
@@ -124,14 +147,14 @@ export function DebugTablesClient() {
           <tbody className="divide-y divide-slate-200">
             {data.length === 0 && !loading && (
               <tr>
-                <td colSpan={columns.length || 1} className="px-3 py-4 text-center text-slate-500">
-                  {columns.length ? "行がありません" : "テーブルを選んでください"}
+                <td colSpan={visibleColumns.length || 1} className="px-3 py-4 text-center text-slate-500">
+                  {visibleColumns.length ? "行がありません" : "テーブルを選んでください"}
                 </td>
               </tr>
             )}
             {data.map((row, i) => (
               <tr key={i} className="hover:bg-slate-50">
-                {columns.map((col) => (
+                {visibleColumns.map((col) => (
                   <td key={col} className="max-w-[200px] truncate px-3 py-2 text-slate-800">
                     {row[col] == null ? "—" : String(row[col])}
                   </td>

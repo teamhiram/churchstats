@@ -28,7 +28,7 @@ export async function getDispatchMonitorData(): Promise<DispatchMonitorData> {
   const [mainMeetingsRes, groupRecordsRes, districtRegularRes, groupRegularRes, membersRes, dispatchRes] =
     await Promise.all([
       supabase
-        .from("meetings")
+        .from("lordsday_meeting_records")
         .select("id, district_id")
         .eq("meeting_type", "main")
         .eq("event_date", weekStartIso),
@@ -56,7 +56,7 @@ export async function getDispatchMonitorData(): Promise<DispatchMonitorData> {
   let mainAttData: { meeting_id: string; member_id: string; attended?: boolean }[] = [];
   if (mainMeetingIds.size > 0) {
     const { data } = await supabase
-      .from("attendance_records")
+      .from("lordsday_meeting_attendance")
       .select("meeting_id, member_id, attended")
       .in("meeting_id", [...mainMeetingIds]);
     mainAttData = (data ?? []) as { meeting_id: string; member_id: string; attended?: boolean }[];
@@ -95,7 +95,7 @@ export async function getDispatchMonitorData(): Promise<DispatchMonitorData> {
   if (mainRegularMemberIds.size === 0 && mainMeetingDistrictIds.length > 0) {
     const pastStart = format(addDays(parseYmd(weekStartIso), -7 * 4), "yyyy-MM-dd");
     const { data: pastMeetings } = await supabase
-      .from("meetings")
+      .from("lordsday_meeting_records")
       .select("id, district_id")
       .eq("meeting_type", "main")
       .gte("event_date", pastStart)
@@ -107,7 +107,7 @@ export async function getDispatchMonitorData(): Promise<DispatchMonitorData> {
     );
     if (pastMainIds.size > 0) {
       const { data: pastAtt } = await supabase
-        .from("attendance_records")
+        .from("lordsday_meeting_attendance")
         .select("member_id, attended")
         .in("meeting_id", [...pastMainIds]);
       (pastAtt ?? [])

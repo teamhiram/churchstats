@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { Toggle } from "@/components/Toggle";
 import { formatDateYmd } from "@/lib/weekUtils";
 import { getGojuonRowLabel, GOJUON_ROW_LABELS } from "@/lib/furigana";
@@ -134,7 +135,7 @@ export function SundayAttendance({
     const district = districts.find((d) => d.id === did);
     const name = district ? `${district.name}地区集会` : "";
     const { data: existing } = await supabase
-      .from("meetings")
+      .from("lordsday_meeting_records")
       .select("id")
       .eq("event_date", sundayIso)
       .eq("meeting_type", "main")
@@ -142,7 +143,7 @@ export function SundayAttendance({
       .maybeSingle();
     if (existing) return existing.id;
     const { data: created, error } = await supabase
-      .from("meetings")
+      .from("lordsday_meeting_records")
       .insert({
         event_date: sundayIso,
         meeting_type: "main",
@@ -241,7 +242,7 @@ export function SundayAttendance({
     const resolveBestMeetingMapForDistricts = async (targetDistrictIds: string[]) => {
       if (targetDistrictIds.length === 0) return {} as Record<string, string>;
       const { data: meetingRows } = await supabase
-        .from("meetings")
+        .from("lordsday_meeting_records")
         .select("id, district_id")
         .eq("event_date", sundayIso)
         .eq("meeting_type", "main")
@@ -257,7 +258,7 @@ export function SundayAttendance({
       const countByMeeting = new Map<string, number>();
       if (allMeetingIds.length > 0) {
         const { data: attRows } = await supabase
-          .from("attendance_records")
+          .from("lordsday_meeting_attendance")
           .select("meeting_id")
           .in("meeting_id", allMeetingIds);
         ((attRows ?? []) as { meeting_id: string }[]).forEach((r) => {
@@ -327,7 +328,7 @@ export function SundayAttendance({
         }
 
         const { data: attData } = await supabase
-          .from("attendance_records")
+          .from("lordsday_meeting_attendance")
           .select("id, member_id, memo, is_online, is_away, attended")
           .in("meeting_id", meetingIds);
         if (cancelled) return;
@@ -413,7 +414,7 @@ const { data: guestData } = await supabase
           return;
         }
         const { data: attData } = await supabase
-          .from("attendance_records")
+          .from("lordsday_meeting_attendance")
           .select("id, member_id, memo, is_online, is_away, attended")
           .in("meeting_id", meetingIds);
         if (cancelled) return;
@@ -471,7 +472,7 @@ const { data: guestData } = await supabase
       }).catch(() => {});
       // #endregion
       const { data: existingMeetingsData } = await supabase
-        .from("meetings")
+        .from("lordsday_meeting_records")
         .select("id")
         .eq("event_date", sundayIso)
         .eq("meeting_type", "main")
@@ -482,7 +483,7 @@ const { data: guestData } = await supabase
         mid = existingMeetingIds[0];
       } else if (existingMeetingIds.length > 1) {
         const { data: attRows } = await supabase
-          .from("attendance_records")
+          .from("lordsday_meeting_attendance")
           .select("meeting_id")
           .in("meeting_id", existingMeetingIds);
         const countByMeeting = new Map<string, number>();
@@ -553,14 +554,14 @@ const { data: guestData } = await supabase
         return;
       }
       let { data: attData } = await supabase
-        .from("attendance_records")
+        .from("lordsday_meeting_attendance")
         .select("id, member_id, memo, is_online, is_away, attended")
         .eq("meeting_id", mid);
       if (cancelled) return;
       let records = (attData ?? []) as AttendanceRow[];
       if (records.length === 0) {
         const { data: directMeeting } = await supabase
-          .from("meetings")
+          .from("lordsday_meeting_records")
           .select("id")
           .eq("event_date", sundayIso)
           .eq("meeting_type", "main")
@@ -594,14 +595,14 @@ const { data: guestData } = await supabase
           }).catch(() => {});
           // #endregion
           const { data: directAtt } = await supabase
-            .from("attendance_records")
+            .from("lordsday_meeting_attendance")
             .select("id, member_id, memo, is_online, is_away, attended")
             .eq("meeting_id", directMeeting.id);
           if (cancelled) return;
           records = (directAtt ?? []) as AttendanceRow[];
         } else if (records.length === 0 && lid) {
           const { data: localityMeeting } = await supabase
-            .from("meetings")
+            .from("lordsday_meeting_records")
             .select("id")
             .eq("event_date", sundayIso)
             .eq("meeting_type", "main")
@@ -623,7 +624,7 @@ const { data: guestData } = await supabase
           // #endregion
           if (localityMeeting?.id) {
             const { data: locAtt } = await supabase
-              .from("attendance_records")
+              .from("lordsday_meeting_attendance")
               .select("id, member_id, memo, is_online, is_away, attended")
               .eq("meeting_id", localityMeeting.id);
             if (cancelled) return;
@@ -1081,7 +1082,7 @@ const { data: guestData } = await supabase
                       mid = await ensureMeeting();
                     }
                     for (const [, recId] of excludedForDeletion) {
-                      await supabase.from("attendance_records").delete().eq("id", recId);
+                      await supabase.from("lordsday_meeting_attendance").delete().eq("id", recId);
                     }
                     for (const m of roster) {
                       if (!attendanceMap.has(m.id) && !excludedMemberIds.has(m.id)) {
@@ -1103,7 +1104,7 @@ const { data: guestData } = await supabase
                         const meetId = did ? meetingIdMap[did] : null;
                         if (!meetId) continue;
                         if (rec.id) {
-                          await supabase.from("attendance_records").upsert({
+                          await supabase.from("lordsday_meeting_attendance").upsert({
                             id: rec.id,
                             meeting_id: meetId,
                             member_id: rec.member_id,
@@ -1115,7 +1116,7 @@ const { data: guestData } = await supabase
                           }, { onConflict: "id" });
                         } else {
                           const { data: { user } } = await supabase.auth.getUser();
-                          await supabase.from("attendance_records").insert({
+                          await supabase.from("lordsday_meeting_attendance").insert({
                             meeting_id: meetId,
                             member_id: rec.member_id,
                             recorded_category: member?.age_group ?? null,
@@ -1144,7 +1145,7 @@ const { data: guestData } = await supabase
                         const member = roster.find((m) => m.id === rec.member_id);
                         const meetId = meetingIdMap[member?.district_id ?? ""] ?? mid;
                         if (rec.id) {
-                          await supabase.from("attendance_records").update({
+                          await supabase.from("lordsday_meeting_attendance").update({
                             meeting_id: meetId,
                             memo: memos.get(rec.member_id) || null,
                             is_online: rec.is_online ?? false,
@@ -1154,7 +1155,7 @@ const { data: guestData } = await supabase
                           }).eq("id", rec.id);
                         } else {
                           const { data: { user } } = await supabase.auth.getUser();
-                          await supabase.from("attendance_records").insert({
+                          await supabase.from("lordsday_meeting_attendance").insert({
                             meeting_id: meetId,
                             member_id: rec.member_id,
                             recorded_category: member?.age_group ?? null,
@@ -1324,11 +1325,11 @@ const { data: guestData } = await supabase
                   <table className="min-w-full divide-y divide-slate-200">
                     <thead className="bg-slate-50">
                       <tr>
-                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">名前</th>
-                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-24">出欠({[...attendanceMap.values()].filter((r) => r.attended !== false).length})</th>
-                        <th className="px-1 py-1.5 text-center text-xs font-medium text-slate-500 uppercase w-14 sm:w-24">ｵﾝﾗｲﾝ({[...attendanceMap.values()].filter((r) => r.attended !== false && r.is_online).length})</th>
-                        <th className="px-1 py-1.5 text-center text-xs font-medium text-slate-500 uppercase w-14 sm:w-24">他地方({[...attendanceMap.values()].filter((r) => r.attended !== false && r.is_away).length})</th>
-                        <th className="px-2 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-10 sm:w-auto"><span className="hidden sm:inline">メモ</span></th>
+                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase max-w-[9rem]">名前</th>
+                        <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase min-w-[3.75rem] w-14 sm:w-24 whitespace-nowrap">出欠({[...attendanceMap.values()].filter((r) => r.attended !== false).length})</th>
+                        <th className="px-1 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-16 sm:w-24 whitespace-nowrap">ｵﾝﾗｲﾝ({[...attendanceMap.values()].filter((r) => r.attended !== false && r.is_online).length})</th>
+                        <th className="px-1 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-[4.5rem] sm:w-24 whitespace-nowrap">他地方({[...attendanceMap.values()].filter((r) => r.attended !== false && r.is_away).length})</th>
+                        <th className={`px-2 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-10 sm:w-auto ${!isEditMode ? "hidden sm:table-cell" : ""}`}><span className="hidden sm:inline">メモ</span></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
@@ -1344,6 +1345,19 @@ const { data: guestData } = await supabase
                         const hasGroup2 = Boolean(group2);
                         const g1Key = `g1-${section.group1Key}`;
                         const g1Open = hasGroup1 ? isSectionOpen(g1Key) : true;
+                        const sectionMemberIds = section.subsections.flatMap((s) => s.members.map((m) => m.id));
+                        const sectionAttendedCount = sectionMemberIds.filter((id) => {
+                          const r = attendanceMap.get(id);
+                          return r && r.attended !== false;
+                        }).length;
+                        const sectionOnlineCount = sectionMemberIds.filter((id) => {
+                          const r = attendanceMap.get(id);
+                          return r && r.attended !== false && r.is_online;
+                        }).length;
+                        const sectionAwayCount = sectionMemberIds.filter((id) => {
+                          const r = attendanceMap.get(id);
+                          return r && r.attended !== false && r.is_away;
+                        }).length;
                         return (
                         <Fragment key={`s-${section.group1Key}-${idx}`}>
                           {hasGroup1 && section.subsections.some((s) => s.members.length > 0) && (
@@ -1370,11 +1384,11 @@ const { data: guestData } = await supabase
                           )}
                           {hasGroup1 && g1Open && section.subsections.some((s) => s.members.length > 0) && (
                             <tr className="bg-slate-50">
-                              <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase">名前</th>
-                              <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase w-24">出欠</th>
-                              <th className="px-1 py-1 text-center text-xs font-medium text-slate-500 uppercase w-14 sm:w-24">ｵﾝﾗｲﾝ</th>
-                              <th className="px-1 py-1 text-center text-xs font-medium text-slate-500 uppercase w-14 sm:w-24">他地方</th>
-                              <th className="px-2 py-1 text-left text-xs font-medium text-slate-500 uppercase w-10 sm:w-auto"><span className="hidden sm:inline">メモ</span></th>
+                              <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase max-w-[9rem]">名前</th>
+                              <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase min-w-[3.75rem] w-14 sm:w-24 whitespace-nowrap">出欠({sectionAttendedCount})</th>
+                              <th className="px-1 py-1 text-left text-xs font-medium text-slate-500 uppercase w-16 sm:w-24 whitespace-nowrap">ｵﾝﾗｲﾝ({sectionOnlineCount})</th>
+                              <th className="px-1 py-1 text-left text-xs font-medium text-slate-500 uppercase w-[4.5rem] sm:w-24 whitespace-nowrap">他地方({sectionAwayCount})</th>
+                              <th className={`px-2 py-1 text-left text-xs font-medium text-slate-500 uppercase w-10 sm:w-auto ${!isEditMode ? "hidden sm:table-cell" : ""}`}><span className="hidden sm:inline">メモ</span></th>
                             </tr>
                           )}
                           {(hasGroup1 ? g1Open : true) && section.subsections.map((sub, subIdx) => {
@@ -1407,11 +1421,20 @@ const { data: guestData } = await supabase
                                 )}
                                 {hasSubHeader && g2Open && sub.members.length > 0 && (
                                   <tr className="bg-slate-50">
-                                    <th className="px-3 py-1 pl-6 text-left text-xs font-medium text-slate-500 uppercase">名前</th>
-                                    <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase w-24">出欠</th>
-                                    <th className="px-1 py-1 text-center text-xs font-medium text-slate-500 uppercase w-14 sm:w-24">ｵﾝﾗｲﾝ</th>
-                                    <th className="px-1 py-1 text-center text-xs font-medium text-slate-500 uppercase w-14 sm:w-24">他地方</th>
-                                    <th className="px-2 py-1 text-left text-xs font-medium text-slate-500 uppercase w-10 sm:w-auto"><span className="hidden sm:inline">メモ</span></th>
+                                    <th className="px-3 py-1 pl-6 text-left text-xs font-medium text-slate-500 uppercase max-w-[9rem]">名前</th>
+                                    <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase min-w-[3.75rem] w-14 sm:w-24 whitespace-nowrap">出欠({sub.members.filter((m) => {
+                                      const r = attendanceMap.get(m.id);
+                                      return r && r.attended !== false;
+                                    }).length})</th>
+                                    <th className="px-1 py-1 text-left text-xs font-medium text-slate-500 uppercase w-16 sm:w-24 whitespace-nowrap">ｵﾝﾗｲﾝ({sub.members.filter((m) => {
+                                      const r = attendanceMap.get(m.id);
+                                      return r && r.attended !== false && r.is_online;
+                                    }).length})</th>
+                                    <th className="px-1 py-1 text-left text-xs font-medium text-slate-500 uppercase w-[4.5rem] sm:w-24 whitespace-nowrap">他地方({sub.members.filter((m) => {
+                                      const r = attendanceMap.get(m.id);
+                                      return r && r.attended !== false && r.is_away;
+                                    }).length})</th>
+                                    <th className={`px-2 py-1 text-left text-xs font-medium text-slate-500 uppercase w-10 sm:w-auto ${!isEditMode ? "hidden sm:table-cell" : ""}`}><span className="hidden sm:inline">メモ</span></th>
                                   </tr>
                                 )}
                                 {(!hasSubHeader || g2Open) && sub.members.map((m) => {
@@ -1426,8 +1449,8 @@ const { data: guestData } = await supabase
                       return (
                         <Fragment key={m.id}>
                         <tr className={rowBgClass}>
-                          <td className="px-3 py-0.5 text-slate-800">
-                            <div className="flex items-center gap-1">
+                          <td className="px-3 py-0.5 text-slate-800 max-w-[9rem] min-w-0">
+                            <div className="flex items-center gap-1 min-w-0 truncate">
                               {isEditMode && (
                                 <button
                                   type="button"
@@ -1439,10 +1462,16 @@ const { data: guestData } = await supabase
                                   −
                                 </button>
                               )}
-                              <span className={guestIds.has(m.id) ? "text-slate-400" : ""}>{m.name}</span>
+                              {isEditMode ? (
+                                <span className={`min-w-0 truncate ${guestIds.has(m.id) ? "text-slate-400" : ""}`}>{m.name}</span>
+                              ) : (
+                                <Link href={`/members/${m.id}`} className={`min-w-0 truncate text-primary-600 hover:underline ${guestIds.has(m.id) ? "text-slate-400" : ""}`}>
+                                  {m.name}
+                                </Link>
+                              )}
                             </div>
                           </td>
-                          <td className="px-3 py-0.5">
+                          <td className="px-3 py-0.5 text-left">
                             {isEditMode ? (
                               <Toggle
                                 checked={attended}
@@ -1453,7 +1482,7 @@ const { data: guestData } = await supabase
                               <span className={attended ? "text-primary-600" : "text-slate-400"}>{attended ? "○" : "×"}</span>
                             )}
                           </td>
-                          <td className="px-1 py-0.5 align-middle">
+                          <td className="px-1 py-0.5 align-middle text-left">
                             {attended ? (
                               isEditMode ? (
                                 <Toggle
@@ -1468,7 +1497,7 @@ const { data: guestData } = await supabase
                               <span className="text-slate-300">—</span>
                             )}
                           </td>
-                          <td className="px-1 py-0.5 align-middle">
+                          <td className="px-1 py-0.5 align-middle text-left">
                             {attended ? (
                               isEditMode ? (
                                 <Toggle
@@ -1483,7 +1512,7 @@ const { data: guestData } = await supabase
                               <span className="text-slate-300">—</span>
                             )}
                           </td>
-                          <td className="px-2 py-0.5 align-top">
+                          <td className={`px-2 py-0.5 align-top ${!isEditMode ? "hidden sm:table-cell" : ""}`}>
                             {isEditMode ? (
                               <>
                                 <div className="sm:hidden">
@@ -1521,8 +1550,8 @@ const { data: guestData } = await supabase
                           </td>
                         </tr>
                         {memo.trim() && (
-                          <tr className={`sm:hidden ${tier === "semi" ? "bg-amber-50" : tier === "pool" ? "bg-sky-50" : "bg-slate-50/50"}`}>
-                            <td colSpan={5} className="px-3 py-0.5 pb-1 text-xs text-slate-500">
+                          <tr className="sm:hidden [border-top:0]">
+                            <td colSpan={5} className="pl-4 pr-3 py-0.5 pb-1 text-xs text-slate-500 [border-top:0]">
                               {memo}
                             </td>
                           </tr>
@@ -1699,16 +1728,16 @@ const { data: guestData } = await supabase
                   try {
                     if (districtId === "__all__") {
                       const { data: meetings } = await supabase
-                        .from("meetings")
+                        .from("lordsday_meeting_records")
                         .select("id")
                         .eq("event_date", sundayIso)
                         .eq("meeting_type", "main");
                       const ids = (meetings ?? []).map((m: { id: string }) => m.id);
                       if (ids.length > 0) {
-                        await supabase.from("attendance_records").delete().in("meeting_id", ids);
+                        await supabase.from("lordsday_meeting_attendance").delete().in("meeting_id", ids);
                       }
                     } else if (meetingId) {
-                      await supabase.from("attendance_records").delete().eq("meeting_id", meetingId);
+                      await supabase.from("lordsday_meeting_attendance").delete().eq("meeting_id", meetingId);
                     }
                     setAttendanceMap(new Map());
                     setMemos(new Map());

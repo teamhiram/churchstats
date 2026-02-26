@@ -46,7 +46,7 @@ export default function NewMeetingPage() {
     setLoading(true);
     const supabase = createClient();
     const { data: meeting, error: err } = await supabase
-      .from("meetings")
+      .from("lordsday_meeting_records")
       .insert({
         event_date: eventDate,
         meeting_type: meetingType,
