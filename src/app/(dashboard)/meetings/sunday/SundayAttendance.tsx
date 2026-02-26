@@ -152,6 +152,16 @@ export function SundayAttendance({
       })
       .select("id")
       .single();
+    if (error?.code === "23505") {
+      const { data: existingRow } = await supabase
+        .from("lordsday_meeting_records")
+        .select("id")
+        .eq("event_date", sundayIso)
+        .eq("meeting_type", "main")
+        .eq("district_id", did)
+        .maybeSingle();
+      return existingRow?.id ?? null;
+    }
     if (error) return null;
     return created?.id ?? null;
   }, [sundayIso, districts]);

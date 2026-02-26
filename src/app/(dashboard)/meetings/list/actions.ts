@@ -635,6 +635,12 @@ export async function getDuplicateMainAttendance(
   return result;
 }
 
+/** 重複出席のグループ数（サイドバーバッジ用）。当年の同一週・同一メンバーで2件以上あるグループ数。 */
+export async function getDuplicateAttendanceGroupCount(): Promise<number> {
+  const list = await getDuplicateMainAttendance(new Date().getFullYear());
+  return list.length;
+}
+
 export async function deleteAttendanceRecord(attendanceId: string): Promise<{ error?: string }> {
   const supabase = await createClient();
   const { error } = await supabase.from("lordsday_meeting_attendance").delete().eq("id", attendanceId);

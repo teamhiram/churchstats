@@ -9,6 +9,13 @@
   --card: #ffffff;
   --border: #e2e8f0;
   --muted: #64748b;
+  /* ヘッダー高さ（Nav の fixed header と一致。main の pt に使用） */
+  --header-height: 2rem; /* モバイル: h-8 */
+}
+@media (min-width: 768px) {
+  :root {
+    --header-height: 3rem; /* PC: h-12 */
+  }
 }
 
 body {

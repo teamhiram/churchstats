@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { deleteMeetingFromDebug } from "./actions";
+import { deleteMeetingFromDebug, deleteMeetingsFromDebug } from "./actions";
 
 type MeetingRow = {
   id: string;
@@ -27,10 +27,12 @@ export function DebugMeetingDuplicatesClient() {
   const [localityNameById, setLocalityNameById] = useState<Map<string, string>>(new Map());
   const [groupNameById, setGroupNameById] = useState<Map<string, string>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
-    const run = async () => {
+  const loadMeetings = useCallback(async () => {
       const supabase = createClient();
       const [{ data: meetingsData, error: meetingsError }, { data: authData }] = await Promise.all([
         supabase
@@ -80,12 +82,18 @@ export function DebugMeetingDuplicatesClient() {
           .in("id", groupIds.length > 0 ? groupIds : ["00000000-0000-0000-0000-000000000000"]),
       ]);
 
-      if (!alive) return;
       setMeetings(rows);
       setDistrictNameById(new Map((districts ?? []).map((d) => [d.id, d.name])));
       setLocalityNameById(new Map((localities ?? []).map((l) => [l.id, l.name])));
       setGroupNameById(new Map((groups ?? []).map((g) => [g.id, g.name])));
       setIsLoading(false);
+    }, []);
+
+  useEffect(() => {
+    let alive = true;
+    const run = async () => {
+      await loadMeetings();
+      if (!alive) return;
     };
     run().catch(() => {
       if (!alive) return;
@@ -94,7 +102,7 @@ export function DebugMeetingDuplicatesClient() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [loadMeetings, refreshTrigger]);
 
   const duplicateGroups = useMemo(() => {
     const mainGroups = new Map<string, MeetingRow[]>();
@@ -200,8 +208,81 @@ export function DebugMeetingDuplicatesClient() {
     );
   }
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectGroup = (group: DuplicateGroup) => {
+    const ids = group.rows.map((r) => r.id);
+    const allSelected = ids.every((id) => selectedIds.has(id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) ids.forEach((id) => next.delete(id));
+      else ids.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const selectAllZeroAttendance = () => {
+    const zeroIds = duplicateMeetingIds.filter((id) => (attendanceCountMap.get(id) ?? 0) === 0);
+    setSelectedIds(new Set(zeroIds));
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkDeleting(true);
+    try {
+      const result = await deleteMeetingsFromDebug(ids);
+      if (result.ok) {
+        setSelectedIds(new Set());
+        setRefreshTrigger((t) => t + 1);
+      } else {
+        alert(result.error ?? "削除に失敗しました");
+      }
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={selectAllZeroAttendance}
+          className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+        >
+          出席者0を一括選択
+        </button>
+      </div>
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3">
+          <span className="text-sm font-medium text-rose-800">
+            選択中: {selectedIds.size} 件
+          </span>
+          <button
+            type="button"
+            onClick={handleBulkDelete}
+            disabled={bulkDeleting}
+            className="rounded border border-rose-300 bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+          >
+            {bulkDeleting ? "削除中…" : "選択した集会を一括削除"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedIds(new Set())}
+            className="text-sm text-rose-700 hover:underline"
+          >
+            選択解除
+          </button>
+        </div>
+      )}
       {duplicateGroups.map((group) => {
         const first = group.rows[0];
         const districtName = first.district_id ? districtNameById.get(first.district_id) ?? "(地区名不明)" : "-";
@@ -209,18 +290,29 @@ export function DebugMeetingDuplicatesClient() {
         const groupName = first.group_id ? groupNameById.get(first.group_id) ?? "(グループ名不明)" : "-";
         return (
           <section key={`${group.kind}-${group.key}`} className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="mb-2 text-sm text-slate-700">
+            <div className="mb-2 flex items-center gap-4 text-sm text-slate-700">
               <span className="font-semibold">{first.event_date}</span>
-              <span className="ml-3">種別: {group.kind}</span>
-              <span className="ml-3">地区: {districtName}</span>
-              <span className="ml-3">地方: {localityName}</span>
-              <span className="ml-3">グループ: {groupName}</span>
-              <span className="ml-3 text-rose-600 font-semibold">重複数: {group.rows.length}</span>
+              <span>種別: {group.kind}</span>
+              <span>地区: {districtName}</span>
+              <span>地方: {localityName}</span>
+              <span>グループ: {groupName}</span>
+              <span className="text-rose-600 font-semibold">重複数: {group.rows.length}</span>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-slate-600">
+                    <th className="w-10 px-2 py-2 text-left">
+                      <label className="flex cursor-pointer items-center gap-1.5 font-medium">
+                        <input
+                          type="checkbox"
+                          checked={group.rows.every((r) => selectedIds.has(r.id))}
+                          onChange={() => toggleSelectGroup(group)}
+                          className="rounded border-slate-300"
+                        />
+                        <span>選択</span>
+                      </label>
+                    </th>
                     <th className="px-2 py-2 text-left font-medium">meeting_id</th>
                     <th className="px-2 py-2 text-left font-medium">name</th>
                     <th className="px-2 py-2 text-right font-medium">attendance</th>
@@ -233,6 +325,14 @@ export function DebugMeetingDuplicatesClient() {
                     const attendanceCount = attendanceCountMap.get(row.id) ?? 0;
                     return (
                       <tr key={row.id} className="border-b border-slate-100">
+                        <td className="w-10 px-2 py-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(row.id)}
+                            onChange={() => toggleSelect(row.id)}
+                            className="rounded border-slate-300"
+                          />
+                        </td>
                         <td className="px-2 py-2 font-mono text-xs text-slate-700">{row.id}</td>
                         <td className="px-2 py-2 text-slate-700">{row.name}</td>
                         <td className="px-2 py-2 text-right text-slate-700">{attendanceCount}</td>
@@ -240,13 +340,26 @@ export function DebugMeetingDuplicatesClient() {
                           {row.created_at ? new Date(row.created_at).toLocaleString("ja-JP") : "-"}
                         </td>
                         <td className="px-2 py-2 text-right">
-                          <form action={deleteMeetingFromDebug}>
+                          <form
+                            action={async (formData: FormData) => {
+                              const id = String(formData.get("meeting_id") ?? "");
+                              if (!id) return;
+                              setDeletingId(id);
+                              try {
+                                await deleteMeetingFromDebug(formData);
+                                setRefreshTrigger((t) => t + 1);
+                              } finally {
+                                setDeletingId(null);
+                              }
+                            }}
+                          >
                             <input type="hidden" name="meeting_id" value={row.id} />
                             <button
                               type="submit"
-                              className="rounded border border-rose-200 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50"
+                              disabled={deletingId === row.id}
+                              className="rounded border border-rose-200 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50 disabled:opacity-50"
                             >
-                              削除
+                              {deletingId === row.id ? "削除中…" : "削除"}
                             </button>
                           </form>
                         </td>
