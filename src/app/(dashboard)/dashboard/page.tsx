@@ -25,7 +25,7 @@ export default async function DashboardPage() {
     supabase.from("districts").select("id", { count: "exact", head: true }),
     supabase.from("groups").select("id", { count: "exact", head: true }),
     supabase
-      .from("meetings")
+      .from("lordsday_meeting_records")
       .select("id, event_date, meeting_type, district_id, name")
       .gte("event_date", yearStartIso),
     supabase
@@ -41,7 +41,7 @@ export default async function DashboardPage() {
       ? []
       : (
           await supabase
-            .from("attendance_records")
+            .from("lordsday_meeting_attendance")
             .select("id, meeting_id, member_id, recorded_category, recorded_is_baptized, district_id, attended")
             .in("meeting_id", meetingIds)
         ).data ?? [];

@@ -33,6 +33,7 @@ export interface Group {
   name: string;
 }
 
+/** 主日集会（日付・地区）。テーブル名: lordsday_meeting_records */
 export interface Meeting {
   id: string;
   event_date: string;
@@ -69,6 +70,7 @@ export interface Member {
   updated_at?: string;
 }
 
+/** 主日集会のレギュラーリスト項目。テーブル名: lordsday_regular_list */
 export interface RegularMemberListItem {
   id: string;
   meeting_id: string;
@@ -76,6 +78,7 @@ export interface RegularMemberListItem {
   sort_order: number;
 }
 
+/** 主日集会出欠。テーブル名: lordsday_meeting_attendance */
 export interface AttendanceRecord {
   id: string;
   meeting_id: string;
@@ -103,6 +106,8 @@ export interface OrganicDispatchRecord {
   dispatch_type: DispatchType | null;
   dispatch_date: string | null;
   dispatch_memo: string | null;
+  /** 訪問者（名簿メンバーIDの配列）。複数選択可。 */
+  visitor_ids?: string[] | null;
   created_at?: string;
   updated_at?: string;
 }

@@ -295,7 +295,7 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear }: Pro
                                   className={`sticky left-0 z-10 border-b border-r border-slate-100 align-top p-1 ${member.tier === "semi" ? "bg-amber-50" : member.tier === "pool" ? "bg-sky-50" : "bg-white"}`}
                                 >
                                   <Link
-                                    href={`/members/${member.memberId}/edit`}
+                                    href={`/members/${member.memberId}`}
                                     className="text-sm text-slate-800 block truncate max-w-[6rem] text-primary-600 hover:underline"
                                     title={member.name}
                                   >
@@ -350,7 +350,7 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear }: Pro
                               className={`sticky left-0 z-10 border-b border-r border-slate-100 align-top p-1 ${member.tier === "semi" ? "bg-amber-50" : member.tier === "pool" ? "bg-sky-50" : "bg-white"}`}
                             >
                               <Link
-                                href={`/members/${member.memberId}/edit`}
+                                href={`/members/${member.memberId}`}
                                 className="text-sm text-slate-800 block truncate max-w-[6rem] text-primary-600 hover:underline"
                                 title={member.name}
                               >

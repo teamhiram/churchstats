@@ -61,7 +61,7 @@ export async function ensureSundayMeetingsBatch(
   const localityNameMap = new Map((localitiesRes.data ?? []).map((l: { id: string; name: string }) => [l.id, l.name]));
 
   const { data: existing } = await supabase
-    .from("meetings")
+    .from("lordsday_meeting_records")
     .select("id, district_id, locality_id")
     .eq("event_date", sundayIso)
     .eq("meeting_type", "main");
@@ -108,7 +108,7 @@ export async function ensureSundayMeetingsBatch(
       if (!existingByLocality.get(localityId)) {
         const locName = localityNameMap.get(localityId) ?? "";
         const { data: ins, error } = await supabase
-          .from("meetings")
+          .from("lordsday_meeting_records")
           .insert({
             event_date: sundayIso,
             meeting_type: "main",
@@ -125,7 +125,7 @@ export async function ensureSundayMeetingsBatch(
     let mid = existingByDistrict.get(did);
     if (!mid) {
       const { data: ins, error } = await supabase
-        .from("meetings")
+        .from("lordsday_meeting_records")
         .insert({
           event_date: sundayIso,
           meeting_type: "main",

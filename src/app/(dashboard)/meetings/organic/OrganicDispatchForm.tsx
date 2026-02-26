@@ -2,7 +2,9 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
-import { formatDateYmd, getDaysInWeek } from "@/lib/weekUtils";
+import { formatDateYmd, getDaysInWeek, getSundayWeeksInYear } from "@/lib/weekUtils";
+import { format, parseISO } from "date-fns";
+import { ja } from "date-fns/locale";
 import { getGojuonRowLabel, GOJUON_ROW_LABELS } from "@/lib/furigana";
 import { DISPATCH_TYPE_LABELS, CATEGORY_LABELS } from "@/types/database";
 import type { DispatchType } from "@/types/database";
@@ -51,6 +53,7 @@ type DispatchRow = {
   dispatch_type: DispatchType | null;
   dispatch_date: string | null;
   dispatch_memo: string | null;
+  visitor_ids: string[] | null;
 };
 
 type Props = {
@@ -80,12 +83,19 @@ export function OrganicDispatchForm({
   const districtId = defaultDistrictId ?? "";
   const weekStartIso = initialWeekStartIso;
   const [groups, setGroups] = useState<Group[]>([]);
-  const [groupId, setGroupId] = useState("");
+  const [groupId, setGroupId] = useState<string>(() => {
+    const d = defaultDistrictId ?? "";
+    if (!d) return "";
+    const list = d === "__all__" ? groupsProp : groupsProp.filter((g) => g.district_id === d);
+    return list.length > 0 ? "__all__" : "";
+  });
   const [roster, setRoster] = useState<MemberRow[]>([]);
   const [dispatchMap, setDispatchMap] = useState<Map<string, DispatchRow>>(new Map());
   const [localType, setLocalType] = useState<Map<string, "" | DispatchType>>(new Map());
   const [localDate, setLocalDate] = useState<Map<string, string>>(new Map());
   const [localMemo, setLocalMemo] = useState<Map<string, string>>(new Map());
+  const [localVisitors, setLocalVisitors] = useState<Map<string, string[]>>(new Map());
+  const [memberIdToName, setMemberIdToName] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -95,7 +105,11 @@ export function OrganicDispatchForm({
   const [group2, setGroup2] = useState<GroupOption | "">("");
   const [sectionOpen, setSectionOpen] = useState<Record<string, boolean>>({});
   const [accordionOpen, setAccordionOpen] = useState(false);
-  const [memoPopupMemberId, setMemoPopupMemberId] = useState<string | null>(null);
+  const [recordPopupMemberId, setRecordPopupMemberId] = useState<string | null>(null);
+  type PopupForm = { type: "" | DispatchType; date: string; memo: string; visitors: string[] };
+  const [popupForm, setPopupForm] = useState<PopupForm | null>(null);
+  const [popupVisitorSearchQuery, setPopupVisitorSearchQuery] = useState("");
+  const [popupVisitorSearchResults, setPopupVisitorSearchResults] = useState<MemberRow[]>([]);
 
   const districtMap = useMemo(() => new Map(districts.map((d) => [d.id, d.name])), [districts]);
   const groupMap = useMemo(() => new Map(groupsProp.map((g) => [g.id, g.name])), [groupsProp]);
@@ -123,22 +137,31 @@ export function OrganicDispatchForm({
       setLocalType(new Map());
       setLocalDate(new Map());
       setLocalMemo(new Map());
+      setLocalVisitors(new Map());
       return;
     }
-    if (groupId === "__all__" && groups.length === 0) return;
+    if (groupId === "__all__" && groups.length === 0 && (districtId !== "__all__" || groupsProp.length === 0)) return;
     let cancelled = false;
     setLoading(true);
     const supabase = createClient();
-    const groupIds = groupId === "__all__" ? groups.map((g) => g.id) : [groupId];
+    const groupIds =
+      groupId === "__all__"
+        ? districtId === "__all__"
+          ? groupsProp.map((g) => g.id)
+          : groups.map((g) => g.id)
+        : [groupId];
     if (groupIds.length === 0) {
       setRoster([]);
       setDispatchMap(new Map());
       setLocalType(new Map());
       setLocalDate(new Map());
       setLocalMemo(new Map());
+      setLocalVisitors(new Map());
       setLoading(false);
       return;
     }
+    const weekDays = getDaysInWeek(weekStartIso);
+    const weekDayValues = new Set(weekDays.map((d) => d.value));
     Promise.all([
       groupId === "__all__"
         ? supabase
@@ -153,36 +176,88 @@ export function OrganicDispatchForm({
             .order("name"),
       supabase
         .from("organic_dispatch_records")
-        .select("id, member_id, group_id, week_start, dispatch_type, dispatch_date, dispatch_memo")
+        .select("id, member_id, group_id, week_start, dispatch_type, dispatch_date, dispatch_memo, visitor_ids")
         .in("group_id", groupIds)
         .eq("week_start", weekStartIso),
     ]).then(([membersRes, dispatchRes]) => {
       if (cancelled) return;
       const members = (membersRes.data ?? []) as MemberRow[];
-      const records = (dispatchRes.data ?? []) as DispatchRow[];
+      const records = (dispatchRes.data ?? []) as (DispatchRow & { visitor_ids?: string[] | null })[];
+      if (dispatchRes.error) {
+        console.error("[organic_dispatch] fetch error", dispatchRes.error);
+        setSaveError(`派遣履歴の取得に失敗しました: ${dispatchRes.error.message}`);
+      } else {
+        setSaveError(null);
+      }
       const map = new Map<string, DispatchRow>();
       const typeMap = new Map<string, "" | DispatchType>();
       const dateMap = new Map<string, string>();
       const memoMap = new Map<string, string>();
-      const weekDayValues = new Set(getDaysInWeek(weekStartIso).map((d) => d.value));
+      const visitorsMap = new Map<string, string[]>();
+      const normalizeVisitorIds = (v: unknown): string[] =>
+        Array.isArray(v) ? v.map((id) => String(id)).filter(Boolean) : [];
       records.forEach((r) => {
-        map.set(r.member_id, r);
+        const visitorIds = normalizeVisitorIds(r.visitor_ids);
+        map.set(r.member_id, { ...r, visitor_ids: visitorIds });
         typeMap.set(r.member_id, r.dispatch_type ?? "");
         const d = r.dispatch_date ?? "";
         dateMap.set(r.member_id, weekDayValues.has(d) ? d : "");
         memoMap.set(r.member_id, r.dispatch_memo ?? "");
+        visitorsMap.set(r.member_id, visitorIds);
       });
       setRoster(members);
       setDispatchMap(map);
       setLocalType(typeMap);
       setLocalDate(dateMap);
       setLocalMemo(memoMap);
+      setLocalVisitors(visitorsMap);
       setLoading(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [groupId, weekStartIso, groups]);
+  }, [groupId, weekStartIso, groups, districtId, groupsProp]);
+
+  useEffect(() => {
+    const fromRoster = new Map<string, string>(roster.map((m) => [m.id, m.name]));
+    const visitorIds = new Set<string>();
+    localVisitors.forEach((ids) => ids.forEach((id) => visitorIds.add(String(id))));
+    dispatchMap.forEach((_, memberId) => visitorIds.add(String(memberId)));
+    const missing = [...visitorIds].filter((id) => !fromRoster.has(id));
+    if (missing.length === 0) {
+      setMemberIdToName(fromRoster);
+      return;
+    }
+    const supabase = createClient();
+    supabase
+      .from("members")
+      .select("id, name")
+      .in("id", missing)
+      .then(({ data }) => {
+        setMemberIdToName((prev) => {
+          const next = new Map(prev);
+          fromRoster.forEach((name, id) => next.set(id, name));
+          (data ?? []).forEach((row: { id: string; name: string }) => next.set(row.id, row.name));
+          return next;
+        });
+      });
+  }, [roster, localVisitors, dispatchMap]);
+
+  useEffect(() => {
+    if (!popupVisitorSearchQuery.trim() || !recordPopupMemberId) {
+      setPopupVisitorSearchResults([]);
+      return;
+    }
+    const supabase = createClient();
+    supabase
+      .from("members")
+      .select("id, name, furigana, district_id, group_id, age_group, is_baptized")
+      .ilike("name", `%${popupVisitorSearchQuery.trim()}%`)
+      .limit(15)
+      .then(({ data }) => {
+        setPopupVisitorSearchResults((data ?? []) as MemberRow[]);
+      });
+  }, [popupVisitorSearchQuery, recordPopupMemberId]);
 
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -320,10 +395,42 @@ export function OrganicDispatchForm({
   const toggleSectionOpen = (key: string) => setSectionOpen((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }));
   const isSectionOpen = (key: string) => sectionOpen[key] ?? true;
 
+  const { historyRecords, weekRangeLabel } = useMemo(() => {
+    const year = initialYear;
+    const weeks = getSundayWeeksInYear(year);
+    const currentWeek = weeks.find((w) => formatDateYmd(w.weekStart) === weekStartIso);
+    const weekRangeLabel = currentWeek
+      ? `${format(currentWeek.weekStart, "yyyy/M/d", { locale: ja })}〜${format(currentWeek.weekEnd, "M/d", { locale: ja })}`
+      : weekStartIso;
+    const list = Array.from(dispatchMap.entries()).map(([memberId, record]) => ({
+      member: roster.find((m) => m.id === memberId) ?? {
+        id: memberId,
+        name: "",
+        furigana: null,
+        district_id: null,
+        group_id: null,
+        age_group: null,
+        is_baptized: false,
+      },
+      memberId,
+      record,
+    }));
+    list.sort((a, b) => {
+      const da = a.record.dispatch_date ?? a.record.week_start;
+      const db = b.record.dispatch_date ?? b.record.week_start;
+      const cmp = da.localeCompare(db);
+      if (cmp !== 0) return cmp;
+      const nameA = a.member.name || a.memberId;
+      const nameB = b.member.name || b.memberId;
+      return nameA.localeCompare(nameB);
+    });
+    return { historyRecords: list, weekRangeLabel };
+  }, [roster, dispatchMap, weekStartIso, initialYear]);
+
   const syncOne = useCallback(
     async (
       memberId: string,
-      overrides?: { type?: "" | DispatchType; date?: string; memo?: string }
+      overrides?: { type?: "" | DispatchType; date?: string; memo?: string; visitors?: string[] }
     ) => {
       if (!groupId || !weekStartIso) return;
       const effectiveGroupId = groupId === "__all__" ? roster.find((m) => m.id === memberId)?.group_id : groupId;
@@ -332,6 +439,8 @@ export function OrganicDispatchForm({
       const type = ((overrides?.type !== undefined ? overrides.type : localType.get(memberId)) ?? "") as DispatchType | "";
       const date = (overrides?.date !== undefined ? overrides.date : localDate.get(memberId) ?? "").trim();
       const memo = (overrides?.memo !== undefined ? overrides.memo : localMemo.get(memberId) ?? "").trim();
+      const visitorIds = overrides?.visitors !== undefined ? overrides.visitors : (localVisitors.get(memberId) ?? []);
+      const visitorIdsNormalized = visitorIds.map((id) => String(id)).filter(Boolean);
       const allFilled = type !== "" && date !== "" && memo !== "";
       const supabase = createClient();
       const existing = dispatchMap.get(memberId);
@@ -341,6 +450,7 @@ export function OrganicDispatchForm({
           dispatch_type: type as DispatchType,
           dispatch_date: date,
           dispatch_memo: memo,
+          visitor_ids: visitorIdsNormalized,
         };
         if (existing) {
           const { error } = await supabase
@@ -355,6 +465,12 @@ export function OrganicDispatchForm({
             setSaveError(isRls ? "保存する権限がありません。報告者以上のロールが必要です。" : `保存に失敗しました: ${error.message}`);
             return;
           }
+          setDispatchMap((prev) => {
+            const next = new Map(prev);
+            const r = next.get(memberId);
+            if (r) next.set(memberId, { ...r, visitor_ids: visitorIdsNormalized });
+            return next;
+          });
         } else {
           const { data: inserted, error } = await supabase
             .from("organic_dispatch_records")
@@ -364,7 +480,7 @@ export function OrganicDispatchForm({
               week_start: weekStartIso,
               ...payload,
             })
-            .select("id, member_id, group_id, week_start, dispatch_type, dispatch_date, dispatch_memo")
+            .select("id, member_id, group_id, week_start, dispatch_type, dispatch_date, dispatch_memo, visitor_ids")
             .single();
           if (error) {
             const isRls = /row-level security|RLS/i.test(error.message ?? "");
@@ -372,7 +488,7 @@ export function OrganicDispatchForm({
             return;
           }
           if (inserted) {
-            setDispatchMap((prev) => new Map(prev).set(memberId, inserted as DispatchRow));
+            setDispatchMap((prev) => new Map(prev).set(memberId, { ...(inserted as DispatchRow), visitor_ids: visitorIdsNormalized }));
           }
         }
       } else if (existing) {
@@ -389,46 +505,88 @@ export function OrganicDispatchForm({
         });
       }
     },
-    [groupId, weekStartIso, dispatchMap, roster, localType, localDate, localMemo]
+    [groupId, weekStartIso, dispatchMap, roster, localType, localDate, localMemo, localVisitors]
   );
 
-  const onTypeChange = (memberId: string, value: "" | DispatchType) => {
-    setLocalType((prev) => new Map(prev).set(memberId, value));
-    syncOne(memberId, { type: value });
-  };
-
-  const onDateChange = (memberId: string, value: string) => {
-    setLocalDate((prev) => new Map(prev).set(memberId, value));
-    syncOne(memberId, { date: value });
-  };
-
-  const onMemoBlur = (memberId: string, memoValue?: string) => {
-    if (memoValue !== undefined) {
-      setLocalMemo((prev) => new Map(prev).set(memberId, memoValue));
-      syncOne(memberId, { memo: memoValue });
-    } else {
-      syncOne(memberId);
-    }
-  };
-
-  useEffect(() => {
-    const hasIncomplete = roster.some((m) => {
-      const t = (localType.get(m.id) ?? "") as string;
-      const d = (localDate.get(m.id) ?? "").trim();
-      const me = (localMemo.get(m.id) ?? "").trim();
-      const hasAny = t !== "" || d !== "" || me !== "";
-      const hasAll = t !== "" && d !== "" && me !== "";
-      return hasAny && !hasAll;
+  const openRecordPopup = (memberId: string) => {
+    setRecordPopupMemberId(memberId);
+    setPopupForm({
+      type: (localType.get(memberId) ?? "") as "" | DispatchType,
+      date: localDate.get(memberId) ?? "",
+      memo: localMemo.get(memberId) ?? "",
+      visitors: localVisitors.get(memberId) ?? [],
     });
-    if (!hasIncomplete) return;
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "種類・日付・メモの3項目をすべて入力しないと保存されません。";
-      return "種類・日付・メモの3項目をすべて入力しないと保存されません。";
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [roster, localType, localDate, localMemo]);
+    setPopupVisitorSearchQuery("");
+    setPopupVisitorSearchResults([]);
+  };
+
+  const closeRecordPopup = () => {
+    setRecordPopupMemberId(null);
+    setPopupForm(null);
+    setPopupVisitorSearchQuery("");
+    setPopupVisitorSearchResults([]);
+  };
+
+  const saveRecordFromPopup = () => {
+    if (!recordPopupMemberId || !popupForm) return;
+    const { type, date, memo, visitors } = popupForm;
+    const allFilled = type !== "" && date.trim() !== "" && memo.trim() !== "";
+    if (!allFilled) {
+      setSaveError("派遣種類・派遣日・メモの3項目をすべて入力してください。");
+      return;
+    }
+    setSaveError(null);
+    setLocalType((prev) => new Map(prev).set(recordPopupMemberId, type));
+    setLocalDate((prev) => new Map(prev).set(recordPopupMemberId, date.trim()));
+    setLocalMemo((prev) => new Map(prev).set(recordPopupMemberId, memo.trim()));
+    setLocalVisitors((prev) => new Map(prev).set(recordPopupMemberId, visitors));
+    syncOne(recordPopupMemberId, { visitors });
+    closeRecordPopup();
+  };
+
+  const deleteRecordFromPopup = () => {
+    if (!recordPopupMemberId) return;
+    const existing = dispatchMap.get(recordPopupMemberId);
+    if (!existing) {
+      closeRecordPopup();
+      return;
+    }
+    const memberIdToClear = recordPopupMemberId;
+    setSaveError(null);
+    const supabase = createClient();
+    supabase.from("organic_dispatch_records").delete().eq("id", existing.id).then(({ error }) => {
+      if (error) {
+        setSaveError(/row-level security|RLS/i.test(error.message ?? "") ? "削除する権限がありません。" : `削除に失敗しました: ${error.message}`);
+        return;
+      }
+      setDispatchMap((prev) => {
+        const next = new Map(prev);
+        next.delete(memberIdToClear);
+        return next;
+      });
+      setLocalType((prev) => {
+        const next = new Map(prev);
+        next.delete(memberIdToClear);
+        return next;
+      });
+      setLocalDate((prev) => {
+        const next = new Map(prev);
+        next.delete(memberIdToClear);
+        return next;
+      });
+      setLocalMemo((prev) => {
+        const next = new Map(prev);
+        next.delete(memberIdToClear);
+        return next;
+      });
+      setLocalVisitors((prev) => {
+        const next = new Map(prev);
+        next.delete(memberIdToClear);
+        return next;
+      });
+      closeRecordPopup();
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -560,8 +718,67 @@ export function OrganicDispatchForm({
               </div>
             )}
           </div>
+
+          <div className="bg-white rounded-lg border border-slate-200 p-4 mb-4">
+            <h2 className="font-semibold text-slate-800 mb-3">派遣履歴</h2>
+            <p className="text-xs text-slate-500 mb-2">
+              表示週: {weekRangeLabel}（上記の週セレクターで変更できます）
+            </p>
+            {historyRecords.length > 0 ? (
+              <ul className="space-y-3">
+                {historyRecords.map(({ member, memberId, record }) => (
+                      <li
+                        key={record.id}
+                        className="border-b border-slate-100 pb-3 last:border-0 last:pb-0 text-sm"
+                      >
+                        <div className="flex flex-wrap items-center gap-2 gap-y-1">
+                          <button
+                            type="button"
+                            onClick={() => openRecordPopup(memberId)}
+                            className="inline-flex shrink-0 items-center justify-center rounded h-4 w-4 text-slate-500 hover:bg-slate-200 hover:text-slate-700 touch-target"
+                            aria-label="編集"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                              <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
+                            </svg>
+                          </button>
+                          <span className="inline-flex shrink-0 items-center rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+                            {record.dispatch_date
+                              ? format(parseISO(record.dispatch_date), "yyyy/M/d")
+                              : format(parseISO(record.week_start), "yyyy/M/d") + "（週）"}
+                          </span>
+                          <span className="font-medium text-slate-800">
+                            {member.name || memberIdToName.get(memberId) || "—"}
+                          </span>
+                          <span className="text-slate-500">
+                            {groupMap.get(record.group_id) ?? record.group_id}
+                          </span>
+                          {record.dispatch_type && (
+                            <span className="text-primary-600">
+                              {DISPATCH_TYPE_LABELS[record.dispatch_type]}
+                            </span>
+                          )}
+                        </div>
+                        {record.dispatch_memo && record.dispatch_memo.trim() !== "" && (
+                          <p className="mt-1.5 text-slate-600 whitespace-pre-wrap">
+                            {record.dispatch_memo.trim()}
+                          </p>
+                        )}
+                        {(record.visitor_ids ?? []).length > 0 && (
+                          <p className="mt-1.5 text-slate-600 text-xs">
+                            訪問者: {(record.visitor_ids ?? []).map((vid) => memberIdToName.get(String(vid)) ?? String(vid)).join("、")}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+            ) : (
+              <p className="text-sm text-slate-500">記録がありません。別の週を選ぶと表示される場合があります。</p>
+            )}
+          </div>
+
           <p className="text-slate-600 text-sm mb-2">
-            種類・日付・メモの3項目をすべて入力すると保存されます。3項目入力しないままページを移動すると保存されません。
+            「記録する」をクリックしてポップアップで派遣種類・訪問者・派遣日・メモを入力し、保存してください。
           </p>
           {loading ? (
             <p className="text-slate-500 text-sm">読み込み中…</p>
@@ -571,15 +788,13 @@ export function OrganicDispatchForm({
                 <thead className="bg-slate-50">
                   <tr>
                     <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">名前</th>
-                    <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">派遣種類</th>
-                    <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">派遣日</th>
-                    <th className="px-2 py-1.5 text-left text-xs font-medium text-slate-500 uppercase w-10 sm:w-auto"><span className="hidden sm:inline">メモ</span></th>
+                    <th className="px-3 py-1.5 text-left text-xs font-medium text-slate-500 uppercase">記録する</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {roster.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-3 py-4 text-center text-slate-500 text-sm">
+                      <td colSpan={2} className="px-3 py-4 text-center text-slate-500 text-sm">
                         名簿がありません
                       </td>
                     </tr>
@@ -593,7 +808,7 @@ export function OrganicDispatchForm({
                     <Fragment key={`s-${section.group1Key}-${idx}`}>
                       {hasGroup1 && section.subsections.some((s) => s.members.length > 0) && (
                         <tr className="bg-slate-100">
-                          <td colSpan={4} className="px-3 py-0">
+                          <td colSpan={2} className="px-3 py-0">
                             <button
                               type="button"
                               onClick={() => toggleSectionOpen(g1Key)}
@@ -621,7 +836,7 @@ export function OrganicDispatchForm({
                           <Fragment key={`sub-${section.group1Key}-${sub.group2Key}-${subIdx}`}>
                             {hasSubHeader && sub.members.length > 0 && (
                               <tr className="bg-slate-50">
-                                <td colSpan={4} className="px-3 py-0 pl-6">
+                                <td colSpan={2} className="px-3 py-0 pl-6">
                                   <button
                                     type="button"
                                     onClick={() => toggleSectionOpen(g2Key)}
@@ -642,80 +857,23 @@ export function OrganicDispatchForm({
                               </tr>
                             )}
                             {(!hasSubHeader || g2Open) && sub.members.map((m) => {
-                    const hasType = (localType.get(m.id) ?? "") !== "";
-                    const hasDate = (localDate.get(m.id) ?? "") !== "";
-                    const hasMemo = (localMemo.get(m.id) ?? "").trim() !== "";
-                    const hasInput = hasType || hasDate || hasMemo;
+                    const hasRecord = dispatchMap.has(m.id);
                     return (
-                    <Fragment key={m.id}>
                     <tr
-                      className={hasInput ? "bg-primary-50/70 hover:bg-primary-100/70 border-l-2 border-l-primary-500" : "hover:bg-slate-50"}
+                      key={m.id}
+                      className={hasRecord ? "bg-primary-50/70 hover:bg-primary-100/70 border-l-2 border-l-primary-500" : "hover:bg-slate-50"}
                     >
                       <td className="px-3 py-1.5 text-slate-800">{m.name}</td>
                       <td className="px-3 py-1.5">
-                        <select
-                          value={localType.get(m.id) ?? ""}
-                          onChange={(e) => onTypeChange(m.id, (e.target.value || "") as "" | DispatchType)}
-                          className="w-full max-w-[140px] px-2 py-0.5 text-sm border border-slate-300 rounded touch-target"
+                        <button
+                          type="button"
+                          onClick={() => openRecordPopup(m.id)}
+                          className="px-3 py-1.5 text-sm font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 touch-target"
                         >
-                          {DISPATCH_OPTIONS.map((opt) => (
-                            <option key={opt.value || "empty"} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-3 py-1.5">
-                        <select
-                          value={localDate.get(m.id) ?? ""}
-                          onChange={(e) => onDateChange(m.id, e.target.value)}
-                          className="w-full max-w-[160px] px-2 py-0.5 text-sm border border-slate-300 rounded touch-target"
-                        >
-                          <option value="">—</option>
-                          {getDaysInWeek(weekStartIso).map((day) => (
-                            <option key={day.value} value={day.value}>
-                              {day.label}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-2 py-1.5 align-top">
-                        <div className="sm:hidden">
-                          <button
-                            type="button"
-                            onClick={() => setMemoPopupMemberId(m.id)}
-                            className="p-1 rounded touch-target inline-flex"
-                            aria-label="メモを編集"
-                          >
-                            <svg className={`w-5 h-5 ${(localMemo.get(m.id) ?? "").trim() ? "text-primary-600" : "text-slate-400"}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                              <polyline points="14 2 14 8 20 8" />
-                              <line x1="16" y1="13" x2="8" y2="13" />
-                              <line x1="16" y1="17" x2="8" y2="17" />
-                              <polyline points="10 9 9 9 8 9" />
-                            </svg>
-                          </button>
-                        </div>
-                        <div className="hidden sm:block">
-                          <input
-                            type="text"
-                            value={localMemo.get(m.id) ?? ""}
-                            onChange={(e) => setLocalMemo((prev) => new Map(prev).set(m.id, e.target.value))}
-                            onBlur={(e) => onMemoBlur(m.id, e.target.value)}
-                            placeholder="メモ"
-                            className="w-full min-w-[120px] max-w-xs px-2 py-0.5 text-sm border border-slate-300 rounded touch-target"
-                          />
-                        </div>
+                          {hasRecord ? "編集" : "記録する"}
+                        </button>
                       </td>
                     </tr>
-                    {(localMemo.get(m.id) ?? "").trim() && (
-                      <tr className="sm:hidden bg-slate-50/50">
-                        <td colSpan={4} className="px-3 py-0.5 pb-1.5 text-xs text-slate-500">
-                          {localMemo.get(m.id)}
-                        </td>
-                      </tr>
-                    )}
-                    </Fragment>
                     );
                   })}
                           </Fragment>
@@ -733,41 +891,144 @@ export function OrganicDispatchForm({
         </>
       )}
 
-      {memoPopupMemberId && (
+      {recordPopupMemberId && popupForm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 sm:hidden"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="organic-memo-popup-title"
-          onClick={() => setMemoPopupMemberId(null)}
+          aria-labelledby="organic-record-popup-title"
+          onClick={() => closeRecordPopup()}
         >
-          <div className="w-full max-w-sm bg-white rounded-lg shadow-lg p-4" onClick={(e) => e.stopPropagation()}>
-            <h2 id="organic-memo-popup-title" className="text-sm font-medium text-slate-700 mb-2">派遣メモ</h2>
-            <textarea
-              value={localMemo.get(memoPopupMemberId) ?? ""}
-              onChange={(e) => setLocalMemo((prev) => new Map(prev).set(memoPopupMemberId, e.target.value))}
-              placeholder="メモ"
-              rows={3}
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg touch-target resize-none"
-              autoFocus
-            />
-            <div className="flex gap-2 mt-3">
+          <div
+            className="w-full max-w-md bg-white rounded-lg shadow-lg p-4 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="organic-record-popup-title" className="text-sm font-semibold text-slate-800 mb-4">
+              派遣を記録 — {roster.find((r) => r.id === recordPopupMemberId)?.name ?? ""}
+            </h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">派遣種類</label>
+                <select
+                  value={popupForm.type}
+                  onChange={(e) => setPopupForm((prev) => prev && { ...prev, type: (e.target.value || "") as "" | DispatchType })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+                >
+                  {DISPATCH_OPTIONS.map((opt) => (
+                    <option key={opt.value || "empty"} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">訪問者</label>
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {popupForm.visitors.map((vid) => (
+                    <span
+                      key={vid}
+                      className="inline-flex items-center gap-0.5 rounded bg-slate-200 px-1.5 py-0.5 text-xs text-slate-800"
+                    >
+                      {memberIdToName.get(vid) ?? vid}
+                      <button
+                        type="button"
+                        onClick={() => setPopupForm((prev) => prev && { ...prev, visitors: prev.visitors.filter((id) => id !== vid) })}
+                        className="ml-0.5 rounded p-0.5 hover:bg-slate-300 touch-target"
+                        aria-label={`${memberIdToName.get(vid) ?? vid}を削除`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={popupVisitorSearchQuery}
+                    onChange={(e) => setPopupVisitorSearchQuery(e.target.value)}
+                    placeholder="名前で検索して追加"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg touch-target"
+                  />
+                  {popupVisitorSearchResults.length > 0 && (
+                    <ul className="absolute left-0 right-0 top-full z-10 mt-0.5 max-h-40 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg py-0.5">
+                      {popupVisitorSearchResults
+                        .filter((vm) => vm.id !== recordPopupMemberId && !popupForm.visitors.includes(vm.id))
+                        .map((vm) => (
+                          <li key={vm.id}>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setPopupForm((prev) => prev && { ...prev, visitors: [...prev.visitors, vm.id] });
+                                setMemberIdToName((p) => new Map(p).set(vm.id, vm.name));
+                                setPopupVisitorSearchQuery("");
+                                setPopupVisitorSearchResults([]);
+                              }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 touch-target"
+                            >
+                              {vm.name}
+                              {vm.furigana && <span className="ml-1 text-slate-500 text-xs">{vm.furigana}</span>}
+                            </button>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">派遣日</label>
+                <select
+                  value={popupForm.date}
+                  onChange={(e) => setPopupForm((prev) => prev && { ...prev, date: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+                >
+                  <option value="">—</option>
+                  {getDaysInWeek(weekStartIso).map((day) => (
+                    <option key={day.value} value={day.value}>
+                      {day.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">メモ</label>
+                <textarea
+                  value={popupForm.memo}
+                  onChange={(e) => setPopupForm((prev) => prev && { ...prev, memo: e.target.value })}
+                  placeholder="メモ"
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg touch-target resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 mt-6">
               <button
                 type="button"
-                onClick={() => setMemoPopupMemberId(null)}
-                className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg text-slate-700 touch-target"
+                onClick={closeRecordPopup}
+                className="px-4 py-2 text-sm border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 touch-target"
               >
                 キャンセル
               </button>
+              {dispatchMap.has(recordPopupMemberId) && (
+                <button
+                  type="button"
+                  onClick={deleteRecordFromPopup}
+                  className="px-4 py-2 text-sm border border-red-300 rounded-lg text-red-700 hover:bg-red-50 touch-target"
+                >
+                  削除
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => {
-                  onMemoBlur(memoPopupMemberId);
-                  setMemoPopupMemberId(null);
-                }}
-                className="flex-1 px-3 py-2 text-sm bg-primary-600 text-white rounded-lg touch-target"
+                onClick={saveRecordFromPopup}
+                className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 touch-target"
               >
-                確定
+                保存
               </button>
             </div>
           </div>

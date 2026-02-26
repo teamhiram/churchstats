@@ -13,14 +13,14 @@ export default async function MeetingDetailPage({
   const { id } = await params;
   const supabase = await createClient();
   const { data: meeting } = await supabase
-    .from("meetings")
+    .from("lordsday_meeting_records")
     .select("id, event_date, meeting_type, name, district_id, group_id")
     .eq("id", id)
     .single();
   if (!meeting) notFound();
 
   const { data: attendance } = await supabase
-    .from("attendance_records")
+    .from("lordsday_meeting_attendance")
     .select("id, member_id")
     .eq("meeting_id", id);
   const { data: members } = await supabase
@@ -28,7 +28,7 @@ export default async function MeetingDetailPage({
     .select("id, name, age_group, is_baptized, district_id, group_id")
     .in("id", attendance?.map((a) => a.member_id) ?? []);
   const { data: regularList } = await supabase
-    .from("regular_member_list_items")
+    .from("lordsday_regular_list")
     .select("id, member_id, sort_order")
     .eq("meeting_id", id)
     .order("sort_order");

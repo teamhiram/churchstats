@@ -10,11 +10,11 @@ export default async function DebugNumbersPage() {
     groupsCountRes,
     attendanceCountRes,
   ] = await Promise.all([
-    supabase.from("meetings").select("id", { count: "exact", head: true }),
+    supabase.from("lordsday_meeting_records").select("id", { count: "exact", head: true }),
     supabase.from("members").select("id", { count: "exact", head: true }),
     supabase.from("districts").select("id", { count: "exact", head: true }),
     supabase.from("groups").select("id", { count: "exact", head: true }),
-    supabase.from("attendance_records").select("id", { count: "exact", head: true }),
+    supabase.from("lordsday_meeting_attendance").select("id", { count: "exact", head: true }),
   ]);
 
   const items = [

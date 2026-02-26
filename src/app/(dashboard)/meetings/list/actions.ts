@@ -60,9 +60,7 @@ async function getListDataUncached(
   const filterDistrictIds = localityId ? districtIdsByLocality.get(localityId) ?? [] : allDistrictIds;
   const filterGroupIds = localityId ? groupIdsByLocality.get(localityId) ?? [] : allGroupIds;
 
-  const yearStart = `${year}-01-01`;
-  const yearEnd = `${year}-12-31`;
-
+  // 週は年をまたぐことがある（例: 2026年W1 = 2025/12/28〜）。集計は週範囲で取得する
   const groupRecordsQuery =
     filterGroupIds.length > 0
       ? supabase
@@ -85,10 +83,10 @@ async function getListDataUncached(
 
   const [meetingsRes, groupRecordsRes, prayerRecordsRes, dispatchRes] = await Promise.all([
     supabase
-      .from("meetings")
+      .from("lordsday_meeting_records")
       .select("id, event_date, meeting_type, district_id, group_id")
-      .gte("event_date", yearStart)
-      .lte("event_date", yearEnd),
+      .gte("event_date", weekStartRangeMin)
+      .lte("event_date", weekStartRangeMax),
     groupRecordsQuery,
     prayerRecordsQuery,
     supabase
@@ -154,7 +152,7 @@ async function getListDataUncached(
     const meetingChunks = chunk(meetingIds, CHUNK_SIZE);
     const attResults = await Promise.all(
       meetingChunks.map((ids) =>
-        supabase.from("attendance_records").select("meeting_id, member_id, attended").in("meeting_id", ids)
+        supabase.from("lordsday_meeting_attendance").select("meeting_id, member_id, attended").in("meeting_id", ids)
       )
     );
     const mainRaw = attResults.flatMap((r) => (r.data ?? []) as { meeting_id: string; member_id: string; attended?: boolean }[]);
@@ -321,7 +319,7 @@ export async function getWeekDetail(
 
   const [meetingsRes, groupRecordsRes, prayerRecordsRes, dispatchRes, membersRes] = await Promise.all([
     supabase
-      .from("meetings")
+      .from("lordsday_meeting_records")
       .select("id, event_date, meeting_type, district_id, group_id")
       .eq("meeting_type", "main")
       .eq("event_date", weekStart),
@@ -400,7 +398,7 @@ export async function getWeekDetail(
   let groupAttendedThisWeek = new Set<string>();
   if (mainMeetingIds.size > 0) {
     const { data: mainAttData } = await supabase
-      .from("attendance_records")
+      .from("lordsday_meeting_attendance")
       .select("meeting_id, member_id, attended, memo")
       .in("meeting_id", [...mainMeetingIds]);
     (mainAttData ?? []).forEach((a: { meeting_id: string; member_id: string; attended?: boolean; memo?: string | null }) => {
@@ -474,7 +472,7 @@ export async function getDebugSundayAttendees(dateStr: string): Promise<{
   const supabase = await createClient();
 
   const { data: meetings } = await supabase
-    .from("meetings")
+    .from("lordsday_meeting_records")
     .select("id")
     .eq("meeting_type", "main")
     .eq("event_date", dateStr);
@@ -485,7 +483,7 @@ export async function getDebugSundayAttendees(dateStr: string): Promise<{
   }
 
   const { data: attData } = await supabase
-    .from("attendance_records")
+    .from("lordsday_meeting_attendance")
     .select("member_id, attended")
     .in("meeting_id", meetingIds);
 
@@ -559,7 +557,7 @@ export async function getDuplicateMainAttendance(
   const yearEnd = `${year}-12-31`;
 
   const { data: meetings } = await supabase
-    .from("meetings")
+    .from("lordsday_meeting_records")
     .select("id, event_date")
     .eq("meeting_type", "main")
     .gte("event_date", yearStart)
@@ -572,7 +570,7 @@ export async function getDuplicateMainAttendance(
   const mainMeetingIds = new Set(mainMeetings.map((m) => m.id));
 
   const { data: attData } = await supabase
-    .from("attendance_records")
+    .from("lordsday_meeting_attendance")
     .select("id, meeting_id, member_id, attended")
     .in("meeting_id", mainMeetings.map((m) => m.id));
 
@@ -639,7 +637,7 @@ export async function getDuplicateMainAttendance(
 
 export async function deleteAttendanceRecord(attendanceId: string): Promise<{ error?: string }> {
   const supabase = await createClient();
-  const { error } = await supabase.from("attendance_records").delete().eq("id", attendanceId);
+  const { error } = await supabase.from("lordsday_meeting_attendance").delete().eq("id", attendanceId);
   if (error) return { error: error.message };
   return {};
 }

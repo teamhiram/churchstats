@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { Toggle } from "@/components/Toggle";
 import { formatDateYmd, getDaysInWeek } from "@/lib/weekUtils";
 import { getGojuonRowLabel, GOJUON_ROW_LABELS } from "@/lib/furigana";
@@ -1062,7 +1063,13 @@ export function SmallGroupAttendance({
                                 −
                               </button>
                             )}
-                            <span className={guestIds.has(m.id) ? "text-slate-400" : ""}>{m.name}</span>
+                            {isEditMode ? (
+                              <span className={guestIds.has(m.id) ? "text-slate-400" : ""}>{m.name}</span>
+                            ) : (
+                              <Link href={`/members/${m.id}`} className={`text-primary-600 hover:underline ${guestIds.has(m.id) ? "text-slate-400" : ""}`}>
+                                {m.name}
+                              </Link>
+                            )}
                           </div>
                         </td>
                         <td className="px-3 py-0.5">

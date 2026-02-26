@@ -18,9 +18,9 @@ export function BackupSection() {
       supabase.from("districts").select("*"),
       supabase.from("groups").select("*"),
       supabase.from("members").select("*"),
-      supabase.from("meetings").select("*"),
-      supabase.from("attendance_records").select("*"),
-      supabase.from("regular_member_list_items").select("*"),
+      supabase.from("lordsday_meeting_records").select("*"),
+      supabase.from("lordsday_meeting_attendance").select("*"),
+      supabase.from("lordsday_regular_list").select("*"),
       supabase.from("group_meeting_records").select("*"),
       supabase.from("group_meeting_attendance").select("*"),
     ]);
@@ -30,9 +30,9 @@ export function BackupSection() {
       districts: districts.data ?? [],
       groups: groups.data ?? [],
       members: members.data ?? [],
-      meetings: meetings.data ?? [],
-      attendance_records: attendance.data ?? [],
-      regular_member_list_items: regularList.data ?? [],
+      lordsday_meeting_records: meetings.data ?? [],
+      lordsday_meeting_attendance: attendance.data ?? [],
+      lordsday_regular_list: regularList.data ?? [],
       group_meeting_records: groupMeetingRecords.data ?? [],
       group_meeting_attendance: groupMeetingAttendance.data ?? [],
     };
@@ -62,9 +62,15 @@ export function BackupSection() {
         districts?: unknown[];
         groups?: unknown[];
         members?: unknown[];
+        /** @deprecated 新形式は lordsday_meeting_records */
         meetings?: unknown[];
+        lordsday_meeting_records?: unknown[];
+        /** @deprecated 新形式は lordsday_meeting_attendance */
         attendance_records?: unknown[];
+        lordsday_meeting_attendance?: unknown[];
+        /** @deprecated 新形式は lordsday_regular_list */
         regular_member_list_items?: unknown[];
+        lordsday_regular_list?: unknown[];
         group_meeting_records?: unknown[];
         group_meeting_attendance?: unknown[];
       };
@@ -81,14 +87,17 @@ export function BackupSection() {
       if (backup.members?.length) {
         await supabase.from("members").upsert(backup.members as never[], { onConflict: "id" });
       }
-      if (backup.meetings?.length) {
-        await supabase.from("meetings").upsert(backup.meetings as never[], { onConflict: "id" });
+      const meetingsData = backup.lordsday_meeting_records ?? backup.meetings;
+      if (meetingsData?.length) {
+        await supabase.from("lordsday_meeting_records").upsert(meetingsData as never[], { onConflict: "id" });
       }
-      if (backup.attendance_records?.length) {
-        await supabase.from("attendance_records").upsert(backup.attendance_records as never[], { onConflict: "id" });
+      const attendanceData = backup.lordsday_meeting_attendance ?? backup.attendance_records;
+      if (attendanceData?.length) {
+        await supabase.from("lordsday_meeting_attendance").upsert(attendanceData as never[], { onConflict: "id" });
       }
-      if (backup.regular_member_list_items?.length) {
-        await supabase.from("regular_member_list_items").upsert(backup.regular_member_list_items as never[], { onConflict: "id" });
+      const regularListData = backup.lordsday_regular_list ?? backup.regular_member_list_items;
+      if (regularListData?.length) {
+        await supabase.from("lordsday_regular_list").upsert(regularListData as never[], { onConflict: "id" });
       }
       if (backup.group_meeting_records?.length) {
         await supabase.from("group_meeting_records").upsert(backup.group_meeting_records as never[], { onConflict: "id" });

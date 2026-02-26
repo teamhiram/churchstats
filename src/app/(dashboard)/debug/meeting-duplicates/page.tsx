@@ -33,7 +33,7 @@ export default async function DebugMeetingDuplicatesPage() {
   };
 
   const { data: meetings } = await supabase
-    .from("meetings")
+    .from("lordsday_meeting_records")
     .select("id, event_date, meeting_type, name, district_id, locality_id, group_id, created_at")
     .order("event_date", { ascending: false })
     .order("created_at", { ascending: true });
@@ -156,7 +156,7 @@ export default async function DebugMeetingDuplicatesPage() {
   const duplicateMeetingIds = duplicateGroups.flatMap((rows) => rows.map((r) => r.id));
 
   const { data: attendanceRows } = await supabase
-    .from("attendance_records")
+    .from("lordsday_meeting_attendance")
     .select("meeting_id")
     .in("meeting_id", duplicateMeetingIds.length > 0 ? duplicateMeetingIds : ["00000000-0000-0000-0000-000000000000"]);
 

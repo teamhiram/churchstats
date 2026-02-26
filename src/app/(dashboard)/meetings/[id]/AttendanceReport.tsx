@@ -53,7 +53,7 @@ export function AttendanceReport({
     setMessage("");
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase.from("attendance_records").insert({
+    const { error } = await supabase.from("lordsday_meeting_attendance").insert({
       meeting_id: meetingId,
       member_id: member.id,
       recorded_category: member.age_group,
@@ -75,7 +75,7 @@ export function AttendanceReport({
 
   const removeAttendance = async (memberId: string) => {
     const supabase = createClient();
-    await supabase.from("attendance_records").delete().eq("meeting_id", meetingId).eq("member_id", memberId);
+    await supabase.from("lordsday_meeting_attendance").delete().eq("meeting_id", meetingId).eq("member_id", memberId);
     setAttendedIds((prev) => {
       const next = new Set(prev);
       next.delete(memberId);
