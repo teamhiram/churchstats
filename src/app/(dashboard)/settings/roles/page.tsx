@@ -12,10 +12,28 @@ export default async function RolesPage() {
   if (profile?.global_role !== "admin") redirect("/settings");
 
   const supabase = await createClient();
-  const { data: profiles } = await supabase
+  const { data: profilesRaw } = await supabase
     .from("profiles")
-    .select("id, email, full_name, role, global_role")
+    .select("id, email, full_name, role, global_role, main_district_id, districts!main_district_id(locality_id, localities(name))")
     .order("created_at", { ascending: true });
+
+  type Row = {
+    id: string;
+    email: string | null;
+    full_name: string | null;
+    role: string;
+    global_role: string | null;
+    main_district_id: string | null;
+    districts: { locality_id: string | null; localities: { name: string } | null } | null;
+  };
+  const profiles = ((profilesRaw ?? []) as Row[]).map((row) => ({
+    id: row.id,
+    email: row.email,
+    full_name: row.full_name,
+    role: row.role,
+    global_role: row.global_role,
+    main_locality_name: row.districts?.localities?.name ?? null,
+  }));
 
   const [areas, localities] = await Promise.all([getCachedAreas(), getCachedLocalities()]);
 

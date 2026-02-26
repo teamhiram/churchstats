@@ -21,6 +21,7 @@ type ProfileRow = {
   full_name: string | null;
   role: string;
   global_role: string | null;
+  main_locality_name: string | null;
 };
 
 type Area = { id: string; name: string };
@@ -124,6 +125,12 @@ export function RoleManagementClient({
                 }`}
               >
                 <span className="block truncate">{p.full_name || p.email || p.id.slice(0, 8)}</span>
+                {p.full_name && p.email && (
+                  <span className="block truncate text-xs text-slate-500">{p.email}</span>
+                )}
+                {p.main_locality_name && (
+                  <span className="block truncate text-xs text-slate-500">所属: {p.main_locality_name}</span>
+                )}
                 <span className="text-xs text-slate-500">
                   {p.global_role ? GLOBAL_ROLE_LABELS[p.global_role as GlobalRole] : "ローカルのみ"}
                 </span>
@@ -232,9 +239,14 @@ function UserRoleForm({
 
   return (
     <div className="space-y-6 border border-slate-200 rounded-lg bg-white p-6">
-      <h2 className="font-medium text-slate-800">
-        {profile.full_name || profile.email || profile.id.slice(0, 8)}
-      </h2>
+      <div>
+        <h2 className="font-medium text-slate-800">
+          {profile.full_name || profile.email || profile.id.slice(0, 8)}
+        </h2>
+        {profile.email && (
+          <p className="text-sm text-slate-500 mt-0.5">{profile.email}</p>
+        )}
+      </div>
 
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">グローバル権限</label>

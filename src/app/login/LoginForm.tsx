@@ -21,11 +21,22 @@ function LoginFormInner() {
     setLoading(true);
     setMessage("");
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) {
       setMessage(error.message);
       return;
+    }
+    if (data.user) {
+      try {
+        await supabase.from("login_logs").insert({
+          user_id: data.user.id,
+          email: data.user.email ?? null,
+          user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+        });
+      } catch (logError) {
+        console.error("login_logs insert failed:", logError);
+      }
     }
     router.push(searchParams.get("next") ?? "/dashboard");
     router.refresh();

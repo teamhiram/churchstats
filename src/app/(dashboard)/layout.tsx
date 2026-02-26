@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Nav } from "@/components/Nav";
 import { MainContentWrapper } from "@/components/MainContentWrapper";
+import { SettingsShell } from "@/components/SettingsShell";
 import { QueryProvider } from "@/components/QueryProvider";
 import { DisplaySettingsProvider } from "@/contexts/DisplaySettingsContext";
 import { LocalityProvider } from "@/contexts/LocalityContext";
@@ -70,7 +71,11 @@ export default async function DashboardLayout({
               showDebug={data.profile?.role === "admin"}
             />
             <main className="flex-1 pt-[calc(2rem+0.5em)] md:pt-[calc(3.5rem+0.5em)] p-4 md:p-6 pb-[calc(1.875rem+env(safe-area-inset-bottom,0px))] md:pb-6 overflow-auto">
-              <MainContentWrapper>{children}</MainContentWrapper>
+              <MainContentWrapper>
+                <SettingsShell showDebug={data.profile?.role === "admin"} showRolesManagement={data.profile?.global_role === "admin"}>
+                  {children}
+                </SettingsShell>
+              </MainContentWrapper>
             </main>
           </div>
         </LocalityProvider>
