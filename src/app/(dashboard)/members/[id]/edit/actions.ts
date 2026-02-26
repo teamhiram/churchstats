@@ -57,7 +57,7 @@ export async function updateMemberAction(
     is_local: data.is_local,
     district_id: data.is_local ? data.district_id : null,
     group_id: data.is_local ? data.group_id : null,
-    locality_id: !data.is_local ? data.locality_id : null,
+    locality_id: data.is_local ? data.locality_id : null,
     age_group: data.age_group,
     is_baptized: data.is_baptized,
     language_main: data.language_main?.trim() || null,

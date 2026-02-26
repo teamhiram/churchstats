@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { Category } from "@/types/database";
 import { MembersList } from "./MembersList";
 import { useMembersData } from "./useMembersData";
+import { useLocality } from "@/contexts/LocalityContext";
 import type { MembersApiResponse } from "@/app/api/members/route";
 
 function isUnassigned(m: { is_local: boolean; district_id: string | null; group_id: string | null }) {
@@ -16,7 +17,8 @@ type Props = {
 };
 
 export function MembersPageClient({ initialData, searchParams }: Props) {
-  const { data, isPending, error } = useMembersData(initialData);
+  const { currentLocalityId: contextLocalityId } = useLocality();
+  const { data, isPending, error } = useMembersData(initialData, contextLocalityId);
   const showUnassignedOnly = searchParams.filter === "unassigned";
   const memberType =
     searchParams.type === "guest" ? "guest" : searchParams.type === "all" ? "all" : "local";

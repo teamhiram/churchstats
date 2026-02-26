@@ -1,5 +1,17 @@
 # リリースノート
 
+## v0.17 (2026-02-26)
+
+### 変更点
+
+- **地方マスタ:** locality に「海外」「不明」の選択肢を追加（マイグレーション 037）。どちらも都道府県に属さない特殊地方として登録され、地方切り替え・名簿で選択可能。
+- **出欠登録:** 地方を切り替えたあと（例: 酒田を選択）に出欠登録を開いても、URL に他地方の地区 ID が残っていても、現在選択中の地方の地区で正しく表示・登録されるように修正。`effectiveDistrictIdForCurrentLocality` で URL の `district_id` を現在地方に属する場合のみ採用。
+- **名簿管理:** 地方区別に伴う表示・フィルタの不具合を解消。
+- **ドキュメント:** 出欠関連テーブル一覧（`docs/attendance-related-tables.md`）に「DB 上の地方（locality）による区別」を追記。多地方運用記録（`docs/multi-region-implementation-record.md`）にパフォーマンスのメモ（Rendering の cache 抑止・Compiling の Turbopack 案）を追加。
+- **パフォーマンス:** 同一リクエスト内で `getCachedLocalities` / `getCachedAreas` / `getCachedPrefectures` の重複呼び出しを抑止するため、React の `cache()` でラップ。レイアウト・集会ページ・地方 ID 解決で何度呼ばれても DB アクセスは 1 回にまとまる。
+
+---
+
 ## v0.11 (2025-02-11)
 
 ### 変更点

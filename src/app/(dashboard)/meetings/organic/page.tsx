@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { OrganicDispatchForm } from "./OrganicDispatchForm";
 import { getSundayWeeksInYear, getDefaultSundayWeekStart, formatDateYmd } from "@/lib/weekUtils";
-import { getMeetingsLayoutData } from "@/lib/cachedData";
+import { getMeetingsLayoutData, effectiveDistrictIdForCurrentLocality } from "@/lib/cachedData";
 
 export default async function OrganicDispatchPage({
   searchParams,
@@ -32,8 +32,8 @@ export default async function OrganicDispatchPage({
   const supabase = await createClient();
   const { data: groups } = await supabase.from("groups").select("id, name, district_id").order("name");
 
-  const defaultDistrictId =
-    params.district_id ?? (profile?.main_district_id ?? districts[0]?.id ?? "");
+  const layoutDefault = (profile?.main_district_id && districts.some((d) => d.id === profile.main_district_id) ? profile.main_district_id : null) ?? districts[0]?.id ?? "";
+  const defaultDistrictId = effectiveDistrictIdForCurrentLocality(params.district_id, { districts, defaultDistrictId: layoutDefault });
 
   return (
     <div className="space-y-6">

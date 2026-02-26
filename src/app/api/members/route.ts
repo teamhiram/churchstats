@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { getEffectiveCurrentLocalityId } from "@/lib/cachedData";
 import type { Category } from "@/types/database";
 
 export type EnrollmentPeriodApi = {
@@ -51,33 +52,43 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const since = searchParams.get("since");
+  const localityParam = searchParams.get("locality");
 
-  let localityId: string | null = null;
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("main_district_id")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (profile?.main_district_id) {
-    const { data: district } = await supabase
-      .from("districts")
-      .select("locality_id")
-      .eq("id", profile.main_district_id)
-      .maybeSingle();
-    localityId = (district as { locality_id?: string } | null)?.locality_id ?? null;
-  }
+  const localityId =
+    localityParam != null && localityParam !== ""
+      ? localityParam
+      : await getEffectiveCurrentLocalityId();
 
   const membersQuery = supabase
     .from("members")
     .select("id, name, furigana, gender, is_local, district_id, group_id, locality_id, age_group, is_baptized, baptism_year, baptism_month, baptism_day, baptism_date_precision, language_main, language_sub, follower_id, updated_at, local_member_join_date, local_member_leave_date")
     .order("name");
+  if (localityId != null) {
+    membersQuery.or(`locality_id.eq.${localityId},locality_id.is.null`);
+  }
   if (since) {
     membersQuery.gt("updated_at", since);
   }
-  const [membersRes, districtsRes, groupsRes, periodsRes] = await Promise.all([
+
+  const districtsQuery = supabase.from("districts").select("id, name, locality_id").order("name");
+  if (localityId != null) {
+    districtsQuery.eq("locality_id", localityId);
+  }
+
+  const districtsRes = await districtsQuery;
+  const districts = (districtsRes.data ?? []) as { id: string; name: string; locality_id: string | null }[];
+  const districtIds = districts.map((d) => d.id);
+
+  const groupsQuery = supabase.from("groups").select("id, name, district_id").order("name");
+  if (districtIds.length > 0) {
+    groupsQuery.in("district_id", districtIds);
+  } else if (localityId != null) {
+    groupsQuery.eq("district_id", "__none__");
+  }
+
+  const [membersRes, groupsRes, periodsRes] = await Promise.all([
     membersQuery,
-    supabase.from("districts").select("id, name, locality_id").order("name"),
-    supabase.from("groups").select("id, name, district_id").order("name"),
+    groupsQuery,
     supabase.from("member_local_enrollment_periods").select("member_id, period_no, join_date, leave_date, is_uncertain, memo").order("period_no"),
   ]);
 
@@ -104,7 +115,6 @@ export async function GET(request: NextRequest) {
       (m as MembersApiRow).local_member_leave_date = (m as { local_member_leave_date?: string | null }).local_member_leave_date ?? null;
     }
   }
-  const districts = (districtsRes.data ?? []) as { id: string; name: string; locality_id: string | null }[];
   const groups = (groupsRes.data ?? []) as { id: string; name: string; district_id: string }[];
 
   return NextResponse.json({

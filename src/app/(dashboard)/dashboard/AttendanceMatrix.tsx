@@ -26,13 +26,13 @@ type RowKey = keyof typeof ROW_LABELS;
 type SortOption = "furigana";
 type GroupOption = "district" | "none" | "list";
 
-type Props = AttendanceMatrixData & { initialYear?: number };
+type Props = AttendanceMatrixData & { initialYear?: number; localityId?: string | null };
 
 const MIN_SIZE = 8;
 const MAX_SIZE = 24;
 const DEFAULT_SIZE = 14;
 
-export function AttendanceMatrix({ weeks, members, districts, initialYear }: Props) {
+export function AttendanceMatrix({ weeks, members, districts, initialYear, localityId }: Props) {
   const [data, setData] = useState<AttendanceMatrixData>({ weeks, members, districts });
   const [selectedYear, setSelectedYear] = useState(initialYear ?? new Date().getFullYear());
   const [isLoadingYear, setIsLoadingYear] = useState(false);
@@ -43,7 +43,7 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear }: Pro
     setSelectedYear(year);
     setIsLoadingYear(true);
     try {
-      const result = await getAttendanceMatrixData(year);
+      const result = await getAttendanceMatrixData(year, localityId ?? null);
       setData(result);
     } finally {
       setIsLoadingYear(false);

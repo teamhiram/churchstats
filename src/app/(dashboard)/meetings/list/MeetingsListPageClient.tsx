@@ -6,13 +6,10 @@ import { MeetingsListFilters } from "./MeetingsListFilters";
 import { MeetingsListTable } from "./MeetingsListTable";
 import type { WeekRow } from "./types";
 
-type Locality = { id: string; name: string };
-
 type MeetingsListClientData = {
   year: number;
   localOnly: boolean;
   localityId: string | null;
-  localities: Locality[];
   weeks: WeekRow[];
   absenceAlertWeeks: number;
   currentYear: number;
@@ -21,11 +18,9 @@ type MeetingsListClientData = {
 export function MeetingsListPageClient({
   searchParams,
   initialData,
-  showLocalityFilter = false,
 }: {
-  searchParams: { year?: string; locality?: string; localOnly?: string };
+  searchParams: { year?: string; localOnly?: string };
   initialData?: MeetingsListClientData;
-  showLocalityFilter?: boolean;
 }) {
   const currentYear = initialData?.currentYear ?? new Date().getFullYear();
   const year = Math.min(
@@ -34,17 +29,13 @@ export function MeetingsListPageClient({
   );
   const localOnly = (searchParams.localOnly ?? (initialData?.localOnly ? "1" : "0")) !== "0";
 
-  const localityParam = searchParams.locality;
-  const localityId = showLocalityFilter && localityParam && localityParam !== "all"
-    ? localityParam
-    : (initialData?.localityId ?? null);
+  const localityId = initialData?.localityId ?? null;
 
   const { data, isPending, error } = useQuery({
     queryKey: ["meetingsList", year, localityId ?? "default", localOnly ? 1 : 0],
     queryFn: async (): Promise<MeetingsListClientData> => {
       const qs = new URLSearchParams({
         year: String(year),
-        locality: localityId ?? "all",
         localOnly: localOnly ? "1" : "0",
       });
       const res = await fetch(`/api/meetings-list?${qs.toString()}`);
@@ -89,11 +80,8 @@ export function MeetingsListPageClient({
 
       <MeetingsListFilters
         year={year}
-        localityId={localityId}
         localOnly={localOnly}
         years={years}
-        localities={effective!.localities}
-        showLocalityFilter={showLocalityFilter}
       />
 
       <p className="text-xs text-slate-500">

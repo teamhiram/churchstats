@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { SmallGroupAttendance } from "./SmallGroupAttendance";
 import { getSundayWeeksInYear, getDefaultSundayWeekStart, formatDateYmd } from "@/lib/weekUtils";
-import { getMeetingsLayoutData } from "@/lib/cachedData";
+import { getMeetingsLayoutData, effectiveDistrictIdForCurrentLocality } from "@/lib/cachedData";
 
 export default async function SmallGroupAttendancePage({
   searchParams,
@@ -30,8 +30,8 @@ export default async function SmallGroupAttendancePage({
 
   const role = profile?.role ?? "viewer";
   const canSeeAllDistricts = role === "admin" || role === "co_admin" || role === "reporter";
-  const defaultDistrictId =
-    params.district_id ?? (canSeeAllDistricts ? "__all__" : (profile?.main_district_id ?? districts[0]?.id ?? ""));
+  const layoutDefault = canSeeAllDistricts ? "__all__" : ((profile?.main_district_id && districts.some((d) => d.id === profile.main_district_id) ? profile.main_district_id : null) ?? districts[0]?.id ?? "");
+  const defaultDistrictId = effectiveDistrictIdForCurrentLocality(params.district_id, { districts, defaultDistrictId: layoutDefault }, { allowAllDistricts: true });
 
   if (canSeeAllDistricts && params.district_id == null) {
     const q = new URLSearchParams();

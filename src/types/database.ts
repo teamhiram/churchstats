@@ -2,6 +2,12 @@
 
 export type Role = "admin" | "co_admin" | "reporter" | "viewer";
 
+/** 多地方: グローバル権限（profiles.global_role） */
+export type GlobalRole = "admin" | "national_viewer" | "regional_viewer";
+
+/** 多地方: ローカル権限（local_roles.role） */
+export type LocalRole = "local_admin" | "local_reporter" | "local_viewer";
+
 export type MeetingType = "main" | "group"; // 主日 / 小組
 
 export type Category =
@@ -19,6 +25,8 @@ export type AttributeHistoryType = "category" | "baptism";
 export interface Locality {
   id: string;
   name: string;
+  /** 多地方: 都道府県。地域(area)は prefecture.area_id から導出。030 で追加、032 で area_id 削除。 */
+  prefecture_id?: string | null;
 }
 
 export interface District {
@@ -145,6 +153,8 @@ export interface Profile {
   id: string;
   email: string | null;
   role: Role;
+  /** 多地方: グローバル権限。null = ローカル権限のみ。027 で追加 */
+  global_role?: GlobalRole | null;
   full_name: string | null;
   main_district_id: string | null;
   created_at?: string;
@@ -155,6 +165,49 @@ export interface ReporterDistrict {
   id: string;
   user_id: string;
   district_id: string;
+}
+
+/** 多地方: 地域（関東・関西など）。027 で追加 */
+export interface Area {
+  id: string;
+  name: string;
+  sort_order?: number | null;
+}
+
+/** 多地方: 都道府県。地域(area)に属する。030 で追加 */
+export interface Prefecture {
+  id: string;
+  name: string;
+  area_id: string;
+  sort_order?: number | null;
+}
+
+/** 多地方: ユーザーがアクセス可能な地方。027 で追加 */
+export interface UserLocality {
+  user_id: string;
+  locality_id: string;
+}
+
+/** 多地方: 地域閲覧者が閲覧可能な地域。027 で追加 */
+export interface UserArea {
+  user_id: string;
+  area_id: string;
+}
+
+/** 多地方: 地方ごとのローカル役割。027 で追加 */
+export interface LocalRoleRow {
+  user_id: string;
+  locality_id: string;
+  role: LocalRole;
+}
+
+/** 多地方: 同一人物紐づけ（管理者表示用のみ）。027 で追加 */
+export interface MemberLink {
+  id: string;
+  member_id_a: string;
+  member_id_b: string;
+  created_at?: string;
+  created_by_user_id?: string | null;
 }
 
 export interface AttributeHistory {
@@ -206,6 +259,18 @@ export const ROLE_LABELS: Record<Role, string> = {
   co_admin: "共同管理者",
   reporter: "報告者",
   viewer: "閲覧者",
+};
+
+export const GLOBAL_ROLE_LABELS: Record<GlobalRole, string> = {
+  admin: "システム管理者",
+  national_viewer: "全国閲覧者",
+  regional_viewer: "地域閲覧者",
+};
+
+export const LOCAL_ROLE_LABELS: Record<LocalRole, string> = {
+  local_admin: "管理者（その地方）",
+  local_reporter: "報告者（その地方）",
+  local_viewer: "閲覧者（その地方）",
 };
 
 export const MEETING_TYPE_LABELS: Record<MeetingType, string> = {

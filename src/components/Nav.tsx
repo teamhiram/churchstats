@@ -1,6 +1,7 @@
 "use client";
 
 import { useDisplaySettings } from "@/contexts/DisplaySettingsContext";
+import { useLocality } from "@/contexts/LocalityContext";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createPortal } from "react-dom";
@@ -36,6 +37,7 @@ const debugSubItems = [{ href: "/debug/numbers", label: "各種数値" }, { href
 type NavProps = {
   displayName?: string | null;
   roleLabel?: string;
+  /** プロフィールの main_district の地方名（参考）。表示は LocalityContext の currentLocalityName を優先 */
   localityName?: string | null;
   /** 管理者のみデバッグメニューを表示。共同管理者以下は false */
   showDebug?: boolean;
@@ -99,9 +101,16 @@ function DebugDropdownPc({
   );
 }
 
-export function Nav({ displayName, roleLabel, localityName, showDebug = false }: NavProps) {
+export function Nav({ displayName, roleLabel, localityName: _localityName, showDebug = false }: NavProps) {
   const pathname = usePathname();
   const { fullWidth } = useDisplaySettings();
+  const { currentLocalityName, currentLocalityId, localitiesByArea, setCurrentLocalityId } = useLocality();
+  const showLocalitySwitcher =
+    localitiesByArea.some((s) => s.prefectures.some((p) => p.localities.length > 0)) &&
+    localitiesByArea.flatMap((s) => s.prefectures).flatMap((p) => p.localities).length > 1;
+  const [localityPopupOpen, setLocalityPopupOpen] = useState(false);
+  const [localityPopupAreaIndex, setLocalityPopupAreaIndex] = useState(0);
+  const localityPopupRef = useRef<HTMLDivElement>(null);
   const [settingsSubOpen, setSettingsSubOpen] = useState(false);
   const [debugSubOpen, setDebugSubOpen] = useState(false);
   const links = showDebug ? baseLinks : baseLinks.filter((item) => item.type !== "dropdown" || item.label !== "デバッグ");
@@ -109,6 +118,36 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
   const debugRef = useRef<HTMLDivElement>(null);
   const debugRefMobile = useRef<HTMLDivElement>(null);
   const debugJustOpenedRef = useRef(false);
+
+  useEffect(() => {
+    if (!localityPopupOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (localityPopupRef.current && !localityPopupRef.current.contains(e.target as Node)) {
+        setLocalityPopupOpen(false);
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [localityPopupOpen]);
+
+  useEffect(() => {
+    if (localityPopupOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+  }, [localityPopupOpen]);
+
+  useEffect(() => {
+    if (localityPopupOpen && currentLocalityId) {
+      const idx = localitiesByArea.findIndex((s) =>
+        s.prefectures.some((p) => p.localities.some((l) => l.id === currentLocalityId))
+      );
+      if (idx >= 0) setLocalityPopupAreaIndex(idx);
+    }
+  }, [localityPopupOpen, currentLocalityId, localitiesByArea]);
 
   useEffect(() => {
     if (!settingsSubOpen) return;
@@ -143,16 +182,124 @@ export function Nav({ displayName, roleLabel, localityName, showDebug = false }:
       <header className="md:hidden fixed top-0 left-0 right-0 z-40 h-8 bg-slate-800 flex items-center justify-center px-3">
         <span className="text-white text-sm font-medium">召会生活統計</span>
         <span className="ml-1.5 inline-flex items-baseline">
-          <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.16</span>
+          <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.17</span>
         </span>
       </header>
 
       {/* PC: トップ固定ナビゲーション */}
       <header className="hidden md:block fixed top-0 left-0 right-0 z-40 h-12 bg-slate-800">
         <div className={`h-full flex items-center justify-between px-4 ${contentWidthClass(fullWidth)}`}>
-          <div className="flex items-center h-full shrink-0 mr-2">
+          <div className="flex items-center h-full shrink-0 mr-2 gap-2">
             <span className="text-white text-sm font-semibold whitespace-nowrap">召会生活統計</span>
-            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.16</span>
+            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.17</span>
+            {showLocalitySwitcher && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setLocalityPopupOpen(true)}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-slate-300 hover:bg-slate-700 text-xs"
+                  aria-expanded={localityPopupOpen}
+                  aria-haspopup="dialog"
+                  aria-label="地方を切り替え"
+                >
+                  <span className="max-w-[8rem] truncate">{currentLocalityName ?? "地方"}</span>
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {localityPopupOpen && (
+                  <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="地方を選択"
+                  >
+                    <div
+                      ref={localityPopupRef}
+                      className="w-full max-w-md max-h-[80vh] overflow-hidden rounded-xl border border-slate-600 bg-slate-800 shadow-xl flex flex-col"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-600 bg-slate-800 px-4 py-3 shrink-0">
+                        <h2 className="text-sm font-semibold text-white">地方を選択</h2>
+                        <button
+                          type="button"
+                          onClick={() => setLocalityPopupOpen(false)}
+                          className="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-white"
+                          aria-label="閉じる"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                      {/* 地域タブ */}
+                      <div className="flex border-b border-slate-600 overflow-x-auto shrink-0" role="tablist" aria-label="地域">
+                        {localitiesByArea.map((section, idx) => (
+                          <button
+                            key={section.areaId ?? `other-${idx}`}
+                            type="button"
+                            role="tab"
+                            aria-selected={localityPopupAreaIndex === idx}
+                            aria-controls={`locality-panel-${idx}`}
+                            id={`locality-tab-${idx}`}
+                            onClick={() => setLocalityPopupAreaIndex(idx)}
+                            className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap touch-target border-b-2 -mb-px transition-colors ${
+                              localityPopupAreaIndex === idx
+                                ? "border-primary-500 text-white bg-slate-700"
+                                : "border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                            }`}
+                          >
+                            {section.areaName}
+                          </button>
+                        ))}
+                      </div>
+                      {/* 都道府県は小ラベル、地方は横並びボタン（選択中タブ内） */}
+                      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden py-3">
+                        {localitiesByArea.map((section, sectionIdx) => (
+                          <div
+                            key={section.areaId ?? `other-${sectionIdx}`}
+                            id={`locality-panel-${sectionIdx}`}
+                            role="tabpanel"
+                            aria-labelledby={`locality-tab-${sectionIdx}`}
+                            hidden={localityPopupAreaIndex !== sectionIdx}
+                            className={localityPopupAreaIndex === sectionIdx ? "px-4 space-y-4" : "hidden"}
+                          >
+                            {section.prefectures.map((pref) => (
+                              <div key={pref.prefectureId ?? `other-${pref.prefectureName}`}>
+                                <span className="text-[11px] text-slate-500 font-medium">
+                                  {pref.prefectureName}
+                                </span>
+                                <div className="flex flex-wrap gap-2 mt-1.5">
+                                  {pref.localities.map((loc) => (
+                                    <button
+                                      key={loc.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setCurrentLocalityId(loc.id);
+                                        setLocalityPopupOpen(false);
+                                      }}
+                                      className={`inline-flex items-center rounded-lg px-3 py-2 text-sm touch-target transition-colors ${
+                                        loc.id === currentLocalityId
+                                          ? "bg-primary-600 text-white font-medium"
+                                          : "bg-slate-700 text-slate-200 hover:bg-slate-600"
+                                      }`}
+                                      role="menuitemradio"
+                                      aria-checked={loc.id === currentLocalityId}
+                                    >
+                                      {loc.name}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <nav className="flex h-full overflow-x-auto">
             {links.map((item) => {

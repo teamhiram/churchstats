@@ -90,3 +90,19 @@ churchstats において「出欠記録」と関連するテーブルを、役�
 - **どの集会か**: `meetings`, `group_meeting_records`, `prayer_meeting_records`。
 - **誰か**: `members`。組織は `groups`, `districts`, `localities`。
 - **欠席者判定の母集団**: `regular_member_list_items`, `district_regular_list`, `group_regular_list` および準レギュラー・プールリスト。
+
+---
+
+## 6. DB 上の地方（locality）による区別
+
+**DB は地方ごとにデータを区別している。**
+
+| 対象 | 区別の仕方 |
+|------|------------|
+| **地区** | `districts.locality_id` で地方に属する。 |
+| **主日集会記録** | `lordsday_meeting_records`（旧 `meetings`）の `district_id` で地区→地方、合同集会時は `locality_id` で地方を直接指定。 |
+| **小組・祈り** | `group_meeting_records` は group → district → locality。`prayer_meeting_records` は district → locality。 |
+| **名簿** | `members.locality_id`（null=ゲスト）。 |
+| **RLS** | 028 で各テーブルが「アクセス可能な locality」のみ見えるようにポリシー設定済み。 |
+
+アプリ側では「現在の地方」を Cookie で保持し、出欠登録・名簿・枠組などはその地方の districts のみ表示。URL に他地方の `district_id` が残っている場合は採用せず、現在地方の default にフォールバックする（`effectiveDistrictIdForCurrentLocality`）。

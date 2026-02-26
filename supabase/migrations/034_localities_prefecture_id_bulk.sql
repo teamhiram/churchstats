@@ -1,0 +1,47 @@
+-- localities の prefecture_id を一括設定（localities_rows.csv に基づき都道府県を判定）
+-- 033 で投入した固定 UUID の都道府県を使用（00000000-0000-0000-0000-000000000001 ～ 047）
+
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000023' WHERE id = '08b9ad97-1a61-427f-bf8b-0917104bc49f';  -- 豊川 → 愛知県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000013' WHERE id = '0e005455-baf4-4c08-a9ac-521f04709b1b';  -- 八王子 → 東京都
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000013' WHERE id = '11111111-1111-1111-1111-111111111111';  -- 調布 → 東京都
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000023' WHERE id = '14054bfa-4a5e-4711-900d-888906e7d3b2';  -- 名古屋 → 愛知県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000013' WHERE id = '1aecb836-e31a-4b9c-8d02-d057736df8c6';  -- 町田 → 東京都
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000001' WHERE id = '1f6427b2-47a2-416a-a65e-3dadf2fb1b76';  -- 札幌 → 北海道
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000004' WHERE id = '2f22f83f-5642-4d21-b092-e1ec3d41f5b5';  -- 仙台 → 宮城県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000026' WHERE id = '2fea6867-6ae3-4834-9547-8f351def4f77';  -- 京都 → 京都府
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000022' WHERE id = '3163aab1-3bfb-4dfa-9012-0ca986641420';  -- 静岡 → 静岡県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000021' WHERE id = '34592367-0498-4ba2-83e7-958900dd4354';  -- 岐阜 → 岐阜県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000027' WHERE id = '3c6c0399-3490-475d-a9ca-84dc9b4d3c1b';  -- 東大阪 → 大阪府
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000012' WHERE id = '3f65ffb5-40c1-4bf6-b71a-032ee32bf61e';  -- 市原 → 千葉県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000013' WHERE id = '4acfd2d7-1224-47d0-8240-3a3b5df36330';  -- 東京 → 東京都
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000013' WHERE id = '4ba43c79-1c2e-46a6-b9a8-db26e969bbb7';  -- 日野 → 東京都
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000040' WHERE id = '4c4ea462-245c-404a-a23d-5fdbc14fd14e';  -- 北九州 → 福岡県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000008' WHERE id = '4dc473a0-65ce-4770-ae33-baa61776ebea';  -- つくば → 茨城県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000012' WHERE id = '53a121d3-3ce3-480d-8504-368d3ad24e45';  -- 千葉 → 千葉県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000012' WHERE id = '54c01eb2-58ae-47d6-9845-fdcffc635187';  -- 成田 → 千葉県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000015' WHERE id = '59decc36-6106-4ad6-9148-465f4cbde858';  -- 新潟 → 新潟県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000016' WHERE id = '615b2821-15d6-4334-912d-cefdfc937bdb';  -- 富山 → 富山県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000024' WHERE id = '61dfea17-3f86-4fcc-82dd-e224b6d3b331';  -- 鈴鹿 → 三重県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000014' WHERE id = '6785f3a9-58a7-440e-87f7-1c03896728a0';  -- 横浜 → 神奈川県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000011' WHERE id = '6b1770d9-1125-4d30-b519-9d8370b6d329';  -- 川口 → 埼玉県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000013' WHERE id = '86ad121f-bbb6-4808-b0f6-6cb8f58868aa';  -- 西東京 → 東京都
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000012' WHERE id = '90b5c2e3-a959-48e2-9fe3-fc694897be7c';  -- 習志野 → 千葉県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000014' WHERE id = '91556301-86ca-4c14-b509-34df456df353';  -- 小田原 → 神奈川県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000011' WHERE id = 'a72bed03-fe85-4ea4-854c-75a50b86a034';  -- 北本 → 埼玉県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000036' WHERE id = 'b63132d2-e4b7-4395-a7ed-410119dc320b';  -- 徳島 → 徳島県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000011' WHERE id = 'ba7f5def-eef2-4312-ae99-334ae08862ee';  -- さいたま → 埼玉県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000047' WHERE id = 'bb9f1a3d-f3a2-4022-9166-d33a537f66d9';  -- 那覇 → 沖縄県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000014' WHERE id = 'c0353f99-b81c-4891-8d8f-85626e8bb563';  -- 相模原 → 神奈川県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000014' WHERE id = 'c48a74dc-8102-4f1a-aea6-9184066c1c4b';  -- 藤沢 → 神奈川県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000029' WHERE id = 'c4bb709c-b144-4a63-b14c-06ba1f42c2b2';  -- 奈良 → 奈良県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000022' WHERE id = 'c82e1798-d580-48e7-8958-86728754a8db';  -- 掛川 → 静岡県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000040' WHERE id = 'cc5eebf3-3f27-4666-aefb-d4cfba1e4fad';  -- 福岡 → 福岡県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000006' WHERE id = 'cca9047d-a719-44e5-b699-3a250aec77a5';  -- 新庄 → 山形県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000013' WHERE id = 'd298a250-5b26-4109-a7a5-3513e811a339';  -- 小平 → 東京都
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000008' WHERE id = 'd58b4c0b-4655-4ca0-9fb6-31ce8f16959e';  -- 下妻 → 茨城県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000006' WHERE id = 'e3b69eec-fa94-4c90-9ee8-3e1a6cb97780';  -- 酒田 → 山形県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000028' WHERE id = 'e3d0da5c-6f0a-42dd-af2a-a3100e850332';  -- 神戸 → 兵庫県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000034' WHERE id = 'e52a51a3-8dda-44ba-be58-0bbf8055558f';  -- 広島 → 広島県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000027' WHERE id = 'e61eebf3-909a-4a81-9d93-2bf29728b458';  -- 大阪 → 大阪府
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000012' WHERE id = 'fae5f223-83f8-4b93-98a4-e4f30417465f';  -- 市川 → 千葉県
+UPDATE localities SET prefecture_id = '00000000-0000-0000-0000-000000000012' WHERE id = 'fe78a057-f046-4496-8ef1-e506d3a18cee';  -- 松戸 → 千葉県

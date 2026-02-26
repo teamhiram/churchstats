@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { SundayAttendance } from "./SundayAttendance";
 import { getSundayWeeksInYear, getDefaultSundayWeekStart, formatDateYmd, getSundayFromWeekStart, getSundayIsoFromWeekStart } from "@/lib/weekUtils";
-import { getMeetingsLayoutData } from "@/lib/cachedData";
+import { getMeetingsLayoutData, effectiveDistrictIdForCurrentLocality } from "@/lib/cachedData";
 
 export default async function SundayAttendancePage({
   searchParams,
@@ -34,8 +34,8 @@ export default async function SundayAttendancePage({
   const supabase = await createClient();
   const { data: groups } = await supabase.from("groups").select("id, name, district_id").order("name");
 
-  const defaultDistrictId =
-    params.district_id ?? (profile?.main_district_id ?? districts[0]?.id ?? "");
+  const layoutData = { districts, defaultDistrictId: (profile?.main_district_id && districts.some((d) => d.id === profile.main_district_id) ? profile.main_district_id : null) ?? districts[0]?.id ?? "" };
+  const defaultDistrictId = effectiveDistrictIdForCurrentLocality(params.district_id, layoutData);
 
   return (
     <div className="space-y-6">
