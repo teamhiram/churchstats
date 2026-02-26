@@ -11,7 +11,7 @@ export function MainContentWrapper({
 
   return (
     <div
-      className={fullWidth ? "w-full" : "w-full max-w-7xl mx-auto"}
+      className={`flex flex-col min-h-0 ${fullWidth ? "w-full" : "w-full max-w-7xl mx-auto"} flex-1 overflow-y-hidden overflow-x-visible`}
     >
       {children}
     </div>

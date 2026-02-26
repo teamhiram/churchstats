@@ -9,6 +9,9 @@ import { getCurrentUserWithProfile, getCachedLocalities, getCachedAreas, getCach
 import { getCurrentLocalityId } from "@/lib/locality";
 import { CURRENT_LOCALITY_COOKIE_NAME } from "@/lib/localityConstants";
 import { cookies } from "next/headers";
+import { getMeetingDuplicateGroupCount } from "@/app/(dashboard)/debug/meeting-duplicates/actions";
+import { getDuplicateAttendanceGroupCount } from "@/app/(dashboard)/meetings/list/actions";
+import { getEnrollmentUncertainCount } from "@/app/(dashboard)/debug/enrollment-uncertain/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -34,11 +37,14 @@ export default async function DashboardLayout({
     redirect("/");
   }
 
-  const [localities, areas, prefectures, cookieLocalityId] = await Promise.all([
+  const [localities, areas, prefectures, cookieLocalityId, meetingDuplicateGroupCount, duplicateAttendanceGroupCount, enrollmentUncertainCount] = await Promise.all([
     getCachedLocalities(),
     getCachedAreas(),
     getCachedPrefectures(),
     getCurrentLocalityId(),
+    data.profile?.role === "admin" ? getMeetingDuplicateGroupCount() : Promise.resolve(0),
+    data.profile?.role === "admin" ? getDuplicateAttendanceGroupCount() : Promise.resolve(0),
+    data.profile?.role === "admin" ? getEnrollmentUncertainCount() : Promise.resolve(0),
   ]);
   const cookieStore = await cookies();
   let effectiveLocalityId = cookieLocalityId;
@@ -69,10 +75,11 @@ export default async function DashboardLayout({
               roleLabel={data.roleLabel}
               localityName={data.localityName}
               showDebug={data.profile?.role === "admin"}
+              showRolesManagement={data.profile?.global_role === "admin"}
             />
-            <main className="flex-1 pt-[calc(2rem+0.5em)] md:pt-[calc(3.5rem+0.5em)] p-4 md:p-6 pb-[calc(1.875rem+env(safe-area-inset-bottom,0px))] md:pb-6 overflow-auto">
+            <main className="flex-1 flex flex-col min-h-0 pt-[var(--header-height)] px-0 pb-[calc(1.875rem+env(safe-area-inset-bottom,0px))] md:pb-6 overflow-hidden">
               <MainContentWrapper>
-                <SettingsShell showDebug={data.profile?.role === "admin"} showRolesManagement={data.profile?.global_role === "admin"}>
+                <SettingsShell showDebug={data.profile?.role === "admin"} showRolesManagement={data.profile?.global_role === "admin"} meetingDuplicateGroupCount={meetingDuplicateGroupCount} duplicateAttendanceGroupCount={duplicateAttendanceGroupCount} enrollmentUncertainCount={enrollmentUncertainCount}>
                   {children}
                 </SettingsShell>
               </MainContentWrapper>

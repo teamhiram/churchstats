@@ -58,11 +58,17 @@ export default function NewMeetingPage() {
       .single();
     setLoading(false);
     if (err) {
+      if (err.code === "23505") {
+        setError("この日・この" + (meetingType === "main" ? "地区" : "小組") + "の集会は既に登録されています。集会一覧から該当の集会を開いてください。");
+        return;
+      }
       setError(err.message);
       return;
     }
-    router.push(`/meetings/${meeting?.id}`);
-    router.refresh();
+    if (meeting?.id) {
+      router.push(`/meetings/${meeting.id}`);
+      router.refresh();
+    }
   };
 
   return (

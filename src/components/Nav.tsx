@@ -21,13 +21,26 @@ const footerMainItems = [
   { href: "/members", label: "名簿" },
 ] as const;
 
+const settingsModalItems = [
+  { href: "/settings/organization", label: "枠組設定" },
+  { href: "/settings", label: "システム設定" },
+] as const;
+const settingsModalRolesItem = { href: "/settings/roles", label: "ユーザ・ロール管理" } as const;
+const settingsModalDebugItems = [
+  { href: "/debug/numbers", label: "各種数値" },
+  { href: "/debug/tables", label: "全テーブル" },
+  { href: "/debug/enrollment-uncertain", label: "在籍期間不確定" },
+  { href: "/debug/meeting-duplicates", label: "集会重複検知" },
+  { href: "/meetings/list/duplicates", label: "重複出席" },
+] as const;
+
 type NavProps = {
   displayName?: string | null;
   roleLabel?: string;
-  /** プロフィールの main_district の地方名（参考）。表示は LocalityContext の currentLocalityName を優先 */
   localityName?: string | null;
-  /** 管理者のみデバッグメニューを表示。共同管理者以下は false */
   showDebug?: boolean;
+  /** グローバル管理者のとき true（設定モーダルでユーザ・ロール管理を表示） */
+  showRolesManagement?: boolean;
 };
 
 /** 設定画面（サイドバー付き）のパスか */
@@ -49,7 +62,7 @@ function PersonIcon({ className }: { className?: string }) {
   );
 }
 
-export function Nav({ displayName, roleLabel, localityName: _localityName, showDebug = false }: NavProps) {
+export function Nav({ displayName, roleLabel, localityName: _localityName, showDebug = false, showRolesManagement = false }: NavProps) {
   const pathname = usePathname();
   const { fullWidth } = useDisplaySettings();
   const { currentLocalityName, currentLocalityId, localitiesByArea, setCurrentLocalityId } = useLocality();
@@ -60,7 +73,9 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
   const visibleSections = localitiesByArea.filter((s) => s.areaName !== "その他");
   const [localityPopupOpen, setLocalityPopupOpen] = useState(false);
   const [localityPopupAreaIndex, setLocalityPopupAreaIndex] = useState(0);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const localityPopupRef = useRef<HTMLDivElement>(null);
+  const settingsModalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!localityPopupOpen) return;
@@ -74,14 +89,25 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
   }, [localityPopupOpen]);
 
   useEffect(() => {
-    if (localityPopupOpen) {
+    if (!settingsModalOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (settingsModalRef.current && !settingsModalRef.current.contains(e.target as Node)) {
+        setSettingsModalOpen(false);
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [settingsModalOpen]);
+
+  useEffect(() => {
+    if (localityPopupOpen || settingsModalOpen) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
       return () => {
         document.body.style.overflow = prev;
       };
     }
-  }, [localityPopupOpen]);
+  }, [localityPopupOpen, settingsModalOpen]);
 
   useEffect(() => {
     if (localityPopupOpen && currentLocalityId && visibleSections.length > 0) {
@@ -95,21 +121,12 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
 
   return (
     <>
-      {/* モバイル: 薄い固定ヘッダー（アプリ名＋バージョンバッジ＋アカウントアイコン） */}
-      <header className="md:hidden fixed top-0 left-0 right-0 z-40 h-8 bg-slate-800 flex items-center justify-between px-3">
-        <div className="flex items-center">
-          <span className="text-white text-sm font-medium">召会生活統計</span>
-          <span className="ml-1.5 inline-flex items-baseline">
-            <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.18</span>
-          </span>
-        </div>
-        <Link
-          href="/settings/account"
-          aria-label="アカウント詳細"
-          className={`p-1.5 rounded touch-target ${pathname.startsWith("/settings/account") ? "text-primary-400 bg-slate-700" : "text-slate-300 hover:bg-slate-700"}`}
-        >
-          <PersonIcon className="w-5 h-5" />
-        </Link>
+      {/* モバイル: 薄い固定ヘッダー（アプリ名＋バージョンバッジのみ。アカウントはフッターへ） */}
+      <header className="md:hidden fixed top-0 left-0 right-0 z-40 h-8 bg-slate-800 flex items-center px-3">
+        <span className="text-white text-sm font-medium">召会生活統計</span>
+        <span className="ml-1.5 inline-flex items-baseline">
+          <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.19</span>
+        </span>
       </header>
 
       {/* PC: トップ固定ナビゲーション */}
@@ -117,7 +134,7 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
         <div className={`h-full flex items-center justify-between px-4 ${contentWidthClass(fullWidth)}`}>
           <div className="flex items-center h-full shrink-0 mr-2 gap-2">
             <span className="text-white text-sm font-semibold whitespace-nowrap">召会生活統計</span>
-            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.18</span>
+            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.19</span>
             {showLocalitySwitcher && (
               <div className="relative">
                 <button
@@ -272,7 +289,7 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
         </div>
       </header>
 
-      {/* モバイル: 固定フッター + 5ボタン */}
+      {/* モバイル: 固定フッター（速報｜週別｜出欠｜名簿｜設定｜アカウント） */}
       <footer className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-800 pb-[env(safe-area-inset-bottom)]">
         <nav className={`flex h-[1.875rem] items-stretch ${contentWidthClass(fullWidth)}`} aria-label="メインメニュー">
           {footerMainItems.map(({ href, label }) => {
@@ -293,19 +310,120 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
               </Link>
             );
           })}
-          <Link
-            href="/settings"
+          <button
+            type="button"
+            onClick={() => setSettingsModalOpen(true)}
             className={`flex-1 h-full flex items-center justify-center text-sm font-medium min-h-0 ${
               isSettingsSectionPath(pathname, !!showDebug) && !pathname.startsWith("/settings/account")
                 ? "text-white bg-primary-600"
                 : "text-slate-300 active:bg-slate-700"
             }`}
             aria-label="設定"
+            aria-expanded={settingsModalOpen}
           >
             設定
+          </button>
+          <Link
+            href="/settings/account"
+            aria-label="アカウント詳細"
+            className={`shrink-0 w-12 h-full flex items-center justify-center min-h-0 ${
+              pathname.startsWith("/settings/account")
+                ? "text-white bg-primary-600"
+                : "text-slate-300 active:bg-slate-700"
+            }`}
+          >
+            <PersonIcon className="w-5 h-5" />
           </Link>
         </nav>
       </footer>
+      {settingsModalOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-[100] flex items-end justify-center bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-label="設定メニュー"
+          onClick={() => setSettingsModalOpen(false)}
+        >
+          <div
+            ref={settingsModalRef}
+            className="w-full max-h-[60vh] overflow-hidden rounded-t-xl border border-b-0 border-slate-200 bg-white shadow-xl flex flex-col mb-[calc(1.875rem+env(safe-area-inset-bottom,0px))]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 backdrop-blur px-3 py-2 shrink-0">
+              <h2 className="text-xs font-semibold text-slate-800">設定</h2>
+              <button
+                type="button"
+                onClick={() => setSettingsModalOpen(false)}
+                className="rounded-full p-2 -m-1 text-slate-500 hover:bg-slate-100 active:bg-slate-200 touch-target"
+                aria-label="閉じる"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <nav className="overflow-y-auto overscroll-contain flex-1 min-h-0" aria-label="設定サブメニュー">
+              <ul className="py-1">
+                {settingsModalItems.map(({ href, label }) => {
+                  const active = isSettingsSectionPath(pathname, !!showDebug) && pathname.startsWith(href) && (href !== "/settings" || pathname === "/settings");
+                  return (
+                    <li key={href}>
+                      <Link
+                        href={href}
+                        onClick={() => setSettingsModalOpen(false)}
+                        className={`block px-4 py-2.5 text-[15px] min-h-[44px] flex items-center ${
+                          active ? "bg-primary-50 text-primary-800 font-medium" : "text-slate-800 active:bg-slate-100"
+                        }`}
+                      >
+                        {label}
+                      </Link>
+                    </li>
+                  );
+                })}
+                {showRolesManagement && (
+                  <li>
+                    <Link
+                      href={settingsModalRolesItem.href}
+                      onClick={() => setSettingsModalOpen(false)}
+                      className={`block px-4 py-2.5 text-[15px] min-h-[44px] flex items-center ${
+                        pathname.startsWith(settingsModalRolesItem.href)
+                          ? "bg-primary-50 text-primary-800 font-medium"
+                          : "text-slate-800 active:bg-slate-100"
+                      }`}
+                    >
+                      {settingsModalRolesItem.label}
+                    </Link>
+                  </li>
+                )}
+              </ul>
+              {showDebug && (
+                <div className="border-t border-slate-200 mt-1 pt-1">
+                  <p className="px-4 py-1.5 text-[11px] font-semibold text-amber-700 uppercase tracking-wider" role="presentation">
+                    デバッグ
+                  </p>
+                  <ul className="py-1">
+                    {settingsModalDebugItems.map(({ href, label }) => (
+                      <li key={href}>
+                        <Link
+                          href={href}
+                          onClick={() => setSettingsModalOpen(false)}
+                          className={`block px-4 py-2.5 text-[15px] min-h-[44px] flex items-center ${
+                            pathname.startsWith(href)
+                              ? "bg-amber-50 text-amber-900 font-medium"
+                              : "text-amber-800 active:bg-amber-50"
+                          }`}
+                        >
+                          {label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </nav>
+          </div>
+        </div>
+      )}
     </>
   );
 }

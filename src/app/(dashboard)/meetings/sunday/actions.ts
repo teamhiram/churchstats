@@ -118,7 +118,19 @@ export async function ensureSundayMeetingsBatch(
           })
           .select("id")
           .single();
-        if (!error && ins?.id) existingByLocality.set(localityId, ins.id);
+        if (error?.code === "23505") {
+          const { data: existingRow } = await supabase
+            .from("lordsday_meeting_records")
+            .select("id")
+            .eq("event_date", sundayIso)
+            .eq("meeting_type", "main")
+            .is("district_id", null)
+            .eq("locality_id", localityId)
+            .maybeSingle();
+          if (existingRow?.id) existingByLocality.set(localityId, existingRow.id);
+        } else if (!error && ins?.id) {
+          existingByLocality.set(localityId, ins.id);
+        }
       }
     }
 
@@ -134,7 +146,19 @@ export async function ensureSundayMeetingsBatch(
         })
         .select("id")
         .single();
-      if (!error && ins?.id) {
+      if (error?.code === "23505") {
+        const { data: existingRow } = await supabase
+          .from("lordsday_meeting_records")
+          .select("id")
+          .eq("event_date", sundayIso)
+          .eq("meeting_type", "main")
+          .eq("district_id", did)
+          .maybeSingle();
+        if (existingRow?.id) {
+          mid = existingRow.id;
+          existingByDistrict.set(did, existingRow.id);
+        }
+      } else if (!error && ins?.id) {
         mid = ins.id;
         existingByDistrict.set(did, ins.id);
       }
