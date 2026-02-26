@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { getEffectiveCurrentLocalityId } from "@/lib/cachedData";
 import { OrganizationForm } from "./OrganizationForm";
 
 export default async function OrganizationPage() {
@@ -13,29 +14,40 @@ export default async function OrganizationPage() {
     redirect("/settings");
   }
 
+  const currentLocalityId = await getEffectiveCurrentLocalityId();
+
   const { data: settings } = await supabase.from("system_settings").select("key, value");
   const settingsMap = new Map((settings ?? []).map((s) => [s.key, s.value]));
   const absenceAlertWeeks = Number(settingsMap.get("absence_alert_weeks") ?? 4);
 
   const { data: localities } = await supabase.from("localities").select("id, name").order("name");
-  const { data: districts } = await supabase.from("districts").select("id, locality_id, name").order("name");
-  const { data: groups } = await supabase.from("groups").select("id, district_id, name").order("name");
+  const { data: allDistricts } = await supabase.from("districts").select("id, locality_id, name").order("name");
+  const { data: allGroups } = await supabase.from("groups").select("id, district_id, name").order("name");
+
+  const districts =
+    currentLocalityId != null && allDistricts != null
+      ? allDistricts.filter((d) => d.locality_id === currentLocalityId)
+      : allDistricts ?? [];
+  const districtIds = districts.map((d) => d.id);
+  const groups =
+    districtIds.length > 0 && allGroups != null
+      ? allGroups.filter((g) => districtIds.includes(g.district_id))
+      : allGroups ?? [];
 
   const { data: reporterDistricts } = await supabase
     .from("reporter_districts")
     .select("district_id")
     .eq("user_id", user.id);
-  const districtIds = (reporterDistricts ?? []).map((r) => r.district_id);
+  const reporterDistrictIds = (reporterDistricts ?? []).map((r) => r.district_id);
   const localityIdsForUser =
-    districtIds.length > 0
-      ? (await supabase.from("districts").select("locality_id").in("id", districtIds))
-          .data?.map((d) => d.locality_id) ?? []
+    reporterDistrictIds.length > 0 && allDistricts != null
+      ? (allDistricts.filter((d) => reporterDistrictIds.includes(d.id)).map((d) => d.locality_id) ?? [])
       : [];
   const distinctLocalityIds = [...new Set(localityIdsForUser)];
   const userLocalities =
-    distinctLocalityIds.length > 0
-      ? (localities ?? []).filter((l) => distinctLocalityIds.includes(l.id))
-      : (localities ?? []);
+    role === "admin" || role === "co_admin"
+      ? (localities ?? [])
+      : (localities ?? []).filter((l) => distinctLocalityIds.includes(l.id));
 
   return (
     <div className="space-y-8">
@@ -43,9 +55,10 @@ export default async function OrganizationPage() {
         <OrganizationForm
           localities={localities ?? []}
           userLocalities={userLocalities}
-          districts={districts ?? []}
-          groups={groups ?? []}
+          districts={districts}
+          groups={groups}
           initialAbsenceWeeks={absenceAlertWeeks}
+          currentLocalityId={currentLocalityId}
         />
       </Suspense>
     </div>

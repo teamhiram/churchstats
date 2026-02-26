@@ -21,6 +21,7 @@
 
 # docs / archives (do not push)
 _Archives
+_Backup
 _RealeaseNotes
 
 # debug
@@ -34,6 +35,9 @@ yarn-error.log*
 
 # local credentials / repo info (do not push)
 github.md
+
+# database backups / dumps (contain data, not for version control)
+*.dump
 
 # vercel
 .vercel

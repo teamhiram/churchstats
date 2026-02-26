@@ -29,6 +29,7 @@ type Props = {
   districts: District[];
   groups: Group[];
   initialAbsenceWeeks: number;
+  currentLocalityId?: string | null;
 };
 
 export function OrganizationForm({
@@ -37,6 +38,7 @@ export function OrganizationForm({
   districts,
   groups: initialGroups,
   initialAbsenceWeeks,
+  currentLocalityId,
 }: Props) {
   const searchParams = useSearchParams();
   const editIdFromUrl = searchParams.get("edit");
@@ -52,7 +54,7 @@ export function OrganizationForm({
   const [absenceWeeksMessage, setAbsenceWeeksMessage] = useState("");
   const userLocalityIds = userLocalities.map((l) => l.id ?? "");
   const [selectedLocalityIdForAdd, setSelectedLocalityIdForAdd] = useState<string>(() =>
-    userLocalities[0]?.id ?? ""
+    currentLocalityId ?? userLocalities[0]?.id ?? ""
   );
   const showDistrictModal = addFromUrl === "district";
   const showGroupModal = addFromUrl === "group";

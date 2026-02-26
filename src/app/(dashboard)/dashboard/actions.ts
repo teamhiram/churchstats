@@ -17,28 +17,74 @@ function parseYmd(s: string): Date {
   return new Date(y, m - 1, d);
 }
 
-/** 今週（アメリカ式・日曜〜土曜）の主日・小組欠席者と、派遣済/未派遣を返す */
-export async function getDispatchMonitorData(): Promise<DispatchMonitorData> {
+/** 今週（アメリカ式・日曜〜土曜）の主日・小組欠席者と、派遣済/未派遣を返す。localityId 指定時はその地方にスコープ。 */
+export async function getDispatchMonitorData(localityId: string | null = null): Promise<DispatchMonitorData> {
   const supabase = await createClient();
   const { weekStart, weekEnd } = getThisWeekByLastSunday();
   const weekStartIso = formatDateYmd(weekStart);
   const weekEndIso = formatDateYmd(weekEnd);
   const weekLabel = `${format(weekStart, "yyyy/MM/dd")} - ${format(weekEnd, "yyyy/MM/dd")}`;
 
+  let districtIds: string[] = [];
+  let groupIds: string[] = [];
+  if (localityId != null) {
+    const { data: distRows } = await supabase.from("districts").select("id").eq("locality_id", localityId);
+    districtIds = (distRows ?? []).map((d) => d.id);
+    if (districtIds.length > 0) {
+      const { data: grpRows } = await supabase.from("groups").select("id").in("district_id", districtIds);
+      groupIds = (grpRows ?? []).map((g) => g.id);
+    }
+  }
+
+  const mainMeetingsQuery = supabase
+    .from("lordsday_meeting_records")
+    .select("id, district_id")
+    .eq("meeting_type", "main")
+    .eq("event_date", weekStartIso);
+  if (localityId != null) {
+    if (districtIds.length > 0) {
+      mainMeetingsQuery.or(`district_id.in.(${districtIds.join(",")}),locality_id.eq.${localityId}`);
+    } else {
+      mainMeetingsQuery.eq("locality_id", localityId);
+    }
+  }
+
+  const groupRecordsQuery = supabase
+    .from("group_meeting_records")
+    .select("id, group_id")
+    .eq("week_start", weekStartIso);
+  if (localityId != null && groupIds.length > 0) {
+    groupRecordsQuery.in("group_id", groupIds);
+  } else if (localityId != null) {
+    groupRecordsQuery.eq("group_id", "__none__");
+  }
+
+  const districtRegularQuery = supabase.from("district_regular_list").select("district_id, member_id");
+  if (localityId != null && districtIds.length > 0) {
+    districtRegularQuery.in("district_id", districtIds);
+  } else if (localityId != null) {
+    districtRegularQuery.eq("district_id", "__none__");
+  }
+
+  const groupRegularQuery = supabase.from("group_regular_list").select("group_id, member_id");
+  if (localityId != null && groupIds.length > 0) {
+    groupRegularQuery.in("group_id", groupIds);
+  } else if (localityId != null) {
+    groupRegularQuery.eq("group_id", "__none__");
+  }
+
+  const membersQuery = supabase.from("members").select("id, name, is_local");
+  if (localityId != null) {
+    membersQuery.or(`locality_id.eq.${localityId},locality_id.is.null`);
+  }
+
   const [mainMeetingsRes, groupRecordsRes, districtRegularRes, groupRegularRes, membersRes, dispatchRes] =
     await Promise.all([
-      supabase
-        .from("lordsday_meeting_records")
-        .select("id, district_id")
-        .eq("meeting_type", "main")
-        .eq("event_date", weekStartIso),
-      supabase
-        .from("group_meeting_records")
-        .select("id, group_id")
-        .eq("week_start", weekStartIso),
-      supabase.from("district_regular_list").select("district_id, member_id"),
-      supabase.from("group_regular_list").select("group_id, member_id"),
-      supabase.from("members").select("id, name, is_local"),
+      mainMeetingsQuery,
+      groupRecordsQuery,
+      districtRegularQuery,
+      groupRegularQuery,
+      membersQuery,
       supabase
         .from("organic_dispatch_records")
         .select("member_id, dispatch_type, dispatch_date, dispatch_memo")

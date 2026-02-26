@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getEffectiveCurrentLocalityId } from "@/lib/cachedData";
 import type { Category } from "@/types/database";
 import { MembersPageClient } from "./MembersPageClient";
 import type { MembersApiResponse, MembersApiRow } from "@/app/api/members/route";
@@ -10,13 +11,32 @@ export default async function MembersPage({
 }) {
   const supabase = await createClient();
   const params = await searchParams;
+  const currentLocalityId = await getEffectiveCurrentLocalityId();
 
-  const { data: members } = await supabase
+  const membersQuery = supabase
     .from("members")
     .select("id, name, furigana, gender, is_local, district_id, group_id, locality_id, age_group, is_baptized, baptism_year, baptism_month, baptism_day, baptism_date_precision, language_main, language_sub, follower_id, updated_at, local_member_join_date, local_member_leave_date")
     .order("name");
-  const { data: districts } = await supabase.from("districts").select("id, name, locality_id").order("name");
-  const { data: groups } = await supabase.from("groups").select("id, name, district_id").order("name");
+  if (currentLocalityId != null) {
+    membersQuery.or(`locality_id.eq.${currentLocalityId},locality_id.is.null`);
+  }
+  const { data: members } = await membersQuery;
+
+  const districtsQuery = supabase.from("districts").select("id, name, locality_id").order("name");
+  if (currentLocalityId != null) {
+    districtsQuery.eq("locality_id", currentLocalityId);
+  }
+  const { data: districts } = await districtsQuery;
+
+  const districtIds = (districts ?? []).map((d) => d.id);
+  const groupsQuery = supabase.from("groups").select("id, name, district_id").order("name");
+  if (districtIds.length > 0) {
+    groupsQuery.in("district_id", districtIds);
+  } else if (currentLocalityId != null) {
+    groupsQuery.eq("district_id", "__none__");
+  }
+  const { data: groups } = await groupsQuery;
+
   const { data: periods } = await supabase
     .from("member_local_enrollment_periods")
     .select("member_id, period_no, join_date, leave_date, is_uncertain, memo")
@@ -34,24 +54,6 @@ export default async function MembersPage({
       memo: row.memo ?? null,
     });
     periodsByMember.set(row.member_id, list);
-  }
-
-  let localityId: string | null = null;
-  const { data: { user } } = await supabase.auth.getUser();
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("main_district_id")
-      .eq("id", user.id)
-      .maybeSingle();
-    if (profile?.main_district_id) {
-      const { data: district } = await supabase
-        .from("districts")
-        .select("locality_id")
-        .eq("id", profile.main_district_id)
-        .maybeSingle();
-      localityId = (district as { locality_id?: string } | null)?.locality_id ?? null;
-    }
   }
 
   const membersList: MembersApiRow[] = (members ?? []).map((m) => {
@@ -93,7 +95,7 @@ export default async function MembersPage({
       locality_id: (d as { locality_id?: string }).locality_id ?? null,
     })),
     groups: groups ?? [],
-    localityId,
+    localityId: currentLocalityId,
   };
 
   return (

@@ -51,9 +51,10 @@ export type AttendanceMatrixData = {
   districts: { id: string; name: string }[];
 };
 
-/** 出欠マトリクス用データ取得。表示期間内にいずれか1つでも出席があるメンバーのみ返す */
+/** 出欠マトリクス用データ取得。表示期間内にいずれか1つでも出席があるメンバーのみ返す。localityId 指定時はその地方にスコープ。 */
 export async function getAttendanceMatrixData(
-  year: number = new Date().getFullYear()
+  year: number = new Date().getFullYear(),
+  localityId: string | null = null
 ): Promise<AttendanceMatrixData> {
   const supabase = await createClient();
   const weeksData = getSundayWeeksInYear(year);
@@ -61,31 +62,81 @@ export async function getAttendanceMatrixData(
   const weekStartRangeMin = weekStarts[0] ?? `${year}-01-01`;
   const weekStartRangeMax = weekStarts[weekStarts.length - 1] ?? `${year}-12-31`;
 
+  let districtIds: string[] = [];
+  let groupIds: string[] = [];
+  if (localityId != null) {
+    const { data: distRows } = await supabase
+      .from("districts")
+      .select("id")
+      .eq("locality_id", localityId);
+    districtIds = (distRows ?? []).map((d) => d.id);
+    if (districtIds.length > 0) {
+      const { data: grpRows } = await supabase
+        .from("groups")
+        .select("id")
+        .in("district_id", districtIds);
+      groupIds = (grpRows ?? []).map((g) => g.id);
+    }
+  }
+
+  const meetingsQuery = supabase
+    .from("lordsday_meeting_records")
+    .select("id, event_date, meeting_type, district_id")
+    .eq("meeting_type", "main")
+    .gte("event_date", weekStartRangeMin)
+    .lte("event_date", weekStartRangeMax);
+  if (localityId != null) {
+    if (districtIds.length > 0) {
+      meetingsQuery.or(`district_id.in.(${districtIds.join(",")}),locality_id.eq.${localityId}`);
+    } else {
+      meetingsQuery.eq("locality_id", localityId);
+    }
+  }
+
+  const groupRecordsQuery = supabase
+    .from("group_meeting_records")
+    .select("id, week_start")
+    .gte("week_start", weekStartRangeMin)
+    .lte("week_start", weekStartRangeMax);
+  if (localityId != null && groupIds.length > 0) {
+    groupRecordsQuery.in("group_id", groupIds);
+  } else if (localityId != null) {
+    groupRecordsQuery.eq("group_id", "__none__");
+  }
+
+  const prayerRecordsQuery = supabase
+    .from("prayer_meeting_records")
+    .select("id, week_start")
+    .gte("week_start", weekStartRangeMin)
+    .lte("week_start", weekStartRangeMax);
+  if (localityId != null && districtIds.length > 0) {
+    prayerRecordsQuery.in("district_id", districtIds);
+  } else if (localityId != null) {
+    prayerRecordsQuery.eq("district_id", "__none__");
+  }
+
+  const membersQuery = supabase.from("members").select("id, name, furigana, district_id, is_local");
+  if (localityId != null) {
+    membersQuery.or(`locality_id.eq.${localityId},locality_id.is.null`);
+  }
+
+  const districtsQuery = supabase.from("districts").select("id, name").order("id");
+  if (localityId != null) {
+    districtsQuery.eq("locality_id", localityId);
+  }
+
   const [meetingsRes, groupRecordsRes, prayerRecordsRes, dispatchRes, membersRes, districtsRes] =
     await Promise.all([
-      supabase
-        .from("lordsday_meeting_records")
-        .select("id, event_date, meeting_type, district_id")
-        .eq("meeting_type", "main")
-        .gte("event_date", weekStartRangeMin)
-        .lte("event_date", weekStartRangeMax),
-      supabase
-        .from("group_meeting_records")
-        .select("id, week_start")
-        .gte("week_start", weekStartRangeMin)
-        .lte("week_start", weekStartRangeMax),
-      supabase
-        .from("prayer_meeting_records")
-        .select("id, week_start")
-        .gte("week_start", weekStartRangeMin)
-        .lte("week_start", weekStartRangeMax),
+      meetingsQuery,
+      groupRecordsQuery,
+      prayerRecordsQuery,
       supabase
         .from("organic_dispatch_records")
         .select("member_id, week_start, dispatch_type, dispatch_date, dispatch_memo")
         .gte("week_start", weekStartRangeMin)
         .lte("week_start", weekStartRangeMax),
-      supabase.from("members").select("id, name, furigana, district_id, is_local"),
-      supabase.from("districts").select("id, name").order("id"),
+      membersQuery,
+      districtsQuery,
     ]);
 
   const meetings = (meetingsRes.data ?? []) as {

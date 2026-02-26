@@ -11,17 +11,10 @@ import type { Category } from "@/types/database";
 import { addDistrictRegularMember, addGroupRegularMember } from "@/app/(dashboard)/settings/organization/actions";
 import { Toggle } from "@/components/Toggle";
 import { QUERY_KEYS } from "@/lib/queryClient";
+import { useLocality } from "@/contexts/LocalityContext";
 
+/** ローカルでないメンバー（ゲスト）は locality_id なし。ローカルは現在選択中の地方を設定。 */
 const CATEGORIES: Category[] = ["adult", "university", "high_school", "junior_high", "elementary", "preschool"];
-
-/** ローカルでないメンバーの「地方」選択肢（表示順） */
-const LOCALITY_NAMES = [
-  "札幌", "仙台", "新庄", "酒田", "下妻", "つくば", "北本", "川口", "さいたま", "千葉",
-  "習志野", "成田", "市川", "市原", "松戸", "東京", "西東京", "調布", "小平", "町田",
-  "八王子", "日野", "横浜", "小田原", "藤沢", "相模原", "富山", "新潟", "静岡", "掛川",
-  "岐阜", "名古屋", "豊川", "鈴鹿", "大阪", "東大阪", "京都", "神戸", "奈良", "広島",
-  "徳島", "北九州", "福岡", "那覇",
-];
 
 function ButtonGroup<T extends string>({
   value,
@@ -57,9 +50,9 @@ function ButtonGroup<T extends string>({
 export default function NewMemberPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { currentLocalityId } = useLocality();
   const [districts, setDistricts] = useState<{ id: string; name: string }[]>([]);
   const [groups, setGroups] = useState<{ id: string; name: string; district_id: string }[]>([]);
-  const [localities, setLocalities] = useState<{ id: string; name: string }[]>([]);
   const [name, setName] = useState("");
   const [furigana, setFurigana] = useState("");
   const [gender, setGender] = useState<"male" | "female">("male");
@@ -68,7 +61,6 @@ export default function NewMemberPage() {
   const [groupId, setGroupId] = useState<string | null>(null);
   const [isDistrictRegular, setIsDistrictRegular] = useState(false);
   const [isGroupRegular, setIsGroupRegular] = useState(false);
-  const [localityId, setLocalityId] = useState("");
   const [ageGroup, setAgeGroup] = useState<Category | null>(null);
   const [isBaptized, setIsBaptized] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -76,15 +68,18 @@ export default function NewMemberPage() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.from("districts").select("id, name").then(({ data }) => setDistricts(data ?? []));
+    if (currentLocalityId) {
+      supabase
+        .from("districts")
+        .select("id, name")
+        .eq("locality_id", currentLocalityId)
+        .order("name")
+        .then(({ data }) => setDistricts(data ?? []));
+    } else {
+      supabase.from("districts").select("id, name").order("name").then(({ data }) => setDistricts(data ?? []));
+    }
     supabase.from("groups").select("id, name, district_id").then(({ data }) => setGroups(data ?? []));
-    supabase.from("localities").select("id, name").then(({ data }) => {
-      const all = data ?? [];
-      const byName = new Map(all.map((l) => [l.name, l]));
-      const ordered = LOCALITY_NAMES.map((n) => byName.get(n)).filter(Boolean) as { id: string; name: string }[];
-      setLocalities(ordered);
-    });
-  }, []);
+  }, [currentLocalityId]);
 
   const filteredGroups = districtId ? groups.filter((g) => g.district_id === districtId) : [];
 
@@ -107,7 +102,7 @@ export default function NewMemberPage() {
         is_local: isLocal,
         district_id: isLocal ? (districtId || null) : null,
         group_id: isLocal ? (groupId ?? null) : null,
-        locality_id: !isLocal ? (localityId || null) : null,
+        locality_id: isLocal ? (currentLocalityId ?? null) : null,
         age_group: ageGroup,
         is_baptized: isBaptized,
       })
@@ -173,8 +168,6 @@ export default function NewMemberPage() {
                   if (b) {
                     setDistrictId("");
                     setGroupId(null);
-                  } else {
-                    setLocalityId("");
                   }
                   return !b;
                 });
@@ -265,21 +258,7 @@ export default function NewMemberPage() {
             </div>
           </>
         ) : (
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">地方</label>
-            <select
-              value={localityId}
-              onChange={(e) => setLocalityId(e.target.value)}
-              className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm bg-white"
-            >
-              <option value="">選択</option>
-              {localities.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <p className="text-sm text-slate-500 py-1">ゲストは地方なし（locality_id なし）で登録されます。</p>
         )}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">年齢層</label>

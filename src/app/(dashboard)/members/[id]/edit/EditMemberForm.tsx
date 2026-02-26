@@ -23,6 +23,7 @@ import {
 import { QUERY_KEYS } from "@/lib/queryClient";
 import { LANGUAGE_OPTIONS } from "@/lib/languages";
 import { Toggle } from "@/components/Toggle";
+import { useLocality } from "@/contexts/LocalityContext";
 import { updateMemberAction } from "./actions";
 
 const CATEGORIES: Category[] = ["adult", "university", "high_school", "junior_high", "elementary", "preschool"];
@@ -84,14 +85,16 @@ type Props = {
   };
   districts: { id: string; name: string }[];
   groups: { id: string; name: string; district_id: string }[];
-  localities: { id: string; name: string }[];
+  /** 編集画面用。ゲスト時は地方ドロップダウンを出さないため未使用。 */
+  localities?: { id: string; name: string }[];
   /** 名簿一覧から編集に来たときのクエリ（保存後・キャンセルで /members?filter=unassigned 等に戻す） */
   returnSearchParams?: { filter?: string; type?: string };
 };
 
-export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts, groups, localities, returnSearchParams }: Props) {
+export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts, groups, localities: _localities, returnSearchParams }: Props) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { currentLocalityId } = useLocality();
   const [name, setName] = useState(initial.name);
   const [furigana, setFurigana] = useState(initial.furigana);
   const [gender, setGender] = useState<"male" | "female">(initial.gender);
@@ -100,7 +103,6 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
   const [groupId, setGroupId] = useState<string | null>(initial.group_id ?? null);
   const [districtTier, setDistrictTier] = useState<Tier>(initial.district_tier);
   const [groupTier, setGroupTier] = useState<Tier>(initial.group_tier);
-  const [localityId, setLocalityId] = useState(initial.locality_id);
   const [ageGroup, setAgeGroup] = useState<Category | null>(initial.age_group);
   const [isBaptized, setIsBaptized] = useState(initial.is_baptized);
   const [languageMain, setLanguageMain] = useState(initial.language_main);
@@ -149,7 +151,7 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
         is_local: isLocal,
         district_id: isLocal ? (districtId || null) : null,
         group_id: isLocal ? groupId : null,
-        locality_id: !isLocal ? (localityId || null) : null,
+        locality_id: isLocal ? (currentLocalityId ?? null) : null,
         age_group: ageGroup,
         is_baptized: isBaptized,
         language_main: languageMain || null,
@@ -246,8 +248,6 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
                 if (b) {
                   setDistrictId("");
                   setGroupId(null);
-                } else {
-                  setLocalityId("");
                 }
                 return !b;
               });
@@ -347,21 +347,7 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
           </div>
         </>
       ) : (
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">地方</label>
-          <select
-            value={localityId}
-            onChange={(e) => setLocalityId(e.target.value)}
-            className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm bg-white"
-          >
-            <option value="">選択</option>
-            {localities.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <p className="text-sm text-slate-500 py-1">ゲストは地方なし（locality_id なし）で保存されます。</p>
       )}
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">年齢層</label>
