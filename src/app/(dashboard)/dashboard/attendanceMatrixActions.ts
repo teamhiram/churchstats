@@ -117,7 +117,7 @@ export async function getAttendanceMatrixData(
 
   const membersQuery = supabase.from("members").select("id, name, furigana, district_id, is_local");
   if (localityId != null) {
-    membersQuery.or(`locality_id.eq.${localityId},locality_id.is.null`);
+    membersQuery.eq("locality_id", localityId);
   }
 
   const districtsQuery = supabase.from("districts").select("id, name").order("id");

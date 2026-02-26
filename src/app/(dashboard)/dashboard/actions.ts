@@ -73,9 +73,9 @@ export async function getDispatchMonitorData(localityId: string | null = null): 
     groupRegularQuery.eq("group_id", "__none__");
   }
 
-  const membersQuery = supabase.from("members").select("id, name, is_local");
+  const membersQuery = supabase.from("members").select("id, name, locality_id");
   if (localityId != null) {
-    membersQuery.or(`locality_id.eq.${localityId},locality_id.is.null`);
+    membersQuery.eq("locality_id", localityId);
   }
 
   const [mainMeetingsRes, groupRecordsRes, districtRegularRes, groupRegularRes, membersRes, dispatchRes] =
@@ -132,9 +132,13 @@ export async function getDispatchMonitorData(localityId: string | null = null): 
     groupRegularRows.filter((r) => groupIdsThisWeek.has(r.group_id)).map((r) => r.member_id)
   );
 
-  const membersList = (membersRes.data ?? []) as { id: string; name: string; is_local: boolean }[];
+  const membersList = (membersRes.data ?? []) as { id: string; name: string; locality_id?: string | null }[];
   const memberMap = new Map(membersList.map((m) => [m.id, m.name]));
-  const localMemberIds = new Set(membersList.filter((m) => m.is_local).map((m) => m.id));
+  const localMemberIds = new Set(
+    localityId != null
+      ? membersList.map((m) => m.id)
+      : membersList.filter((m) => m.locality_id != null).map((m) => m.id)
+  );
 
   let mainSourceIds = new Set(mainRegularMemberIds);
   let groupSourceIds = new Set(groupRegularMemberIds);

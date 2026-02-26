@@ -5,13 +5,15 @@ import { useState, useEffect } from "react";
 import { CATEGORY_LABELS } from "@/types/database";
 import type { Category } from "@/types/database";
 
-type Member = { id: string; name: string; age_group: Category | null; is_baptized: boolean; district_id: string | null; group_id: string | null };
+type Member = { id: string; name: string; age_group: Category | null; is_baptized: boolean; district_id: string | null; group_id: string | null; locality_id: string | null };
 
 type Props = {
   meetingId: string;
   eventDate: string;
   meetingType: string;
   districtId: string | null;
+  /** 集会の地方（recorded_is_local 判定用） */
+  meetingLocalityId: string | null;
   initialAttendance: { id: string; member_id: string }[];
   initialMembers: Member[];
   regularList: { id: string; member_id: string; sort_order: number }[];
@@ -22,6 +24,7 @@ export function AttendanceReport({
   eventDate,
   meetingType,
   districtId,
+  meetingLocalityId,
   initialAttendance,
   initialMembers,
   regularList,
@@ -43,21 +46,25 @@ export function AttendanceReport({
     const supabase = createClient();
     supabase
       .from("members")
-      .select("id, name, age_group, is_baptized, district_id, group_id")
+      .select("id, name, age_group, is_baptized, district_id, group_id, locality_id")
       .ilike("name", `%${search.trim()}%`)
       .limit(10)
-      .then(({ data }) => setCandidates(data ?? []));
+      .then(({ data }) => setCandidates((data ?? []) as Member[]));
   }, [search]);
 
   const addAttendance = async (member: Member) => {
     setMessage("");
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
+    const recordedIsLocal = Boolean(
+      meetingLocalityId != null && member.locality_id != null && member.locality_id === meetingLocalityId
+    );
     const { error } = await supabase.from("lordsday_meeting_attendance").insert({
       meeting_id: meetingId,
       member_id: member.id,
       recorded_category: member.age_group,
       recorded_is_baptized: member.is_baptized,
+      recorded_is_local: recordedIsLocal,
       district_id: member.district_id,
       group_id: member.group_id,
       reported_by_user_id: user?.id ?? null,
