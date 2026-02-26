@@ -121,12 +121,29 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
 
   return (
     <>
-      {/* モバイル: 薄い固定ヘッダー（アプリ名＋バージョンバッジのみ。アカウントはフッターへ） */}
-      <header className="md:hidden fixed top-0 left-0 right-0 z-40 h-8 bg-slate-800 flex items-center px-3">
-        <span className="text-white text-sm font-medium">召会生活統計</span>
-        <span className="ml-1.5 inline-flex items-baseline">
-          <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.19</span>
-        </span>
+      {/* モバイル: 薄い固定ヘッダー（アプリ名＋バージョン＋地方選択） */}
+      <header className="md:hidden fixed top-0 left-0 right-0 z-40 h-8 bg-slate-800 flex items-center justify-between px-3">
+        <div className="flex items-center min-w-0">
+          <span className="text-white text-sm font-medium">召会生活統計</span>
+          <span className="ml-1.5 inline-flex items-baseline shrink-0">
+            <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.19</span>
+          </span>
+        </div>
+        {showLocalitySwitcher && (
+          <button
+            type="button"
+            onClick={() => setLocalityPopupOpen(true)}
+            className="flex items-center gap-0.5 px-2 py-1 rounded text-slate-300 hover:bg-slate-700 active:bg-slate-600 text-xs max-w-[50%] min-w-0 shrink-0 touch-target"
+            aria-expanded={localityPopupOpen}
+            aria-haspopup="dialog"
+            aria-label="地方を切り替え"
+          >
+            <span className="truncate">{currentLocalityName ?? "地方"}</span>
+            <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        )}
       </header>
 
       {/* PC: トップ固定ナビゲーション */}
@@ -150,97 +167,6 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
-                {localityPopupOpen && (
-                  <div
-                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-label="地方を選択"
-                  >
-                    <div
-                      ref={localityPopupRef}
-                      className="w-full max-w-md max-h-[80vh] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl flex flex-col"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 shrink-0">
-                        <h2 className="text-sm font-semibold text-slate-800">地方を選択</h2>
-                        <button
-                          type="button"
-                          onClick={() => setLocalityPopupOpen(false)}
-                          className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                          aria-label="閉じる"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                      {/* 地域タブ */}
-                      <div className="flex border-b border-slate-200 overflow-x-auto shrink-0" role="tablist" aria-label="地域">
-                        {visibleSections.map((section, idx) => (
-                          <button
-                            key={section.areaId ?? `other-${idx}`}
-                            type="button"
-                            role="tab"
-                            aria-selected={localityPopupAreaIndex === idx}
-                            aria-controls={`locality-panel-${idx}`}
-                            id={`locality-tab-${idx}`}
-                            onClick={() => setLocalityPopupAreaIndex(idx)}
-                            className={`px-3 py-2 text-xs font-medium whitespace-nowrap touch-target border-b-2 -mb-px transition-colors ${
-                              localityPopupAreaIndex === idx
-                                ? "border-primary-500 text-primary-600 bg-slate-50"
-                                : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-                            }`}
-                          >
-                            {section.areaName}
-                          </button>
-                        ))}
-                      </div>
-                      {/* 都道府県は小ラベル、地方は横並びボタン（選択中タブ内） */}
-                      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden py-3 bg-white">
-                        {visibleSections.map((section, sectionIdx) => (
-                          <div
-                            key={section.areaId ?? `other-${sectionIdx}`}
-                            id={`locality-panel-${sectionIdx}`}
-                            role="tabpanel"
-                            aria-labelledby={`locality-tab-${sectionIdx}`}
-                            hidden={localityPopupAreaIndex !== sectionIdx}
-                            className={localityPopupAreaIndex === sectionIdx ? "px-4 space-y-4" : "hidden"}
-                          >
-                            {section.prefectures.map((pref) => (
-                              <div key={pref.prefectureId ?? `other-${pref.prefectureName}`}>
-                                <span className="text-[11px] text-slate-500 font-medium">
-                                  {pref.prefectureName}
-                                </span>
-                                <div className="flex flex-wrap gap-2 mt-1.5">
-                                  {pref.localities.map((loc) => (
-                                    <button
-                                      key={loc.id}
-                                      type="button"
-                                      onClick={() => {
-                                        setCurrentLocalityId(loc.id);
-                                        setLocalityPopupOpen(false);
-                                      }}
-                                      className={`inline-flex items-center rounded-lg px-3 py-2 text-sm touch-target transition-colors ${
-                                        loc.id === currentLocalityId
-                                          ? "bg-primary-600 text-white font-medium"
-                                          : "bg-slate-100 text-slate-800 hover:bg-slate-200"
-                                      }`}
-                                      role="menuitemradio"
-                                      aria-checked={loc.id === currentLocalityId}
-                                    >
-                                      {loc.name}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -288,6 +214,99 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
           </nav>
         </div>
       </header>
+
+      {/* 地方選択ポップアップ（モバイル・PC共通） */}
+      {localityPopupOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-label="地方を選択"
+        >
+          <div
+            ref={localityPopupRef}
+            className="w-full max-w-md max-h-[80vh] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 shrink-0">
+              <h2 className="text-sm font-semibold text-slate-800">地方を選択</h2>
+              <button
+                type="button"
+                onClick={() => setLocalityPopupOpen(false)}
+                className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 touch-target"
+                aria-label="閉じる"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {/* 地域タブ */}
+            <div className="flex border-b border-slate-200 overflow-x-auto shrink-0" role="tablist" aria-label="地域">
+              {visibleSections.map((section, idx) => (
+                <button
+                  key={section.areaId ?? `other-${idx}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={localityPopupAreaIndex === idx}
+                  aria-controls={`locality-panel-${idx}`}
+                  id={`locality-tab-${idx}`}
+                  onClick={() => setLocalityPopupAreaIndex(idx)}
+                  className={`px-3 py-2 text-xs font-medium whitespace-nowrap touch-target border-b-2 -mb-px transition-colors ${
+                    localityPopupAreaIndex === idx
+                      ? "border-primary-500 text-primary-600 bg-slate-50"
+                      : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {section.areaName}
+                </button>
+              ))}
+            </div>
+            {/* 都道府県は小ラベル、地方は横並びボタン（選択中タブ内） */}
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden py-3 bg-white">
+              {visibleSections.map((section, sectionIdx) => (
+                <div
+                  key={section.areaId ?? `other-${sectionIdx}`}
+                  id={`locality-panel-${sectionIdx}`}
+                  role="tabpanel"
+                  aria-labelledby={`locality-tab-${sectionIdx}`}
+                  hidden={localityPopupAreaIndex !== sectionIdx}
+                  className={localityPopupAreaIndex === sectionIdx ? "px-4 space-y-4" : "hidden"}
+                >
+                  {section.prefectures.map((pref) => (
+                    <div key={pref.prefectureId ?? `other-${pref.prefectureName}`}>
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        {pref.prefectureName}
+                      </span>
+                      <div className="flex flex-wrap gap-2 mt-1.5">
+                        {pref.localities.map((loc) => (
+                          <button
+                            key={loc.id}
+                            type="button"
+                            onClick={() => {
+                              setCurrentLocalityId(loc.id);
+                              setLocalityPopupOpen(false);
+                            }}
+                            className={`inline-flex items-center rounded-lg px-3 py-2 text-sm touch-target transition-colors ${
+                              loc.id === currentLocalityId
+                                ? "bg-primary-600 text-white font-medium"
+                                : "bg-slate-100 text-slate-800 hover:bg-slate-200"
+                            }`}
+                            role="menuitemradio"
+                            aria-checked={loc.id === currentLocalityId}
+                          >
+                            {loc.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* モバイル: 固定フッター（速報｜週別｜出欠｜名簿｜設定｜アカウント） */}
       <footer className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-800 pb-[env(safe-area-inset-bottom)]">
