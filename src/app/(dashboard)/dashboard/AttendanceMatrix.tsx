@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Toggle } from "@/components/Toggle";
 import { getAttendanceMatrixData } from "./attendanceMatrixActions";
 import type { AttendanceMatrixData, AttendanceMatrixMember } from "./attendanceMatrixActions";
+import { DISPATCH_TYPE_SQUARE_COLORS } from "@/types/database";
+import type { DispatchType } from "@/types/database";
 
 const ROW_LABELS = {
   prayer: "祈",
@@ -13,13 +15,20 @@ const ROW_LABELS = {
   dispatch: "派",
 } as const;
 
-/** 各行の色（ボタン・スクエア・ボーダーで共通） */
+/** 各行の色（ボタン・スクエア・ボーダーで共通）。dispatch は種別ごとに DISPATCH_TYPE_SQUARE_COLORS を使用 */
 const ROW_COLORS: Record<RowKey, { btn: string; square: string; border: string; label: string }> = {
   prayer: { btn: "bg-primary-600", square: "bg-primary-500", border: "border-primary-500", label: "緑" },
   main: { btn: "bg-blue-600", square: "bg-blue-500", border: "border-blue-500", label: "青" },
   group: { btn: "bg-amber-600", square: "bg-amber-500", border: "border-amber-500", label: "黄" },
   dispatch: { btn: "bg-violet-600", square: "bg-violet-500", border: "border-violet-500", label: "紫" },
 };
+const DISPATCH_DEFAULT_SQUARE = { square: "bg-violet-500", border: "border-violet-500" };
+
+function getDispatchSquareColors(member: AttendanceMatrixMember, weekStart: string): { square: string; border: string } {
+  const type = member.dispatchTypes?.[weekStart];
+  if (type && type in DISPATCH_TYPE_SQUARE_COLORS) return DISPATCH_TYPE_SQUARE_COLORS[type as DispatchType];
+  return DISPATCH_DEFAULT_SQUARE;
+}
 
 type RowKey = keyof typeof ROW_LABELS;
 
@@ -313,8 +322,13 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear, local
                               </td>
                               {effectiveData.weeks.map((week) => {
                                 const attended = member[row][week.weekStart] === true;
-                                const colorClass = attended ? ROW_COLORS[row].square : "bg-slate-200";
-                                const borderClass = attended ? ROW_COLORS[row].border : "border-slate-200";
+                                const dispatchColors = row === "dispatch" && attended ? getDispatchSquareColors(member, week.weekStart) : null;
+                                const colorClass = attended
+                                  ? (dispatchColors ? dispatchColors.square : ROW_COLORS[row].square)
+                                  : "bg-slate-200";
+                                const borderClass = attended
+                                  ? (dispatchColors ? dispatchColors.border : ROW_COLORS[row].border)
+                                  : "border-slate-200";
                                 return (
                                   <td
                                     key={week.weekStart}
@@ -368,8 +382,13 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear, local
                           </td>
                           {effectiveData.weeks.map((week) => {
                             const attended = member[row][week.weekStart] === true;
-                            const colorClass = attended ? ROW_COLORS[row].square : "bg-slate-200";
-                            const borderClass = attended ? ROW_COLORS[row].border : "border-slate-200";
+                            const dispatchColors = row === "dispatch" && attended ? getDispatchSquareColors(member, week.weekStart) : null;
+                            const colorClass = attended
+                              ? (dispatchColors ? dispatchColors.square : ROW_COLORS[row].square)
+                              : "bg-slate-200";
+                            const borderClass = attended
+                              ? (dispatchColors ? dispatchColors.border : ROW_COLORS[row].border)
+                              : "border-slate-200";
                             return (
                               <td
                                 key={week.weekStart}
@@ -409,8 +428,16 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear, local
           小組
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded-sm bg-violet-500" aria-hidden />
-          派遣
+          <span className="inline-block w-3 h-3 rounded-sm bg-violet-200" aria-hidden title="メッセージ" />
+          メッセージ
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-violet-300" aria-hidden title="電話" />
+          電話
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-violet-500" aria-hidden title="対面" />
+          対面
         </span>
         <span className="inline-flex items-center gap-1">
           <span className="inline-block w-3 h-3 rounded-sm bg-slate-200" aria-hidden />

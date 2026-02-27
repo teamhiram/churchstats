@@ -6,7 +6,7 @@ import { formatDateYmd, getDaysInWeek, getSundayWeeksInYear } from "@/lib/weekUt
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
 import { getGojuonRowLabel, GOJUON_ROW_LABELS } from "@/lib/furigana";
-import { DISPATCH_TYPE_LABELS, CATEGORY_LABELS } from "@/types/database";
+import { DISPATCH_TYPE_LABELS, CATEGORY_LABELS, DISPATCH_TYPE_TEXT_COLORS } from "@/types/database";
 import type { DispatchType } from "@/types/database";
 import type { Category } from "@/types/database";
 
@@ -754,7 +754,7 @@ export function OrganicDispatchForm({
                             {groupMap.get(record.group_id) ?? record.group_id}
                           </span>
                           {record.dispatch_type && (
-                            <span className="text-primary-600">
+                            <span className={record.dispatch_type ? DISPATCH_TYPE_TEXT_COLORS[record.dispatch_type] : "text-primary-600"}>
                               {DISPATCH_TYPE_LABELS[record.dispatch_type]}
                             </span>
                           )}

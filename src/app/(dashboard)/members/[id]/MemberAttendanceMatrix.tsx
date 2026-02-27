@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { getMemberAttendanceMatrixData, getMemberLifeOverview } from "@/app/(dashboard)/dashboard/attendanceMatrixActions";
 import type { MemberAttendanceMatrixData } from "@/app/(dashboard)/dashboard/attendanceMatrixActions";
+import { DISPATCH_TYPE_SQUARE_COLORS } from "@/types/database";
+import type { DispatchType } from "@/types/database";
 import { addDays, format, parseISO } from "date-fns";
 
 const COL_LABELS = {
@@ -21,6 +23,11 @@ const COL_COLORS: Record<ColKey, { square: string; border: string }> = {
   group: { square: "bg-amber-500", border: "border-amber-500" },
   dispatch: { square: "bg-violet-500", border: "border-violet-500" },
 };
+function getDispatchSquareColors(data: MemberAttendanceMatrixData, weekStart: string): { square: string; border: string } {
+  const type = data.dispatchTypes?.[weekStart];
+  if (type && type in DISPATCH_TYPE_SQUARE_COLORS) return DISPATCH_TYPE_SQUARE_COLORS[type as DispatchType];
+  return COL_COLORS.dispatch;
+}
 
 const SQUARE_SIZE = 20;
 /** スクエア列の最小幅（週列を狭くしつつスクエアに余裕を持たせる） */
@@ -186,6 +193,13 @@ export function MemberAttendanceMatrix({ memberId, initialYear }: Props) {
                   </td>
                   {columns.map((col) => {
                     const attended = data[col][week.weekStart] === true;
+                    const dispatchColors = col === "dispatch" && attended ? getDispatchSquareColors(data, week.weekStart) : null;
+                    const colorClass = attended
+                      ? (dispatchColors ? dispatchColors.square : COL_COLORS[col].square)
+                      : "bg-slate-200";
+                    const borderClass = attended
+                      ? (dispatchColors ? dispatchColors.border : COL_COLORS[col].border)
+                      : "border-slate-200";
                     const memo =
                       col === "prayer"
                         ? (data.prayerMemos ?? {})[week.weekStart]
@@ -196,8 +210,12 @@ export function MemberAttendanceMatrix({ memberId, initialYear }: Props) {
                             : col === "dispatch"
                               ? (data.dispatchMemos ?? {})[week.weekStart]
                               : undefined;
-                    const colorClass = attended ? COL_COLORS[col].square : "bg-slate-200";
-                    const borderClass = attended ? COL_COLORS[col].border : "border-slate-200";
+                    const isDarkDispatchSquare = Boolean(dispatchColors?.square?.includes("violet-500"));
+                    const memoDotClass = memo
+                      ? isDarkDispatchSquare
+                        ? "bg-white"
+                        : "bg-slate-700"
+                      : "";
                     const titleText = memo
                       ? `${week.weekNumber}週目 ${COL_LABELS[col]}: ${attended ? "出席" : "欠席"}\n${memo}`
                       : `${week.weekNumber}週目 ${COL_LABELS[col]}: ${attended ? "出席" : "欠席"}`;
@@ -212,12 +230,12 @@ export function MemberAttendanceMatrix({ memberId, initialYear }: Props) {
                       >
                         <div className="inline-flex flex-col items-center justify-center min-h-[20px]">
                           <div
-                            className={`rounded-sm border ${borderClass} ${colorClass} mx-auto relative ${memo ? "ring-1 ring-offset-1 ring-slate-600 ring-offset-white" : ""}`}
+                            className={`rounded-sm border ${borderClass} ${colorClass} mx-auto relative`}
                             style={squareStyle}
                           >
                             {memo && (
                               <span
-                                className="absolute right-0.5 bottom-0.5 w-1 h-1 rounded-full bg-slate-700"
+                                className={`absolute right-0.5 bottom-0.5 w-1 h-1 rounded-full ${memoDotClass}`}
                                 aria-hidden
                               />
                             )}
@@ -247,15 +265,23 @@ export function MemberAttendanceMatrix({ memberId, initialYear }: Props) {
           小組
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded-sm bg-violet-500" aria-hidden />
-          派遣
+          <span className="inline-block w-3 h-3 rounded-sm bg-violet-200" aria-hidden title="メッセージ" />
+          メッセージ
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-violet-300" aria-hidden title="電話" />
+          電話
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-violet-500" aria-hidden title="対面" />
+          対面
         </span>
         <span className="inline-flex items-center gap-1">
           <span className="inline-block w-3 h-3 rounded-sm bg-slate-200" aria-hidden />
           欠席
         </span>
         <span className="inline-flex items-center gap-1 text-slate-500">
-          <span className="inline-block w-3 h-3 rounded-sm border-2 border-slate-600 ring-1 ring-offset-1 ring-slate-600 ring-offset-white" aria-hidden />
+          <span className="inline-block w-1 h-1 rounded-full bg-slate-700" aria-hidden />
           メモあり（ホバーで表示）
         </span>
       </div>

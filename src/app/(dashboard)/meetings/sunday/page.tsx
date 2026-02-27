@@ -35,7 +35,7 @@ export default async function SundayAttendancePage({
   const { data: groups } = await supabase.from("groups").select("id, name, district_id").order("name");
 
   const layoutData = { districts, defaultDistrictId: (profile?.main_district_id && districts.some((d) => d.id === profile.main_district_id) ? profile.main_district_id : null) ?? districts[0]?.id ?? "" };
-  const defaultDistrictId = effectiveDistrictIdForCurrentLocality(params.district_id, layoutData);
+  const defaultDistrictId = effectiveDistrictIdForCurrentLocality(params.district_id, layoutData, { allowAllDistricts: true });
 
   return (
     <div className="space-y-6">

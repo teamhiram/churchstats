@@ -31,7 +31,7 @@ export function MeetingsFilterBar({ districts, defaultDistrictId }: Props) {
           : formatDateYmd(sundayWeeks[0]?.weekStart ?? new Date(year, 0, 1)));
   const districtIdParam = searchParams.get("district_id");
   const districtId =
-    districtIdParam && districts.some((d) => d.id === districtIdParam)
+    districtIdParam && (districtIdParam === "__all__" || districts.some((d) => d.id === districtIdParam))
       ? districtIdParam
       : (defaultDistrictId || (districts[0]?.id ?? ""));
 

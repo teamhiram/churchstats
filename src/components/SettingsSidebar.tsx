@@ -13,6 +13,7 @@ const rolesSidebarItem = { href: "/settings/roles", label: "ユーザ・ロー�
 const debugSidebarItems = [
   { href: "/debug/numbers", label: "各種数値" },
   { href: "/debug/tables", label: "全テーブル" },
+  { href: "/debug/meetings-list", label: "集会一覧" },
   { href: "/debug/enrollment-uncertain", label: "在籍期間不確定", badgeCount: "enrollmentUncertain" as const },
   { href: "/debug/meeting-duplicates", label: "集会重複検知", badgeCount: "meetingDuplicates" as const },
   { href: "/meetings/list/duplicates", label: "重複出席", badgeCount: "duplicateAttendance" as const },

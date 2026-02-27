@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { addDays, format, getDay } from "date-fns";
 import { getSundayWeeksInYear, formatDateYmd } from "@/lib/weekUtils";
+import type { DispatchType } from "@/types/database";
 
 function parseYmd(s: string): Date {
   const [y, m, d] = s.split("-").map(Number);
@@ -43,6 +44,8 @@ export type AttendanceMatrixMember = {
   main: Record<string, boolean>;
   group: Record<string, boolean>;
   dispatch: Record<string, boolean>;
+  /** weekStart -> dispatch_type（派遣行のスクエア色に使用。省略時は従来どおり violet-500） */
+  dispatchTypes?: Record<string, DispatchType>;
 };
 
 export type AttendanceMatrixData = {
@@ -281,10 +284,16 @@ export async function getAttendanceMatrixData(
   const mainByMember = new Map<string, Record<string, boolean>>();
   const groupByMember = new Map<string, Record<string, boolean>>();
   const dispatchByMember = new Map<string, Record<string, boolean>>();
+  const dispatchTypeByMember = new Map<string, Record<string, DispatchType>>();
 
   const addWeek = (map: Map<string, Record<string, boolean>>, memberId: string, weekStart: string) => {
     if (!map.has(memberId)) map.set(memberId, {});
     map.get(memberId)![weekStart] = true;
+  };
+  const addDispatchWeek = (memberId: string, weekStart: string, type: DispatchType) => {
+    addWeek(dispatchByMember, memberId, weekStart);
+    if (!dispatchTypeByMember.has(memberId)) dispatchTypeByMember.set(memberId, {});
+    dispatchTypeByMember.get(memberId)![weekStart] = type;
   };
 
   mainAttendance.forEach((a) => {
@@ -310,7 +319,7 @@ export async function getAttendanceMatrixData(
 
   completeDispatches.forEach((d) => {
     if (!weekSet.has(d.week_start)) return;
-    addWeek(dispatchByMember, d.member_id, d.week_start);
+    addDispatchWeek(d.member_id, d.week_start, (d.dispatch_type as DispatchType) ?? "in_person");
   });
 
   // Members who have at least one attendance in any type during the period
@@ -340,6 +349,7 @@ export async function getAttendanceMatrixData(
       main: mainByMember.get(m.id) ?? {},
       group: groupByMember.get(m.id) ?? {},
       dispatch: dispatchByMember.get(m.id) ?? {},
+      dispatchTypes: dispatchTypeByMember.get(m.id),
     }));
 
   return { weeks, members, districts };
@@ -360,6 +370,8 @@ export type MemberAttendanceMatrixData = {
   groupMemos: Record<string, string>;
   /** 派遣の週別メモ（weekStart -> メモ）。派遣が「完了」の週のみ */
   dispatchMemos: Record<string, string>;
+  /** 派遣の週別種別（weekStart -> dispatch_type）。スクエア色に使用 */
+  dispatchTypes?: Record<string, DispatchType>;
 };
 
 export async function getMemberAttendanceMatrixData(
@@ -506,10 +518,12 @@ export async function getMemberAttendanceMatrixData(
       (d.dispatch_memo as string).trim() !== ""
   );
   const dispatchMemos: Record<string, string> = {};
+  const dispatchTypes: Record<string, DispatchType> = {};
   completeDispatches.forEach((d) => {
     if (weekSet.has(d.week_start)) {
       dispatch[d.week_start] = true;
       dispatchMemos[d.week_start] = (d.dispatch_memo as string).trim();
+      dispatchTypes[d.week_start] = (d.dispatch_type as DispatchType) ?? "in_person";
     }
   });
 
@@ -518,7 +532,7 @@ export async function getMemberAttendanceMatrixData(
     weekStart: formatDateYmd(w.weekStart),
   }));
 
-  return { weeks, prayer, main, group, dispatch, prayerMemos, mainMemos, groupMemos, dispatchMemos };
+  return { weeks, prayer, main, group, dispatch, prayerMemos, mainMemos, groupMemos, dispatchMemos, dispatchTypes };
 }
 
 /** 個人召会生活概況用。主日統計がある週のみ集計対象とし、出席率・派遣回数を返す。 */
