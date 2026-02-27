@@ -149,6 +149,20 @@ export const DISPATCH_TYPE_LABELS: Record<DispatchType, string> = {
   in_person: "対面",
 };
 
+/** 派遣種別ごとのスクエア・ラベル色（全サイト共通）。メッセージ＝最も薄い、電話＝少し薄い、対面＝濃い紫 */
+export const DISPATCH_TYPE_SQUARE_COLORS: Record<DispatchType, { square: string; border: string }> = {
+  message: { square: "bg-violet-200", border: "border-violet-200" },
+  phone: { square: "bg-violet-300", border: "border-violet-300" },
+  in_person: { square: "bg-violet-500", border: "border-violet-500" },
+};
+
+/** 派遣種別のラベル用テキスト色（スクエアと同じ濃さの系統） */
+export const DISPATCH_TYPE_TEXT_COLORS: Record<DispatchType, string> = {
+  message: "text-violet-500",
+  phone: "text-violet-600",
+  in_person: "text-violet-700",
+};
+
 export interface Profile {
   id: string;
   email: string | null;

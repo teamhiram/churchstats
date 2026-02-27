@@ -15,7 +15,7 @@ import { removeDistrictRegularMember } from "@/app/(dashboard)/settings/organiza
 type District = { id: string; name: string; locality_id?: string };
 type Group = { id: string; name: string; district_id: string };
 type SortOption = "furigana" | "district" | "group" | "age_group";
-type GroupOption = "district" | "group" | "age_group" | "believer" | "attendance" | "gojuon";
+type GroupOption = "district" | "group" | "age_group" | "believer" | "attendance" | "list" | "gojuon";
 
 const SORT_LABELS: Record<SortOption, string> = {
   furigana: "フリガナ順",
@@ -30,6 +30,7 @@ const GROUP_LABELS: Record<GroupOption, string> = {
   age_group: "年齢層",
   believer: "信者",
   attendance: "出欠別",
+  list: "リスト別",
   gojuon: "五十音別",
 };
 
@@ -85,11 +86,9 @@ export function SundayAttendance({
   const [searchResults, setSearchResults] = useState<MemberRow[]>([]);
   const [message, setMessage] = useState("");
   const [sortOrder, setSortOrder] = useState<SortOption>("furigana");
-  const [group1, setGroup1] = useState<GroupOption | "">("");
-  const [group1UserSet, setGroup1UserSet] = useState(false);
-  const [group2, setGroup2] = useState<GroupOption | "">("");
   const [sectionOpen, setSectionOpen] = useState<Record<string, boolean>>({});
   const [accordionOpen, setAccordionOpen] = useState(false);
+  const [isCombinedPerLocality, setIsCombinedPerLocality] = useState<Record<string, boolean>>({});
   const [memoPopupMemberId, setMemoPopupMemberId] = useState<string | null>(null);
   const [enrollmentBlockedMemberId, setEnrollmentBlockedMemberId] = useState<string | null>(null);
   const [excludedMemberIds, setExcludedMemberIds] = useState<Set<string>>(new Set());
@@ -99,17 +98,15 @@ export function SundayAttendance({
   const [isEditMode, setIsEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [showSemiToggle, setShowSemiToggle] = useState(false);
-  const [showPoolToggle, setShowPoolToggle] = useState(false);
   const [memberTierMap, setMemberTierMap] = useState<Map<string, "regular" | "semi" | "pool">>(new Map());
   const [guestIds, setGuestIds] = useState<Set<string>>(new Set());
 
+  const [group1, setGroup1] = useState<GroupOption | "">("attendance");
+  const [group2, setGroup2] = useState<GroupOption | "">("");
+
   useEffect(() => {
-    if (!group1UserSet && attendanceMap.size > 0) {
-      setGroup1("attendance");
-    }
-  }, [attendanceMap.size, group1UserSet]);
-  const [isCombinedPerLocality, setIsCombinedPerLocality] = useState<Record<string, boolean>>({});
+    setGroup2(isEditMode ? "list" : "");
+  }, [isEditMode]);
 
   const districtMap = useMemo(() => new Map(districts.map((d) => [d.id, d.name])), [districts]);
   const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
@@ -363,12 +360,20 @@ const { data: guestData } = await supabase
         const tierMap = await buildDistrictMemberTierMap(supabase, districtIdsToLoad, districtMembers);
         if (cancelled) return;
         setMemberTierMap(tierMap);
-      setGuestIds(new Set(guestIds));
-      setRoster([...districtMembers, ...guests]);
-      setAttendanceMap(map);
-      setMemos(memoMap);
-      setLoading(false);
-    })();
+        setGuestIds(new Set(guestIds));
+        setRoster([...districtMembers, ...guests]);
+        setAttendanceMap(map);
+        setMemos(memoMap);
+        setLoading(false);
+      })().catch((err) => {
+        if (!cancelled) {
+          setLoading(false);
+          setRoster([]);
+          setAttendanceMap(new Map());
+          setMemos(new Map());
+        }
+        console.error("SundayAttendance all-districts load:", err);
+      });
       return () => {
         cancelled = true;
       };
@@ -454,7 +459,15 @@ const { data: guestData } = await supabase
         setAttendanceMap(map);
         setMemos(memoMap);
         setLoading(false);
-      })();
+      })().catch((err) => {
+        if (!cancelled) {
+          setLoading(false);
+          setRoster([]);
+          setAttendanceMap(new Map());
+          setMemos(new Map());
+        }
+        console.error("SundayAttendance combined load:", err);
+      });
       return () => {
         cancelled = true;
       };
@@ -697,28 +710,36 @@ const { data: guestData } = await supabase
     };
   }, [districtId, sundayIso, districts, refreshTrigger, isCombinedPerLocality]);
 
-  const toggleAttendance = (memberId: string, member: MemberRow) => {
+  const setAttendanceChoice = (memberId: string, member: MemberRow, choice: "unrecorded" | "present" | "absent") => {
     if (!isEditMode) return;
     setMessage("");
-    const rec = attendanceMap.get(memberId);
     const memoVal = (memos.get(memberId) ?? "").trim();
-    const isCurrentlyOn = Boolean(rec && rec.attended !== false);
+    if (choice === "unrecorded") {
+      setAttendanceMap((prev) => {
+        const next = new Map(prev);
+        next.delete(memberId);
+        return next;
+      });
+      setMemos((prev) => {
+        const next = new Map(prev);
+        next.delete(memberId);
+        return next;
+      });
+      return;
+    }
+    const attended = choice === "present";
+    const rec = attendanceMap.get(memberId);
     if (rec) {
-      if (isCurrentlyOn) {
-        setAttendanceMap((prev) =>
-          new Map(prev).set(memberId, { ...rec, attended: false, is_online: false, is_away: false, memo: memoVal || null })
-        );
-      } else {
-        setAttendanceMap((prev) => {
-          const next = new Map(prev);
-          const r = next.get(memberId);
-          if (r) next.set(memberId, { ...r, attended: true });
-          return next;
-        });
-      }
+      setAttendanceMap((prev) =>
+        new Map(prev).set(memberId, {
+          ...rec,
+          attended,
+          is_online: attended ? (rec.is_online ?? false) : false,
+          is_away: attended ? (rec.is_away ?? false) : false,
+          memo: memoVal || null,
+        })
+      );
     } else {
-      const isAll = districtId === "__all__";
-      const mid = isAll ? null : meetingId;
       setAttendanceMap((prev) =>
         new Map(prev).set(memberId, {
           id: "",
@@ -726,7 +747,7 @@ const { data: guestData } = await supabase
           memo: null,
           is_online: false,
           is_away: false,
-          attended: true,
+          attended,
         })
       );
       setMemos((prev) => new Map(prev).set(memberId, ""));
@@ -891,24 +912,8 @@ const { data: guestData } = await supabase
     const base = isEditMode
       ? roster.filter((m) => !excludedMemberIds.has(m.id))
       : roster.filter((m) => attendanceMap.has(m.id));
-    return base.filter((m) => {
-      const tier = memberTierMap.get(m.id);
-      if (tier === undefined) return true;
-      if (tier === "regular") return true;
-      if (tier === "semi") return showSemiToggle || hasAttendanceData(m.id);
-      if (tier === "pool") return showPoolToggle || hasAttendanceData(m.id);
-      return true;
-    });
-  }, [
-    isEditMode,
-    roster,
-    excludedMemberIds,
-    attendanceMap,
-    memberTierMap,
-    showSemiToggle,
-    showPoolToggle,
-    hasAttendanceData,
-  ]);
+    return base;
+  }, [isEditMode, roster, excludedMemberIds, attendanceMap]);
   const sortedMembers = useMemo(() => {
     const list = [...displayRoster];
     const collator = new Intl.Collator("ja");
@@ -944,8 +949,10 @@ const { data: guestData } = await supabase
     if (opt === "age_group") return m.age_group ?? "__none__";
     if (opt === "attendance") {
       const rec = attendanceMap.get(m.id);
-      return (rec && rec.attended !== false) ? "attended" : "absent";
+      if (!rec) return "unrecorded";
+      return rec.attended !== false ? "attended" : "absent";
     }
+    if (opt === "list") return memberTierMap.get(m.id) ?? "semi";
     if (opt === "gojuon") return getGojuonRowLabel(m.furigana ?? m.name);
     return m.is_baptized ? "believer" : "friend";
   };
@@ -953,12 +960,14 @@ const { data: guestData } = await supabase
     if (opt === "district") return key === "__none__" ? "—" : (districtMap.get(key) ?? "");
     if (opt === "group") return key === "__none__" ? "無所属" : (groupMap.get(key) ?? "");
     if (opt === "age_group") return key === "__none__" ? "不明" : (key in CATEGORY_LABELS ? CATEGORY_LABELS[key as Category] : "");
-    if (opt === "attendance") return key === "attended" ? "出席" : "欠席";
+    if (opt === "attendance") return key === "attended" ? "○ 出席" : key === "absent" ? "× 欠席" : "ー 記録なし";
+    if (opt === "list") return key === "regular" ? "レギュラー" : key === "semi" ? "準レギュラー" : "プール";
     if (opt === "gojuon") return key;
     return key === "believer" ? "聖徒" : "友人";
   };
   const sortKeys = (opt: GroupOption, keys: string[]): string[] => {
-    if (opt === "attendance") return ["attended", "absent"].filter((k) => keys.includes(k));
+    if (opt === "attendance") return ["attended", "absent", "unrecorded"].filter((k) => keys.includes(k));
+    if (opt === "list") return ["regular", "semi", "pool"].filter((k) => keys.includes(k));
     if (opt === "gojuon") return GOJUON_ROW_LABELS.filter((l) => keys.includes(l));
     return [...keys].sort((a, b) => {
       if (opt === "district") return new Intl.Collator("ja").compare(districtMap.get(a) ?? "", districtMap.get(b) ?? "");
@@ -1004,9 +1013,10 @@ const { data: guestData } = await supabase
       }));
       return { group1Key: g1Key, group1Label: getLabel(group1, g1Key), subsections };
     });
-  }, [sortedMembers, group1, group2, districtMap, groupMap, attendanceMap]);
-  const toggleSectionOpen = (key: string) => setSectionOpen((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }));
-  const isSectionOpen = (key: string) => sectionOpen[key] ?? true;
+  }, [sortedMembers, group1, group2, districtMap, groupMap, attendanceMap, memberTierMap]);
+  const defaultSectionOpen = (key: string) => (key.includes("::g2-pool") ? false : true);
+  const toggleSectionOpen = (key: string) => setSectionOpen((prev) => ({ ...prev, [key]: !(prev[key] ?? defaultSectionOpen(key)) }));
+  const isSectionOpen = (key: string) => sectionOpen[key] ?? defaultSectionOpen(key);
 
   const hasNoRecords = !loading && attendanceMap.size === 0;
 
@@ -1095,18 +1105,6 @@ const { data: guestData } = await supabase
                     }
                     for (const [, recId] of excludedForDeletion) {
                       await supabase.from("lordsday_meeting_attendance").delete().eq("id", recId);
-                    }
-                    for (const m of roster) {
-                      if (!attendanceMap.has(m.id) && !excludedMemberIds.has(m.id)) {
-                        attendanceMap.set(m.id, {
-                          id: "",
-                          member_id: m.id,
-                          memo: (memos.get(m.id) ?? "").trim() || null,
-                          is_online: false,
-                          is_away: false,
-                          attended: false,
-                        });
-                      }
                     }
                     if (isAll) {
                       const meetingIdMap = await ensureSundayMeetingsBatch(sundayIso, districts, isCombinedPerLocality);
@@ -1222,25 +1220,6 @@ const { data: guestData } = await supabase
             </button>
             {accordionOpen && (
               <div className="border-t border-slate-200 px-4 pb-4 pt-2 space-y-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
-                  <span className="text-sm font-medium text-slate-700">表示リスト</span>
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
-                    <Toggle
-                      checked={showSemiToggle}
-                      onChange={() => setShowSemiToggle((prev) => !prev)}
-                      disabled={loading}
-                    />
-                    <span>準レギュラー</span>
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
-                    <Toggle
-                      checked={showPoolToggle}
-                      onChange={() => setShowPoolToggle((prev) => !prev)}
-                      disabled={loading}
-                    />
-                    <span>プール</span>
-                  </label>
-                </div>
                 {isEditMode && (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">フリー検索（名前）</label>
@@ -1298,7 +1277,6 @@ const { data: guestData } = await supabase
                       onChange={(e) => {
                         const v = e.target.value as GroupOption | "";
                         setGroup1(v);
-                        setGroup1UserSet(true);
                         if (v === group2) setGroup2("");
                       }}
                       className="px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
@@ -1366,6 +1344,19 @@ const { data: guestData } = await supabase
                           const r = attendanceMap.get(id);
                           return r && r.attended !== false;
                         }).length;
+                        const sectionAbsentCount = sectionMemberIds.filter((id) => {
+                          const r = attendanceMap.get(id);
+                          return r && r.attended === false;
+                        }).length;
+                        const sectionUnrecordedCount = sectionMemberIds.filter((id) => !attendanceMap.has(id)).length;
+                        const sectionDisplayCount =
+                          group1 === "attendance"
+                            ? section.group1Key === "absent"
+                              ? sectionAbsentCount
+                              : section.group1Key === "unrecorded"
+                                ? sectionUnrecordedCount
+                                : sectionAttendedCount
+                            : sectionAttendedCount;
                         const sectionOnlineCount = sectionMemberIds.filter((id) => {
                           const r = attendanceMap.get(id);
                           return r && r.attended !== false && r.is_online;
@@ -1377,17 +1368,17 @@ const { data: guestData } = await supabase
                         return (
                         <Fragment key={`s-${section.group1Key}-${idx}`}>
                           {hasGroup1 && section.subsections.some((s) => s.members.length > 0) && (
-                            <tr className="bg-slate-100">
+                            <tr className="bg-gray-800">
                               <td colSpan={5} className="px-3 py-0">
                                 <button
                                   type="button"
                                   onClick={() => toggleSectionOpen(g1Key)}
-                                  className="w-full flex items-center justify-between px-3 py-1.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-200/70 touch-target"
+                                  className="w-full flex items-center justify-between px-3 py-1.5 text-left text-sm font-medium text-white hover:bg-gray-700 touch-target"
                                   aria-expanded={g1Open}
                                 >
                                   <span>{group1 ? `${GROUP_LABELS[group1]}：${section.group1Label || "—"}` : ""}</span>
                                   <svg
-                                    className={`w-4 h-4 text-slate-500 transition-transform ${g1Open ? "rotate-180" : ""}`}
+                                    className={`w-4 h-4 text-gray-300 transition-transform ${g1Open ? "rotate-180" : ""}`}
                                     fill="none"
                                     stroke="currentColor"
                                     viewBox="0 0 24 24"
@@ -1401,7 +1392,7 @@ const { data: guestData } = await supabase
                           {hasGroup1 && g1Open && section.subsections.some((s) => s.members.length > 0) && (
                             <tr className="bg-slate-50">
                               <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase max-w-[9rem]">名前</th>
-                              <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase min-w-[3.75rem] w-14 sm:w-24 whitespace-nowrap">出欠({sectionAttendedCount})</th>
+                              <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase min-w-[3.75rem] w-14 sm:w-24 whitespace-nowrap">出欠({sectionDisplayCount})</th>
                               <th className="px-1 py-1 text-left text-xs font-medium text-slate-500 uppercase w-16 sm:w-24 whitespace-nowrap">ｵﾝﾗｲﾝ({sectionOnlineCount})</th>
                               <th className="px-1 py-1 text-left text-xs font-medium text-slate-500 uppercase w-[4.5rem] sm:w-24 whitespace-nowrap">他地方({sectionAwayCount})</th>
                               <th className={`px-2 py-1 text-left text-xs font-medium text-slate-500 uppercase w-10 sm:w-auto ${!isEditMode ? "hidden sm:table-cell" : ""}`}><span className="hidden sm:inline">メモ</span></th>
@@ -1414,17 +1405,17 @@ const { data: guestData } = await supabase
                             return (
                               <Fragment key={`sub-${section.group1Key}-${sub.group2Key}-${subIdx}`}>
                                 {hasSubHeader && sub.members.length > 0 && (
-                                  <tr className="bg-slate-50">
+                                  <tr className="bg-gray-500">
                                     <td colSpan={5} className="px-3 py-0 pl-6">
                                       <button
                                         type="button"
                                         onClick={() => toggleSectionOpen(g2Key)}
-                                        className="w-full flex items-center justify-between px-3 py-1 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 touch-target"
+                                        className="w-full flex items-center justify-between px-3 py-1 text-left text-sm font-medium text-white hover:bg-gray-400 touch-target"
                                         aria-expanded={g2Open}
                                       >
                                         <span>{group2 ? `${GROUP_LABELS[group2]}：${sub.group2Label || "—"}` : ""}</span>
                                         <svg
-                                          className={`w-4 h-4 text-slate-500 transition-transform ${g2Open ? "rotate-180" : ""}`}
+                                          className={`w-4 h-4 text-gray-300 transition-transform ${g2Open ? "rotate-180" : ""}`}
                                           fill="none"
                                           stroke="currentColor"
                                           viewBox="0 0 24 24"
@@ -1438,10 +1429,23 @@ const { data: guestData } = await supabase
                                 {hasSubHeader && g2Open && sub.members.length > 0 && (
                                   <tr className="bg-slate-50">
                                     <th className="px-3 py-1 pl-6 text-left text-xs font-medium text-slate-500 uppercase max-w-[9rem]">名前</th>
-                                    <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase min-w-[3.75rem] w-14 sm:w-24 whitespace-nowrap">出欠({sub.members.filter((m) => {
-                                      const r = attendanceMap.get(m.id);
-                                      return r && r.attended !== false;
-                                    }).length})</th>
+                                    <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase min-w-[3.75rem] w-14 sm:w-24 whitespace-nowrap">出欠({(() => {
+                                      const subAttended = sub.members.filter((m) => {
+                                        const r = attendanceMap.get(m.id);
+                                        return r && r.attended !== false;
+                                      }).length;
+                                      if (group1 !== "attendance") return subAttended;
+                                      if (section.group1Key === "absent") {
+                                        return sub.members.filter((m) => {
+                                          const r = attendanceMap.get(m.id);
+                                          return r && r.attended === false;
+                                        }).length;
+                                      }
+                                      if (section.group1Key === "unrecorded") {
+                                        return sub.members.filter((m) => !attendanceMap.has(m.id)).length;
+                                      }
+                                      return subAttended;
+                                    })()})</th>
                                     <th className="px-1 py-1 text-left text-xs font-medium text-slate-500 uppercase w-16 sm:w-24 whitespace-nowrap">ｵﾝﾗｲﾝ({sub.members.filter((m) => {
                                       const r = attendanceMap.get(m.id);
                                       return r && r.attended !== false && r.is_online;
@@ -1456,6 +1460,7 @@ const { data: guestData } = await supabase
                                 {(!hasSubHeader || g2Open) && sub.members.map((m) => {
                       const rec = attendanceMap.get(m.id);
                       const attended = Boolean(rec && rec.attended !== false);
+                      const unrecorded = !rec;
                       const isOnline = rec?.is_online ?? false;
                       const isAway = rec?.is_away ?? false;
                       const memo = memos.get(m.id) ?? "";
@@ -1489,13 +1494,37 @@ const { data: guestData } = await supabase
                           </td>
                           <td className="px-3 py-0.5 text-left">
                             {isEditMode ? (
-                              <Toggle
-                                checked={attended}
-                                onChange={() => toggleAttendance(m.id, m)}
-                                ariaLabel={`${m.name}の出欠`}
-                              />
+                              <div className="flex items-center gap-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setAttendanceChoice(m.id, m, "unrecorded")}
+                                  className={`w-8 h-8 flex items-center justify-center rounded border text-sm font-medium touch-target ${unrecorded ? "border-amber-400 bg-amber-100 text-slate-600 cursor-default" : "border-slate-300 bg-white text-slate-500 hover:bg-amber-50 hover:border-amber-300"}`}
+                                  aria-label={`${m.name}を記録なしに`}
+                                  title="記録なし"
+                                >
+                                  ー
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setAttendanceChoice(m.id, m, "present")}
+                                  className={`w-8 h-8 flex items-center justify-center rounded border text-sm font-medium touch-target ${attended ? "border-primary-400 bg-primary-100 text-primary-700 cursor-default" : "border-slate-300 bg-white text-slate-500 hover:bg-primary-50 hover:border-primary-400"}`}
+                                  aria-label={`${m.name}を出席に`}
+                                  title="出席"
+                                >
+                                  ○
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setAttendanceChoice(m.id, m, "absent")}
+                                  className={`w-8 h-8 flex items-center justify-center rounded border text-sm font-medium touch-target ${!attended && !unrecorded ? "border-amber-400 bg-amber-100 text-amber-700 cursor-default" : "border-slate-300 bg-white text-slate-500 hover:bg-amber-50 hover:border-amber-400"}`}
+                                  aria-label={`${m.name}を欠席に`}
+                                  title="欠席"
+                                >
+                                  ×
+                                </button>
+                              </div>
                             ) : (
-                              <span className={attended ? "text-primary-600" : "text-slate-400"}>{attended ? "○" : "×"}</span>
+                              <span className={attended ? "text-primary-600" : unrecorded ? "text-slate-400" : "text-slate-400"}>{attended ? "○" : unrecorded ? "ー" : "×"}</span>
                             )}
                           </td>
                           <td className="px-1 py-0.5 align-middle text-left">

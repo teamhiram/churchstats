@@ -3,13 +3,15 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { CATEGORY_LABELS } from "@/types/database";
 import type { Category } from "@/types/database";
-import { DISPATCH_TYPE_LABELS } from "@/types/database";
 import type { DispatchType } from "@/types/database";
 import { getLanguageLabel } from "@/lib/languages";
 import { EnrollmentMemoHtml } from "@/components/EnrollmentMemoHtml";
 import { MemberAttendanceMatrix } from "./MemberAttendanceMatrix";
 import { MemberNameDropdown } from "./MemberNameDropdown";
-import { format, parseISO } from "date-fns";
+import { MemberDispatchSection } from "./MemberDispatchSection";
+import { EditPencilIcon } from "@/components/icons/EditPencilIcon";
+import { format } from "date-fns";
+import { ja } from "date-fns/locale";
 import { getSundayWeeksInYear, formatDateYmd } from "@/lib/weekUtils";
 
 const BAPTISM_PRECISION_LABELS: Record<string, string> = {
@@ -126,6 +128,45 @@ export default async function MemberDetailPage({
   }
   const sortedWeekStarts = [...recordsByWeek.keys()].sort();
 
+  // 派遣追加フォーム用: メンバーの地方に属する小組、または全小組
+  const memberLocalityId = (member as { locality_id?: string | null }).locality_id ?? null;
+  let dispatchFormGroups: { id: string; name: string }[] = [];
+  if (memberLocalityId) {
+    const { data: distRows } = await supabase
+      .from("districts")
+      .select("id")
+      .eq("locality_id", memberLocalityId);
+    const districtIds = (distRows ?? []).map((d: { id: string }) => d.id);
+    if (districtIds.length > 0) {
+      const { data: grpRows } = await supabase
+        .from("groups")
+        .select("id, name")
+        .in("district_id", districtIds)
+        .order("name");
+      dispatchFormGroups = (grpRows ?? []) as { id: string; name: string }[];
+    }
+  }
+  if (dispatchFormGroups.length === 0) {
+    const { data: allGrp } = await supabase.from("groups").select("id, name").order("name");
+    dispatchFormGroups = (allGrp ?? []) as { id: string; name: string }[];
+  }
+
+  // 週ドロップダウン用: 当年・前年の日曜週
+  const currentYear = new Date().getFullYear();
+  const yearsForWeeks = [currentYear - 1, currentYear];
+  const weekOptions: { value: string; label: string }[] = [];
+  yearsForWeeks.forEach((year) => {
+    getSundayWeeksInYear(year).forEach((w) => {
+      const iso = formatDateYmd(w.weekStart);
+      weekStartToNumber.set(iso, w.weekNumber);
+      weekOptions.push({
+        value: iso,
+        label: `W${w.weekNumber}（${format(w.weekStart, "yyyy/M/d", { locale: ja })} - ${format(w.weekEnd, "yyyy/M/d", { locale: ja })}）`,
+      });
+    });
+  });
+  weekOptions.sort((a, b) => a.value.localeCompare(b.value));
+
   const district = districtRes.data as { id: string; name: string } | null;
   const group = groupRes.data as { id: string; name: string } | null;
   const locality = localityRes.data as { id: string; name: string } | null;
@@ -153,21 +194,20 @@ export default async function MemberDetailPage({
       <Link href="/members" className="text-slate-600 hover:text-slate-800 text-sm">
         ← 名簿管理
       </Link>
-      <div className="bg-white rounded-lg border border-slate-200 p-2 space-y-2">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            {member.furigana && (
-              <p className="text-sm text-slate-500">{member.furigana}</p>
-            )}
-          </div>
+      <div className="bg-white rounded-lg border border-slate-200 p-4">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h2 className="font-semibold text-slate-800">プロフィール</h2>
           <Link
             href={`/members/${id}/edit`}
-            className="inline-flex items-center px-3 py-1.5 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg touch-target shrink-0"
+            aria-label="プロフィールを編集"
+            className="flex items-center justify-center w-8 h-8 rounded-lg border border-slate-300 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 hover:border-slate-400 touch-target shrink-0"
           >
-            編集
+            <EditPencilIcon className="w-4 h-4" aria-hidden />
           </Link>
         </div>
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+          <dt className="text-slate-500">フリガナ</dt>
+          <dd className="text-slate-800">{member.furigana ?? "—"}</dd>
           <dt className="text-slate-500">性別</dt>
           <dd className="text-slate-800">{member.gender === "male" ? "男" : "女"}</dd>
           <dt className="text-slate-500">ローカル/ゲスト</dt>
@@ -235,61 +275,20 @@ export default async function MemberDetailPage({
         </dl>
       </div>
 
-      <div className="bg-white rounded-lg border border-slate-200 p-4">
-        <h2 className="font-semibold text-slate-800 mb-3">派遣記録</h2>
-        <p className="text-xs text-slate-500 mb-3">時系列（古い→新しい）</p>
-        {dispatchRecords.length > 0 ? (
-          <div className="space-y-5">
-            {sortedWeekStarts.map((weekStart) => {
-              const weekNum = weekStartToNumber.get(weekStart);
-              const records = recordsByWeek.get(weekStart) ?? [];
-              return (
-                <section key={weekStart}>
-                  <h3 className="text-sm font-semibold text-slate-700 mb-2">
-                    W{weekNum ?? "?"}
-                  </h3>
-                  <ul className="space-y-3">
-                    {records.map((r) => (
-                      <li
-                        key={r.id}
-                        className="border-b border-slate-100 pb-3 last:border-0 last:pb-0 text-sm"
-                      >
-                        <div className="flex flex-wrap items-center gap-2 gap-y-1">
-                          <span className="inline-flex shrink-0 items-center rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-medium text-slate-700">
-                            {r.dispatch_date
-                              ? format(parseISO(r.dispatch_date), "yyyy/M/d")
-                              : format(parseISO(r.week_start), "yyyy/M/d") + "（週）"}
-                          </span>
-                          <span className="text-slate-500">
-                            {dispatchGroupMap.get(r.group_id) ?? r.group_id}
-                          </span>
-                          {r.dispatch_type && (
-                            <span className="text-primary-600">
-                              {DISPATCH_TYPE_LABELS[r.dispatch_type]}
-                            </span>
-                          )}
-                        </div>
-                        {r.dispatch_memo && r.dispatch_memo.trim() !== "" && (
-                          <p className="mt-1.5 text-slate-600 whitespace-pre-wrap">
-                            {r.dispatch_memo.trim()}
-                          </p>
-                        )}
-                        {r.visitor_ids && r.visitor_ids.length > 0 && (
-                          <p className="mt-1.5 text-slate-600 text-xs">
-                            訪問者: {r.visitor_ids.map((vid) => visitorIdToName.get(vid) ?? vid).join("、")}
-                          </p>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-sm text-slate-500">記録がありません</p>
-        )}
-      </div>
+      <MemberDispatchSection
+        memberId={id}
+        memberName={member.name}
+        defaultGroupId={member.group_id ?? null}
+        dispatchRecords={dispatchRecords}
+        dispatchGroupMap={dispatchGroupMap}
+        visitorIdToName={visitorIdToName}
+        groups={dispatchFormGroups}
+        allMembers={allMembers}
+        weekOptions={weekOptions}
+        sortedWeekStarts={sortedWeekStarts}
+        recordsByWeek={recordsByWeek}
+        weekStartToNumber={weekStartToNumber}
+      />
 
       <MemberAttendanceMatrix memberId={id} />
     </div>

@@ -15,7 +15,7 @@ type District = { id: string; name: string };
 type Group = { id: string; name: string; district_id: string };
 type WeekOption = { value: string; label: string };
 type SortOption = "furigana" | "district" | "group" | "age_group";
-type GroupOption = "district" | "group" | "age_group" | "believer" | "attendance" | "gojuon";
+type GroupOption = "district" | "group" | "age_group" | "believer" | "attendance" | "list" | "gojuon";
 
 const SORT_LABELS: Record<SortOption, string> = {
   furigana: "フリガナ順",
@@ -30,6 +30,7 @@ const GROUP_LABELS: Record<GroupOption, string> = {
   age_group: "年齢層",
   believer: "信者",
   attendance: "出欠別",
+  list: "リスト別",
   gojuon: "五十音別",
 };
 
@@ -86,8 +87,13 @@ export function PrayerMeetingAttendance({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<MemberRow[]>([]);
   const [sortOrder, setSortOrder] = useState<SortOption>("furigana");
-  const [group1, setGroup1] = useState<GroupOption | "">("");
+  const [group1, setGroup1] = useState<GroupOption | "">("attendance");
   const [group2, setGroup2] = useState<GroupOption | "">("");
+
+  useEffect(() => {
+    setGroup2(isEditMode ? "list" : "");
+  }, [isEditMode]);
+
   const [sectionOpen, setSectionOpen] = useState<Record<string, boolean>>({});
   const [accordionOpen, setAccordionOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -97,8 +103,6 @@ export function PrayerMeetingAttendance({
   const [excludedMemberIds, setExcludedMemberIds] = useState<Set<string>>(new Set());
   const [excludedForDeletion, setExcludedForDeletion] = useState<Map<string, string>>(new Map());
   const [regularListExcludePopup, setRegularListExcludePopup] = useState<{ memberId: string; member: MemberRow; districtId: string } | null>(null);
-  const [showSemiToggle, setShowSemiToggle] = useState(false);
-  const [showPoolToggle, setShowPoolToggle] = useState(false);
   const [memberTierMap, setMemberTierMap] = useState<Map<string, "regular" | "semi" | "pool">>(new Map());
   const [guestIds, setGuestIds] = useState<Set<string>>(new Set());
   const [showDeleteRecordConfirm, setShowDeleteRecordConfirm] = useState(false);
@@ -468,24 +472,8 @@ export function PrayerMeetingAttendance({
     const base = isEditMode
       ? roster.filter((m) => !excludedMemberIds.has(m.id))
       : roster.filter((m) => attendanceMap.has(m.id));
-    return base.filter((m) => {
-      const tier = memberTierMap.get(m.id);
-      if (tier === undefined) return true;
-      if (tier === "regular") return true;
-      if (tier === "semi") return showSemiToggle || hasAttendanceData(m.id);
-      if (tier === "pool") return showPoolToggle || hasAttendanceData(m.id);
-      return true;
-    });
-  }, [
-    isEditMode,
-    roster,
-    excludedMemberIds,
-    attendanceMap,
-    memberTierMap,
-    showSemiToggle,
-    showPoolToggle,
-    hasAttendanceData,
-  ]);
+    return base;
+  }, [isEditMode, roster, excludedMemberIds, attendanceMap]);
   const sortedMembers = useMemo(() => {
     const list = [...displayRoster];
     const collator = new Intl.Collator("ja");
@@ -521,8 +509,10 @@ export function PrayerMeetingAttendance({
     if (opt === "age_group") return m.age_group ?? "__none__";
     if (opt === "attendance") {
       const rec = attendanceMap.get(m.id);
-      return (rec && rec.attended !== false) ? "attended" : "absent";
+      if (!rec) return "unrecorded";
+      return rec.attended !== false ? "attended" : "absent";
     }
+    if (opt === "list") return memberTierMap.get(m.id) ?? "semi";
     if (opt === "gojuon") return getGojuonRowLabel(m.furigana ?? m.name);
     return m.is_baptized ? "believer" : "friend";
   };
@@ -530,12 +520,14 @@ export function PrayerMeetingAttendance({
     if (opt === "district") return key === "__none__" ? "—" : (districtMap.get(key) ?? "");
     if (opt === "group") return key === "__none__" ? "無所属" : (groupMap.get(key) ?? "");
     if (opt === "age_group") return key === "__none__" ? "不明" : (key in CATEGORY_LABELS ? CATEGORY_LABELS[key as Category] : "");
-    if (opt === "attendance") return key === "attended" ? "出席" : "欠席";
+    if (opt === "attendance") return key === "attended" ? "○ 出席" : key === "absent" ? "× 欠席" : "ー 記録なし";
+    if (opt === "list") return key === "regular" ? "レギュラー" : key === "semi" ? "準レギュラー" : "プール";
     if (opt === "gojuon") return key;
     return key === "believer" ? "聖徒" : "友人";
   };
   const sortKeys = (opt: GroupOption, keys: string[]): string[] => {
-    if (opt === "attendance") return ["attended", "absent"].filter((k) => keys.includes(k));
+    if (opt === "attendance") return ["attended", "absent", "unrecorded"].filter((k) => keys.includes(k));
+    if (opt === "list") return ["regular", "semi", "pool"].filter((k) => keys.includes(k));
     if (opt === "gojuon") return GOJUON_ROW_LABELS.filter((l) => keys.includes(l));
     return [...keys].sort((a, b) => {
       if (opt === "district") return new Intl.Collator("ja").compare(districtMap.get(a) ?? "", districtMap.get(b) ?? "");
@@ -581,29 +573,40 @@ export function PrayerMeetingAttendance({
       }));
       return { group1Key: g1Key, group1Label: getLabel(group1, g1Key), subsections };
     });
-  }, [sortedMembers, group1, group2, districtMap, groupMap, attendanceMap]);
-  const toggleSectionOpen = (key: string) => setSectionOpen((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }));
-  const isSectionOpen = (key: string) => sectionOpen[key] ?? true;
+  }, [sortedMembers, group1, group2, districtMap, groupMap, attendanceMap, memberTierMap]);
+  const defaultSectionOpen = (key: string) => (key.includes("::g2-pool") ? false : true);
+  const toggleSectionOpen = (key: string) => setSectionOpen((prev) => ({ ...prev, [key]: !(prev[key] ?? defaultSectionOpen(key)) }));
+  const isSectionOpen = (key: string) => sectionOpen[key] ?? defaultSectionOpen(key);
 
-  const toggleAttendance = (memberId: string, member: MemberRow) => {
+  const setAttendanceChoice = (memberId: string, member: MemberRow, choice: "unrecorded" | "present" | "absent") => {
     if (!isEditMode) return;
     setMessage("");
-    const rec = attendanceMap.get(memberId);
     const memoVal = (memos.get(memberId) ?? "").trim();
-    const isCurrentlyOn = Boolean(rec && rec.attended !== false);
+    if (choice === "unrecorded") {
+      setAttendanceMap((prev) => {
+        const next = new Map(prev);
+        next.delete(memberId);
+        return next;
+      });
+      setMemos((prev) => {
+        const next = new Map(prev);
+        next.delete(memberId);
+        return next;
+      });
+      return;
+    }
+    const attended = choice === "present";
+    const rec = attendanceMap.get(memberId);
     if (rec) {
-      if (isCurrentlyOn) {
-        setAttendanceMap((prev) =>
-          new Map(prev).set(memberId, { ...rec, attended: false, is_online: false, is_away: false, memo: memoVal || null })
-        );
-      } else {
-        setAttendanceMap((prev) => {
-          const next = new Map(prev);
-          const r = next.get(memberId);
-          if (r) next.set(memberId, { ...r, attended: true });
-          return next;
-        });
-      }
+      setAttendanceMap((prev) =>
+        new Map(prev).set(memberId, {
+          ...rec,
+          attended,
+          is_online: attended ? (rec.is_online ?? false) : false,
+          is_away: attended ? (rec.is_away ?? false) : false,
+          memo: memoVal || null,
+        })
+      );
     } else {
       setAttendanceMap((prev) =>
         new Map(prev).set(memberId, {
@@ -612,11 +615,11 @@ export function PrayerMeetingAttendance({
           memo: null,
           is_online: false,
           is_away: false,
-          attended: true,
+          attended,
         })
       );
       setMemos((prev) => new Map(prev).set(memberId, ""));
-      setGuestIds((prev) => new Set([...prev, member.id]));
+      setGuestIds((prev) => new Set([...prev, memberId]));
       setRoster((prev) => (prev.some((m) => m.id === memberId) ? prev : [...prev, member]));
     }
   };
@@ -852,25 +855,6 @@ export function PrayerMeetingAttendance({
                 </button>
                 {accordionOpen && (
                   <div className="border-t border-slate-200 px-4 pb-4 pt-2 space-y-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
-                      <span className="text-sm font-medium text-slate-700">表示リスト</span>
-                      <label className="flex items-center gap-2 text-sm text-slate-700">
-                        <Toggle
-                          checked={showSemiToggle}
-                          onChange={() => setShowSemiToggle((prev) => !prev)}
-                          disabled={loading}
-                        />
-                        <span>準レギュラー</span>
-                      </label>
-                      <label className="flex items-center gap-2 text-sm text-slate-700">
-                        <Toggle
-                          checked={showPoolToggle}
-                          onChange={() => setShowPoolToggle((prev) => !prev)}
-                          disabled={loading}
-                        />
-                        <span>プール</span>
-                      </label>
-                    </div>
                     {isEditMode && (
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">フリー検索（名前）</label>
@@ -955,10 +939,10 @@ export function PrayerMeetingAttendance({
                       )}
                     </div>
                   </div>
-                )}
-              </div>
-              {message && <p className="text-sm text-amber-600">{message}</p>}
-              {isAllDistricts && (
+            )}
+          </div>
+          {message && <p className="text-sm text-amber-600">{message}</p>}
+          {isAllDistricts && (
                 <p className="text-slate-600 text-sm">全ての地区を表示しています。各メンバーの所属地区の集会として出欠を登録・変更できます。</p>
               )}
 
@@ -994,17 +978,17 @@ export function PrayerMeetingAttendance({
                           return (
                           <Fragment key={`s-${section.group1Key}-${idx}`}>
                             {hasGroup1 && section.subsections.some((s) => s.members.length > 0) && (
-                              <tr className="bg-slate-100">
+                              <tr className="bg-gray-800">
                                 <td colSpan={4} className="px-3 py-0">
                                   <button
                                     type="button"
                                     onClick={() => toggleSectionOpen(g1Key)}
-                                    className="w-full flex items-center justify-between px-3 py-1.5 text-left text-sm font-medium text-slate-700 hover:bg-slate-200/70 touch-target"
+                                    className="w-full flex items-center justify-between px-3 py-1.5 text-left text-sm font-medium text-white hover:bg-gray-700 touch-target"
                                     aria-expanded={g1Open}
                                   >
                                     <span>{group1 ? `${GROUP_LABELS[group1]}：${section.group1Label || "—"}` : ""}</span>
                                     <svg
-                                      className={`w-4 h-4 text-slate-500 transition-transform ${g1Open ? "rotate-180" : ""}`}
+                                      className={`w-4 h-4 text-gray-300 transition-transform ${g1Open ? "rotate-180" : ""}`}
                                       fill="none"
                                       stroke="currentColor"
                                       viewBox="0 0 24 24"
@@ -1030,17 +1014,17 @@ export function PrayerMeetingAttendance({
                               return (
                                 <Fragment key={`sub-${section.group1Key}-${sub.group2Key}-${subIdx}`}>
                                   {hasSubHeader && sub.members.length > 0 && (
-                                    <tr className="bg-slate-50">
+                                    <tr className="bg-gray-500">
                                       <td colSpan={4} className="px-3 py-0 pl-6">
                                         <button
                                           type="button"
                                           onClick={() => toggleSectionOpen(g2Key)}
-                                          className="w-full flex items-center justify-between px-3 py-1 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 touch-target"
+                                          className="w-full flex items-center justify-between px-3 py-1 text-left text-sm font-medium text-white hover:bg-gray-400 touch-target"
                                           aria-expanded={g2Open}
                                         >
                                           <span>{group2 ? `${GROUP_LABELS[group2]}：${sub.group2Label || "—"}` : ""}</span>
                                           <svg
-                                            className={`w-4 h-4 text-slate-500 transition-transform ${g2Open ? "rotate-180" : ""}`}
+                                            className={`w-4 h-4 text-gray-300 transition-transform ${g2Open ? "rotate-180" : ""}`}
                                             fill="none"
                                             stroke="currentColor"
                                             viewBox="0 0 24 24"
@@ -1059,49 +1043,74 @@ export function PrayerMeetingAttendance({
                                       <th className="px-3 py-1 text-left text-xs font-medium text-slate-500 uppercase">メモ</th>
                                     </tr>
                                   )}
-                                  {(!hasSubHeader || g2Open) && sub.members.map((m) => {
-                        const rec = attendanceMap.get(m.id);
-                        const attended = Boolean(rec && rec.attended !== false);
-                        const isOnline = rec?.is_online ?? false;
-                        const memo = memos.get(m.id) ?? "";
-                        const memoPlaceholder = "欠席理由など";
-                        const tier = memberTierMap.get(m.id);
-                        const rowBgClass = tier === "semi" ? "bg-amber-50 hover:bg-amber-100" : tier === "pool" ? "bg-sky-50 hover:bg-sky-100" : "hover:bg-slate-50";
-                        return (
-                          <tr key={m.id} className={rowBgClass}>
-                            <td className="px-3 py-0.5 text-slate-800">
-                              <div className="flex items-center gap-1">
-                                {isEditMode && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleExclude(m)}
-                                    className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-red-600 hover:bg-red-50 touch-target text-sm font-bold"
-                                    aria-label={`${m.name}を除外`}
-                                    title="除外"
-                                  >
-                                    −
-                                  </button>
-                                )}
-                                {isEditMode ? (
-                                  <span className={guestIds.has(m.id) ? "text-slate-400" : ""}>{m.name}</span>
-                                ) : (
-                                  <Link href={`/members/${m.id}`} className={`text-primary-600 hover:underline ${guestIds.has(m.id) ? "text-slate-400" : ""}`}>
-                                    {m.name}
-                                  </Link>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-3 py-0.5">
-                              {isEditMode ? (
-                                <Toggle
-                                  checked={attended}
-                                  onChange={() => toggleAttendance(m.id, m)}
-                                  ariaLabel={`${m.name}の出欠`}
-                                />
-                              ) : (
-                                <span className={attended ? "text-primary-600" : "text-slate-400"}>{attended ? "○" : "×"}</span>
-                              )}
-                            </td>
+                                {(!hasSubHeader || g2Open) && sub.members.map((m) => {
+                                  const rec = attendanceMap.get(m.id);
+                                  const attended = Boolean(rec && rec.attended !== false);
+                                  const unrecorded = !rec;
+                                  const isOnline = rec?.is_online ?? false;
+                                  const memo = memos.get(m.id) ?? "";
+                                  const memoPlaceholder = "欠席理由など";
+                                  const tier = memberTierMap.get(m.id);
+                                  const rowBgClass = tier === "semi" ? "bg-amber-50 hover:bg-amber-100" : tier === "pool" ? "bg-sky-50 hover:bg-sky-100" : "hover:bg-slate-50";
+                                  return (
+                                    <tr key={m.id} className={rowBgClass}>
+                                      <td className="px-3 py-0.5 text-slate-800">
+                                        <div className="flex items-center gap-1">
+                                          {isEditMode && (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleExclude(m)}
+                                              className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-red-600 hover:bg-red-50 touch-target text-sm font-bold"
+                                              aria-label={`${m.name}を除外`}
+                                              title="除外"
+                                            >
+                                              −
+                                            </button>
+                                          )}
+                                          {isEditMode ? (
+                                            <span className={guestIds.has(m.id) ? "text-slate-400" : ""}>{m.name}</span>
+                                          ) : (
+                                            <Link href={`/members/${m.id}`} className={`text-primary-600 hover:underline ${guestIds.has(m.id) ? "text-slate-400" : ""}`}>
+                                              {m.name}
+                                            </Link>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="px-3 py-0.5">
+                                        {isEditMode ? (
+                                          <div className="flex items-center gap-0.5">
+                                            <button
+                                              type="button"
+                                              onClick={() => setAttendanceChoice(m.id, m, "unrecorded")}
+                                              className={`w-8 h-8 flex items-center justify-center rounded border text-sm font-medium touch-target ${unrecorded ? "border-amber-400 bg-amber-100 text-slate-600 cursor-default" : "border-slate-300 bg-white text-slate-500 hover:bg-amber-50 hover:border-amber-300"}`}
+                                              aria-label={`${m.name}を記録なしに`}
+                                              title="記録なし"
+                                            >
+                                              ー
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => setAttendanceChoice(m.id, m, "present")}
+                                              className={`w-8 h-8 flex items-center justify-center rounded border text-sm font-medium touch-target ${attended ? "border-primary-400 bg-primary-100 text-primary-700 cursor-default" : "border-slate-300 bg-white text-slate-500 hover:bg-primary-50 hover:border-primary-400"}`}
+                                              aria-label={`${m.name}を出席に`}
+                                              title="出席"
+                                            >
+                                              ○
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => setAttendanceChoice(m.id, m, "absent")}
+                                              className={`w-8 h-8 flex items-center justify-center rounded border text-sm font-medium touch-target ${!attended && !unrecorded ? "border-amber-400 bg-amber-100 text-amber-700 cursor-default" : "border-slate-300 bg-white text-slate-500 hover:bg-amber-50 hover:border-amber-400"}`}
+                                              aria-label={`${m.name}を欠席に`}
+                                              title="欠席"
+                                            >
+                                              ×
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <span className={attended ? "text-primary-600" : unrecorded ? "text-slate-400" : "text-slate-400"}>{attended ? "○" : unrecorded ? "ー" : "×"}</span>
+                                        )}
+                                      </td>
                             <td className="px-3 py-0.5">
                               {attended ? (
                                 isEditMode ? (
