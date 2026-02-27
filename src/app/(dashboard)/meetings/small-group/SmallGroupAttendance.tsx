@@ -87,6 +87,7 @@ export function SmallGroupAttendance({
   const [sortOrder, setSortOrder] = useState<SortOption>("furigana");
   const [group1, setGroup1] = useState<GroupOption | "">("attendance");
   const [group2, setGroup2] = useState<GroupOption | "">("");
+  const [isEditMode, setIsEditMode] = useState(false);
 
   useEffect(() => {
     setGroup2(isEditMode ? "list" : "");
@@ -94,7 +95,6 @@ export function SmallGroupAttendance({
 
   const [sectionOpen, setSectionOpen] = useState<Record<string, boolean>>({});
   const [accordionOpen, setAccordionOpen] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [enrollmentBlockedMemberId, setEnrollmentBlockedMemberId] = useState<string | null>(null);
