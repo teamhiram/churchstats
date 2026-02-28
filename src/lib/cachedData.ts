@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentLocalityId } from "@/lib/locality";
-import { ROLE_LABELS } from "@/types/database";
+import { ROLE_LABELS, GLOBAL_ROLE_LABELS } from "@/types/database";
 import type { GlobalRole, Role } from "@/types/database";
 
 /** キャッシュ無効化で使うタグ。システム設定の「キャッシュをリフレッシュ」で revalidateTag(CACHE_TAG) する */
@@ -9,9 +9,12 @@ export const CACHE_TAG = "churchstats";
 
 export type CurrentUserWithProfile = {
   user: { id: string } | null;
-  profile: { role: Role; main_district_id: string | null; global_role?: GlobalRole | null } | null;
+  profile: { role: Role; main_district_id: string | null; locality_id: string | null; global_role?: GlobalRole | null } | null;
   displayName: string | null;
+  /** ローカル（従来の profiles.role）の表示名 */
   roleLabel: string;
+  /** グローバル権限がある場合のみセット */
+  globalRoleLabel: string | null;
   localityName: string | null;
 };
 
@@ -19,6 +22,7 @@ type ProfileWithDistrictLocality = {
   full_name: string | null;
   role: string;
   main_district_id: string | null;
+  locality_id: string | null;
   global_role?: string | null;
   districts: {
     locality_id: string | null;
@@ -31,19 +35,26 @@ export const getCurrentUserWithProfile = cache(async (): Promise<CurrentUserWith
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    return { user: null, profile: null, displayName: null, roleLabel: "閲覧者", localityName: null };
+    return { user: null, profile: null, displayName: null, roleLabel: "閲覧者", globalRoleLabel: null, localityName: null };
   }
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, role, main_district_id, global_role, districts!main_district_id(locality_id, localities(name))")
+    .select("full_name, role, main_district_id, global_role, locality_id, districts!main_district_id(locality_id, localities(name))")
     .eq("id", user.id)
     .maybeSingle();
 
   const row = profile as ProfileWithDistrictLocality;
   const displayName = row?.full_name ?? null;
   const roleLabel = ROLE_LABELS[(row?.role as Role) ?? "viewer"];
-  const localityName = row?.districts?.localities?.name ?? null;
+  const globalRoleLabel =
+    row?.global_role != null && row.global_role !== ""
+      ? GLOBAL_ROLE_LABELS[row.global_role as GlobalRole] ?? null
+      : null;
+  const localities = await getCachedLocalities();
+  const localityName = row?.locality_id
+    ? (localities.find((l) => l.id === row.locality_id)?.name ?? null)
+    : (row?.districts?.localities?.name ?? null);
 
   return {
     user: { id: user.id },
@@ -51,11 +62,13 @@ export const getCurrentUserWithProfile = cache(async (): Promise<CurrentUserWith
       ? {
           role: (row.role as Role) ?? "viewer",
           main_district_id: row.main_district_id,
+          locality_id: row.locality_id ?? null,
           global_role: (row.global_role as GlobalRole | null) ?? null,
         }
       : null,
     displayName,
     roleLabel,
+    globalRoleLabel,
     localityName,
   };
 });
@@ -132,15 +145,20 @@ export const getCachedAreas = cache(async (): Promise<{ id: string; name: string
 
 /**
  * 表示・クエリに使う「実効的な現在の地方 ID」を返す。
- * Cookie が設定されていればそれを使用。未設定ならアクセス可能な地方が1つならその ID、
- * 複数なら先頭をデフォルトとして返す（切り替え UI で変更可能）。
+ * Cookie が設定されていてアクセス可能一覧に含まれるならそれを使用。
+ * そうでなければ profile.locality_id がアクセス可能ならそれ、それ以外はアクセス可能な地方の先頭を返す。
  */
 export async function getEffectiveCurrentLocalityId(): Promise<string | null> {
-  const [cookieId, localities] = await Promise.all([
+  const [cookieId, localities, data] = await Promise.all([
     getCurrentLocalityId(),
     getCachedLocalities(),
+    getCurrentUserWithProfile(),
   ]);
-  if (cookieId) return cookieId;
+  if (cookieId && localities.some((l) => l.id === cookieId)) return cookieId;
+  const profile = data.profile;
+  if (profile?.locality_id && localities.some((l) => l.id === profile.locality_id)) {
+    return profile.locality_id;
+  }
   return localities.length > 0 ? localities[0].id : null;
 }
 

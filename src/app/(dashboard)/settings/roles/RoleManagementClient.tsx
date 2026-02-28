@@ -9,7 +9,9 @@ import {
 } from "@/types/database";
 import {
   inviteUser,
+  createUserDirect,
   updateUserGlobalRole,
+  updateProfileLocalityId,
   setUserAreas,
   setUserLocalities,
   setUserLocalRoles,
@@ -21,6 +23,7 @@ type ProfileRow = {
   full_name: string | null;
   role: string;
   global_role: string | null;
+  locality_id: string | null;
   main_locality_name: string | null;
 };
 
@@ -45,9 +48,17 @@ export function RoleManagementClient({
   localRoles,
 }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [createMode, setCreateMode] = useState<"invite" | "direct">("invite");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteDefaultLocalityId, setInviteDefaultLocalityId] = useState<string>("");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMessage, setInviteMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const [directEmail, setDirectEmail] = useState("");
+  const [directPassword, setDirectPassword] = useState("");
+  const [directFullName, setDirectFullName] = useState("");
+  const [directDefaultLocalityId, setDirectDefaultLocalityId] = useState<string>("");
+  const [directBusy, setDirectBusy] = useState(false);
+  const [directMessage, setDirectMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [saveBusy, setSaveBusy] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
 
@@ -61,13 +72,37 @@ export function RoleManagementClient({
   const handleInvite = async () => {
     setInviteBusy(true);
     setInviteMessage(null);
-    const result = await inviteUser(inviteEmail.trim());
+    const result = await inviteUser(inviteEmail.trim(), {
+      defaultLocalityId: inviteDefaultLocalityId || undefined,
+    });
     setInviteBusy(false);
     if (result.ok) {
       setInviteMessage({ type: "ok", text: result.message });
       setInviteEmail("");
+      setInviteDefaultLocalityId("");
     } else {
       setInviteMessage({ type: "error", text: result.error });
+    }
+  };
+
+  const handleCreateDirect = async () => {
+    setDirectBusy(true);
+    setDirectMessage(null);
+    const result = await createUserDirect(
+      directEmail.trim(),
+      directPassword,
+      directFullName.trim() || undefined,
+      { defaultLocalityId: directDefaultLocalityId || undefined }
+    );
+    setDirectBusy(false);
+    if (result.ok) {
+      setDirectMessage({ type: "ok", text: result.message });
+      setDirectEmail("");
+      setDirectPassword("");
+      setDirectFullName("");
+      setDirectDefaultLocalityId("");
+    } else {
+      setDirectMessage({ type: "error", text: result.error });
     }
   };
 
@@ -110,6 +145,15 @@ export function RoleManagementClient({
     else setSaveMessage({ type: "error", text: result.error });
   };
 
+  const handleSaveDefaultLocality = async (userId: string, localityId: string | null) => {
+    setSaveBusy(true);
+    setSaveMessage(null);
+    const result = await updateProfileLocalityId(userId, localityId);
+    setSaveBusy(false);
+    if (result.ok) setSaveMessage({ type: "ok", text: "デフォルト表示地方を保存しました。" });
+    else setSaveMessage({ type: "error", text: result.error });
+  };
+
   return (
     <div className="grid gap-8 md:grid-cols-[280px_1fr]">
       <section>
@@ -140,28 +184,126 @@ export function RoleManagementClient({
         </ul>
 
         <div className="mt-6 border border-slate-200 rounded-lg bg-slate-50 p-4">
-          <h3 className="font-medium text-slate-800 text-sm mb-2">招待（新規ユーザー）</h3>
-          <div className="flex gap-2">
-            <input
-              type="email"
-              placeholder="メールアドレス"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              className="flex-1 rounded border border-slate-300 px-3 py-2 text-sm"
-            />
+          <h3 className="font-medium text-slate-800 text-sm mb-2">新規ユーザー</h3>
+          <div className="flex gap-2 mb-2">
             <button
               type="button"
-              onClick={handleInvite}
-              disabled={inviteBusy || !inviteEmail.trim()}
-              className="rounded bg-slate-800 text-white px-3 py-2 text-sm disabled:opacity-50"
+              onClick={() => setCreateMode("invite")}
+              className={`px-3 py-1.5 text-sm rounded ${createMode === "invite" ? "bg-slate-700 text-white" : "bg-slate-200 text-slate-700"}`}
             >
-              {inviteBusy ? "送信中…" : "招待"}
+              招待（メール送信）
+            </button>
+            <button
+              type="button"
+              onClick={() => setCreateMode("direct")}
+              className={`px-3 py-1.5 text-sm rounded ${createMode === "direct" ? "bg-slate-700 text-white" : "bg-slate-200 text-slate-700"}`}
+            >
+              直接作成
             </button>
           </div>
-          {inviteMessage && (
-            <p className={`mt-2 text-sm ${inviteMessage.type === "error" ? "text-red-600" : "text-slate-600"}`}>
-              {inviteMessage.text}
-            </p>
+
+          {createMode === "invite" ? (
+            <>
+              <div className="flex gap-2 flex-wrap items-end">
+                <div className="flex-1 min-w-[180px]">
+                  <label className="block text-xs text-slate-600 mb-0.5">メールアドレス</label>
+                  <input
+                    type="email"
+                    placeholder="メールアドレス"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="w-40">
+                  <label className="block text-xs text-slate-600 mb-0.5">デフォルト表示地方</label>
+                  <select
+                    value={inviteDefaultLocalityId}
+                    onChange={(e) => setInviteDefaultLocalityId(e.target.value)}
+                    className="w-full rounded border border-slate-300 px-2 py-2 text-sm"
+                  >
+                    <option value="">—</option>
+                    {localities.map((l) => (
+                      <option key={l.id} value={l.id}>{l.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleInvite}
+                  disabled={inviteBusy || !inviteEmail.trim()}
+                  className="rounded bg-slate-800 text-white px-3 py-2 text-sm disabled:opacity-50"
+                >
+                  {inviteBusy ? "送信中…" : "招待"}
+                </button>
+              </div>
+              {inviteMessage && (
+                <p className={`mt-2 text-sm ${inviteMessage.type === "error" ? "text-red-600" : "text-slate-600"}`}>
+                  {inviteMessage.text}
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-xs text-slate-600 mb-0.5">メールアドレス（必須）</label>
+                  <input
+                    type="email"
+                    placeholder="メールアドレス"
+                    value={directEmail}
+                    onChange={(e) => setDirectEmail(e.target.value)}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-600 mb-0.5">パスワード（必須・6文字以上）</label>
+                  <input
+                    type="password"
+                    placeholder="パスワード"
+                    value={directPassword}
+                    onChange={(e) => setDirectPassword(e.target.value)}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-600 mb-0.5">氏名（任意）</label>
+                  <input
+                    type="text"
+                    placeholder="氏名"
+                    value={directFullName}
+                    onChange={(e) => setDirectFullName(e.target.value)}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-600 mb-0.5">デフォルト表示地方</label>
+                  <select
+                    value={directDefaultLocalityId}
+                    onChange={(e) => setDirectDefaultLocalityId(e.target.value)}
+                    className="w-full rounded border border-slate-300 px-2 py-2 text-sm"
+                  >
+                    <option value="">—</option>
+                    {localities.map((l) => (
+                      <option key={l.id} value={l.id}>{l.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCreateDirect}
+                  disabled={directBusy || !directEmail.trim() || directPassword.length < 6}
+                  className="rounded bg-slate-800 text-white px-3 py-2 text-sm disabled:opacity-50"
+                >
+                  {directBusy ? "作成中…" : "作成"}
+                </button>
+              </div>
+              {directMessage && (
+                <p className={`mt-2 text-sm ${directMessage.type === "error" ? "text-red-600" : "text-slate-600"}`}>
+                  {directMessage.text}
+                </p>
+              )}
+            </>
           )}
         </div>
       </section>
@@ -185,6 +327,7 @@ export function RoleManagementClient({
             initialLocalRoles={selectedLocalRoles}
             disabled={saveBusy}
             onSaveGlobalRole={handleSaveGlobalRole}
+            onSaveDefaultLocality={handleSaveDefaultLocality}
             onSaveAreas={handleSaveAreas}
             onSaveLocalities={handleSaveLocalities}
             onSaveLocalRoles={handleSaveLocalRoles}
@@ -204,6 +347,7 @@ type UserRoleFormProps = {
   initialLocalRoles: { locality_id: string; role: string }[];
   disabled: boolean;
   onSaveGlobalRole: (userId: string, value: GlobalRole | null) => Promise<void>;
+  onSaveDefaultLocality: (userId: string, localityId: string | null) => Promise<void>;
   onSaveAreas: (userId: string, areaIds: string[]) => Promise<void>;
   onSaveLocalities: (userId: string, localityIds: string[]) => Promise<void>;
   onSaveLocalRoles: (userId: string, entries: { localityId: string; role: LocalRole }[]) => Promise<void>;
@@ -218,15 +362,26 @@ function UserRoleForm({
   initialLocalRoles,
   disabled,
   onSaveGlobalRole,
+  onSaveDefaultLocality,
   onSaveAreas,
   onSaveLocalities,
   onSaveLocalRoles,
 }: UserRoleFormProps) {
   const [globalRole, setGlobalRole] = useState<GlobalRole | null>((profile.global_role as GlobalRole) ?? null);
+  const [defaultLocalityId, setDefaultLocalityId] = useState<string | null>(profile.locality_id ?? null);
   const [areaIds, setAreaIds] = useState<string[]>(initialUserAreaIds);
   const [localityIds, setLocalityIds] = useState<string[]>(initialUserLocalityIds);
   const [localRoleByLocality, setLocalRoleByLocality] = useState<Record<string, LocalRole>>(
     Object.fromEntries(initialLocalRoles.map((lr) => [lr.locality_id, lr.role as LocalRole]))
+  );
+
+  const accessibleLocalityIds =
+    globalRole === "admin" || globalRole === "national_viewer" || globalRole === "regional_viewer"
+      ? localities.map((l) => l.id)
+      : initialUserLocalityIds;
+  // 現在の profile.locality_id も含める（直接作成で設定済みだが user_localities が空のとき選択肢に出るように）
+  const defaultLocalityOptions = localities.filter(
+    (l) => accessibleLocalityIds.includes(l.id) || l.id === profile.locality_id
   );
 
   const toggleArea = (id: string) => {
@@ -284,6 +439,32 @@ function UserRoleForm({
         >
           保存
         </button>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">デフォルト表示地方</label>
+        <p className="text-xs text-slate-500 mb-1">サイトを開いたとき、Cookie が未設定ならこの地方を表示します。</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={defaultLocalityId ?? ""}
+            onChange={(e) => setDefaultLocalityId(e.target.value || null)}
+            disabled={disabled}
+            className="rounded border border-slate-300 px-2 py-1.5 text-sm"
+          >
+            <option value="">—</option>
+            {defaultLocalityOptions.map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => onSaveDefaultLocality(profile.id, defaultLocalityId)}
+            disabled={disabled}
+            className="rounded bg-slate-700 text-white px-3 py-1.5 text-sm disabled:opacity-50"
+          >
+            保存
+          </button>
+        </div>
       </div>
 
       {globalRole === "regional_viewer" && (
