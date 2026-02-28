@@ -8,7 +8,7 @@ const MOBILE_BREAKPOINT = 768;
 
 function isInSettingsSection(pathname: string, showDebug: boolean) {
   if (pathname.startsWith("/settings")) return true;
-  if (showDebug && (pathname.startsWith("/debug") || pathname.startsWith("/meetings/list/duplicates"))) return true;
+  if (showDebug && (pathname.startsWith("/debug") || pathname.startsWith("/weekly/duplicates"))) return true;
   return false;
 }
 

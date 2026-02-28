@@ -38,7 +38,7 @@ function LoginFormInner() {
         console.error("login_logs insert failed:", logError);
       }
     }
-    router.push(searchParams.get("next") ?? "/dashboard");
+    router.push(searchParams.get("next") ?? "/charts");
     router.refresh();
   };
 

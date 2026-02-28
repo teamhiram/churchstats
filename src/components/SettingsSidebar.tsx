@@ -16,7 +16,7 @@ const debugSidebarItems = [
   { href: "/debug/meetings-list", label: "集会一覧" },
   { href: "/debug/enrollment-uncertain", label: "在籍期間不確定", badgeCount: "enrollmentUncertain" as const },
   { href: "/debug/meeting-duplicates", label: "集会重複検知", badgeCount: "meetingDuplicates" as const },
-  { href: "/meetings/list/duplicates", label: "重複出席", badgeCount: "duplicateAttendance" as const },
+  { href: "/weekly/duplicates", label: "重複出席", badgeCount: "duplicateAttendance" as const },
 ] as const;
 
 function isItemActive(href: string, pathname: string) {

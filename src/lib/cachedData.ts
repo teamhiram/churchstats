@@ -11,6 +11,8 @@ export type CurrentUserWithProfile = {
   user: { id: string } | null;
   profile: { role: Role; main_district_id: string | null; locality_id: string | null; global_role?: GlobalRole | null } | null;
   displayName: string | null;
+  /** ログイン中のメールアドレス（表示用） */
+  email: string | null;
   /** ローカル（従来の profiles.role）の表示名 */
   roleLabel: string;
   /** グローバル権限がある場合のみセット */
@@ -35,7 +37,7 @@ export const getCurrentUserWithProfile = cache(async (): Promise<CurrentUserWith
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    return { user: null, profile: null, displayName: null, roleLabel: "閲覧者", globalRoleLabel: null, localityName: null };
+    return { user: null, profile: null, displayName: null, email: null, roleLabel: "閲覧者", globalRoleLabel: null, localityName: null };
   }
 
   const { data: profile } = await supabase
@@ -67,6 +69,7 @@ export const getCurrentUserWithProfile = cache(async (): Promise<CurrentUserWith
         }
       : null,
     displayName,
+    email: user.email ?? null,
     roleLabel,
     globalRoleLabel,
     localityName,

@@ -6,10 +6,11 @@ import { createClient } from "@/lib/supabase/client";
 import { format, parseISO } from "date-fns";
 import { DISPATCH_TYPE_LABELS, DISPATCH_TYPE_TEXT_COLORS } from "@/types/database";
 import type { DispatchType } from "@/types/database";
-import { getDaysInWeek, getThisWeekByLastSunday, formatDateYmd } from "@/lib/weekUtils";
+import { getWeekStartForDate } from "@/lib/weekUtils";
+import { EditPencilIcon } from "@/components/icons/EditPencilIcon";
+import { updateDispatchRecordAction } from "./dispatchActions";
 
-const DISPATCH_OPTIONS: { value: "" | DispatchType; label: string }[] = [
-  { value: "", label: "選択" },
+const DISPATCH_OPTIONS: { value: DispatchType; label: string }[] = [
   { value: "message", label: DISPATCH_TYPE_LABELS.message },
   { value: "phone", label: DISPATCH_TYPE_LABELS.phone },
   { value: "in_person", label: DISPATCH_TYPE_LABELS.in_person },
@@ -36,7 +37,6 @@ type Props = {
   groups: { id: string; name: string }[];
   /** 訪問者選択用。本人は除外して表示 */
   allMembers: { id: string; name: string }[];
-  weekOptions: { value: string; label: string }[];
   sortedWeekStarts: string[];
   recordsByWeek: Map<string, DispatchRecord[]>;
   weekStartToNumber: Map<string, number>;
@@ -51,17 +51,16 @@ export function MemberDispatchSection({
   visitorIdToName,
   groups,
   allMembers,
-  weekOptions,
   sortedWeekStarts,
   recordsByWeek,
   weekStartToNumber,
 }: Props) {
   const router = useRouter();
   const [popupOpen, setPopupOpen] = useState(false);
+  const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
-    week_start: "",
     dispatch_type: "" as "" | DispatchType,
     visitor_ids: [] as string[],
     dispatch_date: "",
@@ -70,8 +69,6 @@ export function MemberDispatchSection({
   const [visitorSearchQuery, setVisitorSearchQuery] = useState("");
   const [visitorSearchResults, setVisitorSearchResults] = useState<{ id: string; name: string; furigana: string | null }[]>([]);
   const [visitorNameMap, setVisitorNameMap] = useState<Map<string, string>>(new Map());
-
-  const currentWeekDays = form.week_start ? getDaysInWeek(form.week_start) : [];
 
   useEffect(() => {
     if (!popupOpen || !visitorSearchQuery.trim()) {
@@ -90,29 +87,35 @@ export function MemberDispatchSection({
   }, [popupOpen, visitorSearchQuery]);
 
   const openPopup = () => {
-    // 今日に一番近い週をデフォルトに
-    const { weekStart: thisWeekStart } = getThisWeekByLastSunday();
-    const thisWeekIso = formatDateYmd(thisWeekStart);
-    const exactMatch = weekOptions.find((o) => o.value === thisWeekIso);
-    const defaultWeek =
-      exactMatch?.value ??
-      weekOptions.find((o) => o.value >= thisWeekIso)?.value ??
-      weekOptions[weekOptions.length - 1]?.value ??
-      "";
-
-    // その週のなかで今日の日付があれば派遣日デフォルトに、なければ週の日曜
+    setEditingRecordId(null);
     const todayIso = format(new Date(), "yyyy-MM-dd");
-    const daysInDefaultWeek = defaultWeek ? getDaysInWeek(defaultWeek) : [];
-    const todayInWeek = daysInDefaultWeek.some((d) => d.value === todayIso);
-    const defaultDispatchDate = defaultWeek && todayInWeek ? todayIso : defaultWeek;
-
     setForm({
-      week_start: defaultWeek,
       dispatch_type: "",
       visitor_ids: [],
-      dispatch_date: defaultDispatchDate,
+      dispatch_date: todayIso,
       dispatch_memo: "",
     });
+    setVisitorSearchQuery("");
+    setVisitorSearchResults([]);
+    setVisitorNameMap(new Map());
+    setError(null);
+    setPopupOpen(true);
+  };
+
+  const openEditPopup = (r: DispatchRecord) => {
+    setEditingRecordId(r.id);
+    setForm({
+      dispatch_type: (r.dispatch_type ?? "") as "" | DispatchType,
+      visitor_ids: (r.visitor_ids ?? []).map(String),
+      dispatch_date: r.dispatch_date?.slice(0, 10) ?? "",
+      dispatch_memo: r.dispatch_memo?.trim() ?? "",
+    });
+    const nameMap = new Map<string, string>();
+    (r.visitor_ids ?? []).forEach((vid) => {
+      const name = visitorIdToName.get(String(vid));
+      if (name) nameMap.set(String(vid), name);
+    });
+    setVisitorNameMap(nameMap);
     setVisitorSearchQuery("");
     setVisitorSearchResults([]);
     setError(null);
@@ -121,6 +124,7 @@ export function MemberDispatchSection({
 
   const closePopup = () => {
     setPopupOpen(false);
+    setEditingRecordId(null);
     setVisitorSearchQuery("");
     setVisitorSearchResults([]);
     setError(null);
@@ -129,32 +133,52 @@ export function MemberDispatchSection({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    const { week_start, dispatch_type, dispatch_date, dispatch_memo, visitor_ids } = form;
+    const { dispatch_type, dispatch_date, dispatch_memo, visitor_ids } = form;
     const group_id = defaultGroupId ?? groups[0]?.id ?? "";
-    if (!week_start || !dispatch_type || !dispatch_date?.trim() || !dispatch_memo?.trim()) {
-      setError("週・派遣種類・派遣日・メモをすべて入力してください。");
+    if (!dispatch_date?.trim() || !dispatch_memo?.trim()) {
+      setError("派遣日・メモをすべて入力してください。");
+      return;
+    }
+    if (!dispatch_type) {
+      setError("派遣種類を選択してください。");
       return;
     }
     if (!group_id) {
       setError("小組が取得できません。メンバーに小組を登録するか、枠組設定で小組を追加してください。");
       return;
     }
+    const dateStr = dispatch_date.trim();
+    const week_start = getWeekStartForDate(dateStr);
     setLoading(true);
     const supabase = createClient();
-    const { error: insertError } = await supabase.from("organic_dispatch_records").insert({
-      member_id: memberId,
-      group_id,
-      week_start,
-      dispatch_type: dispatch_type as DispatchType,
-      dispatch_date: dispatch_date.trim(),
-      dispatch_memo: dispatch_memo.trim(),
-      visitor_ids: visitor_ids,
-    });
-    setLoading(false);
-    if (insertError) {
-      const isRls = /row-level security|RLS/i.test(insertError.message ?? "");
-      setError(isRls ? "保存する権限がありません。報告者以上のロールが必要です。" : `保存に失敗しました: ${insertError.message}`);
-      return;
+    if (editingRecordId) {
+      const result = await updateDispatchRecordAction(editingRecordId, {
+        dispatch_date: dateStr,
+        dispatch_type: dispatch_type as DispatchType,
+        dispatch_memo: dispatch_memo.trim(),
+        visitor_ids: visitor_ids,
+      });
+      setLoading(false);
+      if (!result.ok) {
+        setError(result.error ?? "更新に失敗しました。");
+        return;
+      }
+    } else {
+      const { error: insertError } = await supabase.from("organic_dispatch_records").insert({
+        member_id: memberId,
+        group_id,
+        week_start,
+        dispatch_type: dispatch_type as DispatchType,
+        dispatch_date: dispatch_date.trim(),
+        dispatch_memo: dispatch_memo.trim(),
+        visitor_ids: visitor_ids,
+      });
+      setLoading(false);
+      if (insertError) {
+        const isRls = /row-level security|RLS/i.test(insertError.message ?? "");
+        setError(isRls ? "保存する権限がありません。報告者以上のロールが必要です。" : `保存に失敗しました: ${insertError.message}`);
+        return;
+      }
     }
     closePopup();
     router.refresh();
@@ -189,13 +213,18 @@ export function MemberDispatchSection({
                       className="border-b border-slate-100 pb-3 last:border-0 last:pb-0 text-sm"
                     >
                       <div className="flex flex-wrap items-center gap-2 gap-y-1">
+                        <button
+                          type="button"
+                          onClick={() => openEditPopup(r)}
+                          className="inline-flex items-center justify-center p-0.5 text-slate-500 hover:text-slate-700 touch-target shrink-0"
+                          aria-label="この派遣記録を編集"
+                        >
+                          <EditPencilIcon className="w-3.5 h-3.5" aria-hidden />
+                        </button>
                         <span className="inline-flex shrink-0 items-center rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-medium text-slate-700">
                           {r.dispatch_date
                             ? format(parseISO(r.dispatch_date), "yyyy/M/d")
                             : format(parseISO(r.week_start), "yyyy/M/d") + "（週）"}
-                        </span>
-                        <span className="text-slate-500">
-                          {dispatchGroupMap.get(r.group_id) ?? r.group_id}
                         </span>
                         {r.dispatch_type && (
                           <span className={DISPATCH_TYPE_TEXT_COLORS[r.dispatch_type]}>
@@ -229,56 +258,35 @@ export function MemberDispatchSection({
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="add-dispatch-title"
+          aria-labelledby={editingRecordId ? "edit-dispatch-title" : "add-dispatch-title"}
           onClick={(e) => e.target === e.currentTarget && closePopup()}
         >
           <div
             className="relative z-[101] w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="add-dispatch-title" className="text-sm font-semibold text-slate-800 mb-4">
-              派遣記録を追加 — {memberName}
+            <h2 id={editingRecordId ? "edit-dispatch-title" : "add-dispatch-title"} className="text-sm font-semibold text-slate-800 mb-4">
+              {editingRecordId ? "派遣記録を編集" : "派遣記録を追加"} — {memberName}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">対象週</label>
-                <select
-                  value={form.week_start}
-                  onChange={(e) => {
-                    const week = e.target.value;
-                    setForm((prev) => ({
-                      ...prev,
-                      week_start: week,
-                      dispatch_date: week || prev.dispatch_date,
-                    }));
-                  }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target bg-white"
-                  required
-                >
-                  <option value="">選択</option>
-                  {weekOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">派遣種類</label>
-                <select
-                  value={form.dispatch_type}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, dispatch_type: (e.target.value || "") as "" | DispatchType }))
-                  }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target bg-white"
-                  required
-                >
+                <div className="flex flex-wrap gap-2" role="group" aria-label="派遣種類">
                   {DISPATCH_OPTIONS.map((opt) => (
-                    <option key={opt.value || "empty"} value={opt.value}>
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, dispatch_type: opt.value }))}
+                      className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors touch-target ${
+                        form.dispatch_type === opt.value
+                          ? `${DISPATCH_TYPE_TEXT_COLORS[opt.value]} bg-violet-100 border-2 border-violet-400`
+                          : "bg-slate-100 text-slate-700 border-2 border-transparent hover:bg-slate-200"
+                      }`}
+                    >
                       {opt.label}
-                    </option>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">訪問者</label>
@@ -342,19 +350,13 @@ export function MemberDispatchSection({
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">派遣日</label>
-                <select
+                <input
+                  type="date"
                   value={form.dispatch_date}
                   onChange={(e) => setForm((prev) => ({ ...prev, dispatch_date: e.target.value }))}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target bg-white"
                   required
-                >
-                  <option value="">選択</option>
-                  {currentWeekDays.map((day) => (
-                    <option key={day.value} value={day.value}>
-                      {day.label}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">メモ</label>
@@ -385,7 +387,7 @@ export function MemberDispatchSection({
                   disabled={loading}
                   className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 touch-target disabled:opacity-50"
                 >
-                  {loading ? "保存中…" : "保存"}
+                  {loading ? (editingRecordId ? "更新中…" : "保存中…") : editingRecordId ? "更新" : "保存"}
                 </button>
               </div>
             </form>

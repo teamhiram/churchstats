@@ -27,14 +27,12 @@ export function MeetingsListFilters({ year, localOnly, years }: Props) {
   return (
     <div className="flex flex-wrap gap-4 items-center">
       <div className="flex items-center gap-2">
-        <label htmlFor="year" className="text-sm font-medium text-slate-700">
-          年
-        </label>
         <select
           id="year"
           value={year}
           className="px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
           onChange={(e) => updateParams({ year: Number(e.target.value) })}
+          aria-label="年"
         >
           {years.map((y) => (
             <option key={y} value={y}>

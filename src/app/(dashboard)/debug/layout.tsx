@@ -9,6 +9,6 @@ export default async function DebugLayout({
 }) {
   const { user, profile } = await getCurrentUserWithProfile();
   if (!user) redirect("/login");
-  if (profile?.role !== "admin") redirect("/dashboard");
+  if (profile?.role !== "admin") redirect("/charts");
   return <>{children}</>;
 }

@@ -11,7 +11,7 @@ export default async function DuplicatesPage({
 }) {
   const { user, profile } = await getCurrentUserWithProfile();
   if (!user) redirect("/login");
-  if (profile?.role !== "admin") redirect("/meetings/list");
+  if (profile?.role !== "admin") redirect("/weekly");
 
   const params = await searchParams;
   const year = params.year && Number.isFinite(Number(params.year)) ? Number(params.year) : new Date().getFullYear();

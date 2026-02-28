@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
-import { getMemberAttendanceMatrixData, getMemberLifeOverview } from "@/app/(dashboard)/dashboard/attendanceMatrixActions";
-import type { MemberAttendanceMatrixData } from "@/app/(dashboard)/dashboard/attendanceMatrixActions";
+import { getMemberAttendanceMatrixData, getMemberLifeOverview } from "@/app/(dashboard)/charts/attendanceMatrixActions";
+import type { MemberAttendanceMatrixData } from "@/app/(dashboard)/charts/attendanceMatrixActions";
 import { DISPATCH_TYPE_SQUARE_COLORS } from "@/types/database";
 import type { DispatchType } from "@/types/database";
 import { addDays, format, parseISO } from "date-fns";
@@ -34,6 +34,8 @@ const SQUARE_SIZE = 20;
 const SQUARE_COL_MIN = 32;
 const TOOLTIP_MAX_WIDTH_PX = 256;
 const TOOLTIP_MARGIN_PX = 8;
+const MOBILE_BREAKPOINT_PX = 768;
+const MEMO_AUTO_CLOSE_MS = 3000;
 
 /** weekStart "yyyy-MM-dd" から "MM/dd - MM/dd" の日付範囲（年省略・日月二桁）を返す */
 function formatWeekDateRange(weekStart: string): string {
@@ -58,6 +60,35 @@ export function MemberAttendanceMatrix({ memberId, initialYear }: Props) {
     anchorTop: number;
     anchorWidth: number;
   } | null>(null);
+  const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const m = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT_PX - 1}px)`);
+    const update = () => setIsMobile(m.matches);
+    update();
+    m.addEventListener("change", update);
+    return () => m.removeEventListener("change", update);
+  }, []);
+
+  const clearAutoCloseTimer = useCallback(() => {
+    if (autoCloseTimerRef.current != null) {
+      clearTimeout(autoCloseTimerRef.current);
+      autoCloseTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile || !tooltipState) {
+      clearAutoCloseTimer();
+      return undefined;
+    }
+    autoCloseTimerRef.current = setTimeout(() => {
+      autoCloseTimerRef.current = null;
+      setTooltipState(null);
+    }, MEMO_AUTO_CLOSE_MS);
+    return () => clearAutoCloseTimer();
+  }, [isMobile, tooltipState, clearAutoCloseTimer]);
 
   const handleCellPointerEnter = useCallback(
     (e: React.PointerEvent, memo: string) => {
@@ -72,7 +103,18 @@ export function MemberAttendanceMatrix({ memberId, initialYear }: Props) {
     []
   );
   const handleCellPointerLeave = useCallback(() => {
-    setTooltipState(null);
+    if (!isMobile) setTooltipState(null);
+  }, [isMobile]);
+
+  const handleCellClickMobile = useCallback((e: React.MouseEvent, memo: string) => {
+    if (!memo) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setTooltipState({
+      memo,
+      anchorLeft: rect.left,
+      anchorTop: rect.top,
+      anchorWidth: rect.width,
+    });
   }, []);
 
   useEffect(() => {
@@ -225,8 +267,9 @@ export function MemberAttendanceMatrix({ memberId, initialYear }: Props) {
                         className="border-b border-slate-100 p-0.5 text-center align-middle relative group/cell"
                         style={{ minWidth: SQUARE_COL_MIN }}
                         title={memo ? undefined : titleText}
-                        onPointerEnter={memo ? (e) => handleCellPointerEnter(e, memo) : undefined}
-                        onPointerLeave={memo ? handleCellPointerLeave : undefined}
+                        onPointerEnter={memo && !isMobile ? (e) => handleCellPointerEnter(e, memo) : undefined}
+                        onPointerLeave={memo && !isMobile ? handleCellPointerLeave : undefined}
+                        onClick={memo && isMobile ? (e) => handleCellClickMobile(e, memo) : undefined}
                       >
                         <div className="inline-flex flex-col items-center justify-center min-h-[20px]">
                           <div
@@ -282,7 +325,7 @@ export function MemberAttendanceMatrix({ memberId, initialYear }: Props) {
         </span>
         <span className="inline-flex items-center gap-1 text-slate-500">
           <span className="inline-block w-1 h-1 rounded-full bg-slate-700" aria-hidden />
-          メモあり（ホバーで表示）
+          {isMobile ? "メモあり（タップで表示）" : "メモあり（ホバーで表示）"}
         </span>
       </div>
 
@@ -297,18 +340,29 @@ export function MemberAttendanceMatrix({ memberId, initialYear }: Props) {
             const clampedLeft = Math.max(half, Math.min(viewWidth - half, centerX));
             const maxW = Math.min(TOOLTIP_MAX_WIDTH_PX, viewWidth - TOOLTIP_MARGIN_PX * 2);
             return (
-              <div
-                role="tooltip"
-                className="pointer-events-none fixed z-[9999] px-2 py-1.5 text-left text-xs font-normal text-white bg-slate-800 rounded shadow-lg whitespace-pre-wrap break-words"
-                style={{
-                  left: clampedLeft,
-                  top: tooltipState.anchorTop - TOOLTIP_MARGIN_PX,
-                  transform: "translate(-50%, -100%)",
-                  maxWidth: maxW,
-                }}
-              >
-                {tooltipState.memo}
-              </div>
+              <>
+                {isMobile && (
+                  <div
+                    className="fixed inset-0 z-[9998]"
+                    role="presentation"
+                    aria-hidden
+                    onClick={() => setTooltipState(null)}
+                  />
+                )}
+                <div
+                  role="tooltip"
+                  className={`fixed z-[9999] px-2 py-1.5 text-left text-xs font-normal text-white bg-slate-800 rounded shadow-lg whitespace-pre-wrap break-words ${isMobile ? "pointer-events-auto" : "pointer-events-none"}`}
+                  style={{
+                    left: clampedLeft,
+                    top: tooltipState.anchorTop - TOOLTIP_MARGIN_PX,
+                    transform: "translate(-50%, -100%)",
+                    maxWidth: maxW,
+                  }}
+                  onClick={isMobile ? (e) => e.stopPropagation() : undefined}
+                >
+                  {tooltipState.memo}
+                </div>
+              </>
             );
           })(),
           document.body

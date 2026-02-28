@@ -63,11 +63,11 @@ export function MeetingsFilterBar({ districts, defaultDistrictId }: Props) {
   }, [nextWeekIso, nextWeekStart, updateParams]);
 
   const showFilter =
-    pathname === "/meetings" ||
-    pathname === "/meetings/sunday" ||
-    pathname === "/meetings/prayer" ||
-    pathname === "/meetings/small-group" ||
-    pathname === "/meetings/organic";
+    pathname === "/attendance" ||
+    pathname === "/attendance/lordsday" ||
+    pathname === "/attendance/prayer" ||
+    pathname === "/attendance/small-group" ||
+    pathname === "/attendance/organic";
   if (!showFilter) return null;
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);

@@ -31,7 +31,7 @@
   - これにより、アプリのミスで current_locality を付け忘れても、他地方のデータは返らない。
 
 **影響箇所（抜粋）**:  
-`src/lib/cachedData.ts`（getMeetingsLayoutData, getCachedLocalities）、`src/app/(dashboard)/members/page.tsx`、`src/app/api/members/route.ts`、`src/app/api/organization-lists/route.ts`、`src/app/(dashboard)/dashboard/page.tsx`、集会・出欠・名簿・設定の各ページ・actions、`src/app/api/data-version/route.ts`（current_locality でスコープするか、global な更新日時のみ返すか方針を決める）。  
+`src/lib/cachedData.ts`（getMeetingsLayoutData, getCachedLocalities）、`src/app/(dashboard)/members/page.tsx`、`src/app/api/members/route.ts`、`src/app/api/organization-lists/route.ts`、`src/app/(dashboard)/charts/page.tsx`、集会・出欠・名簿・設定の各ページ・actions、`src/app/api/data-version/route.ts`（current_locality でスコープするか、global な更新日時のみ返すか方針を決める）。  
 一貫して「current_locality_id をどこで渡すか」「各クエリにどう付与するか」のパターンを決め、全データ取得をそのパターンに合わせる。実装・レビュー時は**影響箇所チェックリスト**を使い、current_locality フィルタの付け忘れを防ぐ。
 
 ---

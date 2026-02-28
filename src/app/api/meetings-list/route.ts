@@ -1,8 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { getEffectiveCurrentLocalityId } from "@/lib/cachedData";
-import { getListData } from "@/app/(dashboard)/meetings/list/actions";
-import type { WeekRow } from "@/app/(dashboard)/meetings/list/types";
+import { getListData } from "@/app/(dashboard)/weekly/actions";
+import type { WeekRow } from "@/app/(dashboard)/weekly/types";
 
 export type MeetingsListApiResponse = {
   year: number;

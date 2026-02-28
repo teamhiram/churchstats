@@ -10,7 +10,7 @@ export default async function RootPage() {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      redirect("/dashboard");
+      redirect("/charts");
     }
   } catch (e) {
     unstable_rethrow(e);

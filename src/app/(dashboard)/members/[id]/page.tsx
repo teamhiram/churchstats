@@ -10,8 +10,6 @@ import { MemberAttendanceMatrix } from "./MemberAttendanceMatrix";
 import { MemberNameDropdown } from "./MemberNameDropdown";
 import { MemberDispatchSection } from "./MemberDispatchSection";
 import { EditPencilIcon } from "@/components/icons/EditPencilIcon";
-import { format } from "date-fns";
-import { ja } from "date-fns/locale";
 import { getSundayWeeksInYear, formatDateYmd } from "@/lib/weekUtils";
 
 const BAPTISM_PRECISION_LABELS: Record<string, string> = {
@@ -151,21 +149,15 @@ export default async function MemberDetailPage({
     dispatchFormGroups = (allGrp ?? []) as { id: string; name: string }[];
   }
 
-  // 週ドロップダウン用: 当年・前年の日曜週
+  // 週番号マップ: 当年・前年の日曜週（派遣記録の W9 等表示用）
   const currentYear = new Date().getFullYear();
   const yearsForWeeks = [currentYear - 1, currentYear];
-  const weekOptions: { value: string; label: string }[] = [];
   yearsForWeeks.forEach((year) => {
     getSundayWeeksInYear(year).forEach((w) => {
       const iso = formatDateYmd(w.weekStart);
       weekStartToNumber.set(iso, w.weekNumber);
-      weekOptions.push({
-        value: iso,
-        label: `W${w.weekNumber}（${format(w.weekStart, "yyyy/M/d", { locale: ja })} - ${format(w.weekEnd, "yyyy/M/d", { locale: ja })}）`,
-      });
     });
   });
-  weekOptions.sort((a, b) => a.value.localeCompare(b.value));
 
   const district = districtRes.data as { id: string; name: string } | null;
   const group = groupRes.data as { id: string; name: string } | null;
@@ -205,49 +197,49 @@ export default async function MemberDetailPage({
             <EditPencilIcon className="w-4 h-4" aria-hidden />
           </Link>
         </div>
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-          <dt className="text-slate-500">フリガナ</dt>
-          <dd className="text-slate-800">{member.furigana ?? "—"}</dd>
-          <dt className="text-slate-500">性別</dt>
-          <dd className="text-slate-800">{member.gender === "male" ? "男" : "女"}</dd>
-          <dt className="text-slate-500">ローカル/ゲスト</dt>
-          <dd className="text-slate-800">{member.is_local ? "ローカル" : "ゲスト"}</dd>
-          <dt className="text-slate-500">地区</dt>
-          <dd className="text-slate-800">{district?.name ?? "—"}</dd>
-          <dt className="text-slate-500">小組</dt>
-          <dd className="text-slate-800">{group?.name ?? (member.is_local ? "未所属" : "—")}</dd>
-          <dt className="text-slate-500">区分</dt>
-          <dd className="text-slate-800">{member.age_group ? CATEGORY_LABELS[member.age_group as Category] : "—"}</dd>
-          <dt className="text-slate-500">聖徒/友人</dt>
-          <dd className="text-slate-800">{member.is_baptized ? "聖徒" : "友人"}</dd>
-          <dt className="text-slate-500">バプテスマ日</dt>
-          <dd className="text-slate-800">{baptismDate}</dd>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm items-baseline">
+          <dt className="text-slate-500 shrink-0">フリガナ</dt>
+          <dd className="text-slate-800 min-w-0">{member.furigana ?? "—"}</dd>
+          <dt className="text-slate-500 shrink-0">性別</dt>
+          <dd className="text-slate-800 min-w-0">{member.gender === "male" ? "男" : "女"}</dd>
+          <dt className="text-slate-500 shrink-0">ローカル/ゲスト</dt>
+          <dd className="text-slate-800 min-w-0">{member.is_local ? "ローカル" : "ゲスト"}</dd>
+          <dt className="text-slate-500 shrink-0">地区</dt>
+          <dd className="text-slate-800 min-w-0">{district?.name ?? "—"}</dd>
+          <dt className="text-slate-500 shrink-0">小組</dt>
+          <dd className="text-slate-800 min-w-0">{group?.name ?? (member.is_local ? "未所属" : "—")}</dd>
+          <dt className="text-slate-500 shrink-0">区分</dt>
+          <dd className="text-slate-800 min-w-0">{member.age_group ? CATEGORY_LABELS[member.age_group as Category] : "—"}</dd>
+          <dt className="text-slate-500 shrink-0">聖徒/友人</dt>
+          <dd className="text-slate-800 min-w-0">{member.is_baptized ? "聖徒" : "友人"}</dd>
+          <dt className="text-slate-500 shrink-0">バプテスマ日</dt>
+          <dd className="text-slate-800 min-w-0">{baptismDate}</dd>
           {m.baptism_date_precision && (
             <>
-              <dt className="text-slate-500">バプテスマ日精度</dt>
-              <dd className="text-slate-800">{BAPTISM_PRECISION_LABELS[String(m.baptism_date_precision)] ?? String(m.baptism_date_precision)}</dd>
+              <dt className="text-slate-500 shrink-0">バプテスマ日精度</dt>
+              <dd className="text-slate-800 min-w-0">{BAPTISM_PRECISION_LABELS[String(m.baptism_date_precision)] ?? String(m.baptism_date_precision)}</dd>
             </>
           )}
-          <dt className="text-slate-500">主言語</dt>
-          <dd className="text-slate-800">{getLanguageLabel(m.language_main as string)}</dd>
-          <dt className="text-slate-500">副言語</dt>
-          <dd className="text-slate-800">{getLanguageLabel(m.language_sub as string)}</dd>
+          <dt className="text-slate-500 shrink-0">主言語</dt>
+          <dd className="text-slate-800 min-w-0">{getLanguageLabel(m.language_main as string)}</dd>
+          <dt className="text-slate-500 shrink-0">副言語</dt>
+          <dd className="text-slate-800 min-w-0">{getLanguageLabel(m.language_sub as string)}</dd>
           {(m.locality_id != null && locality) && (
             <>
-              <dt className="text-slate-500">地方</dt>
-              <dd className="text-slate-800">{locality.name}</dd>
+              <dt className="text-slate-500 shrink-0">地方</dt>
+              <dd className="text-slate-800 min-w-0">{locality.name}</dd>
             </>
           )}
           {m.follower_id && (
             <>
-              <dt className="text-slate-500">フォロー担当</dt>
-              <dd className="text-slate-800">{follower?.name ?? (m.follower_id as string)}</dd>
+              <dt className="text-slate-500 shrink-0">フォロー担当</dt>
+              <dd className="text-slate-800 min-w-0">{follower?.name ?? (m.follower_id as string)}</dd>
             </>
           )}
           {member.is_local && enrollmentPeriods.length > 0 && (
             <>
-              <dt className="text-slate-500">在籍期間</dt>
-              <dd className="text-slate-800">
+              <dt className="text-slate-500 shrink-0">在籍期間</dt>
+              <dd className="text-slate-800 min-w-0">
                 {enrollmentPeriods.map((p, i) => (
                   <div key={p.period_no} className={i > 0 ? "mt-1" : ""}>
                     期間{i + 1}: 転入 {p.join_date ?? "—"} / 転出 {p.leave_date ?? "—"}
@@ -257,8 +249,8 @@ export default async function MemberDetailPage({
               </dd>
               {enrollmentPeriods.some((p) => p.memo) && (
                 <>
-                  <dt className="text-slate-500">在籍メモ</dt>
-                  <dd className="text-slate-800">
+                  <dt className="text-slate-500 shrink-0">在籍メモ</dt>
+                  <dd className="text-slate-800 min-w-0">
                     {enrollmentPeriods.map((p, i) =>
                       p.memo ? (
                         <div key={p.period_no} className={i > 0 ? "mt-2" : ""}>
@@ -284,7 +276,6 @@ export default async function MemberDetailPage({
         visitorIdToName={visitorIdToName}
         groups={dispatchFormGroups}
         allMembers={allMembers}
-        weekOptions={weekOptions}
         sortedWeekStarts={sortedWeekStarts}
         recordsByWeek={recordsByWeek}
         weekStartToNumber={weekStartToNumber}
