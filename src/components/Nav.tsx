@@ -217,7 +217,7 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
             召会生活統計
           </Link>
           <span className="ml-1.5 inline-flex items-baseline shrink-0">
-            <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.20.1</span>
+            <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.20.2</span>
           </span>
         </div>
         {showLocalitySwitcher && (
@@ -248,7 +248,7 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
             <Link href="/" className="text-white text-sm font-semibold whitespace-nowrap hover:text-white/90">
               召会生活統計
             </Link>
-            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.20.1</span>
+            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.20.2</span>
             {showLocalitySwitcher && !searchOpen && (
               <div className="relative">
                 <button
