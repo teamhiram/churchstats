@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserWithProfile } from "@/lib/cachedData";
 
-/** デバッグ機能は管理者（admin）のみアクセス可能。共同管理者以下は 403。 */
+/** デバッグ機能はグローバル管理者（global_role = admin）のみアクセス可能。 */
 export default async function DebugLayout({
   children,
 }: {
@@ -9,6 +9,6 @@ export default async function DebugLayout({
 }) {
   const { user, profile } = await getCurrentUserWithProfile();
   if (!user) redirect("/login");
-  if (profile?.role !== "admin") redirect("/charts");
+  if (profile?.global_role !== "admin") redirect("/charts");
   return <>{children}</>;
 }

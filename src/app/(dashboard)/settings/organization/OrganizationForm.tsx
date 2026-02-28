@@ -253,9 +253,9 @@ export function OrganizationForm({
         </div>
       </section>
 
-      {/* アカウントの所属地方（表示のみ・変更不可） */}
+      {/* アクセス可能地方（表示のみ・変更不可） */}
       <section className="bg-white rounded-lg border border-slate-200 p-4">
-        <h2 className="font-semibold text-slate-800 mb-2">アカウントの所属地方</h2>
+        <h2 className="font-semibold text-slate-800 mb-2">アクセス可能地方</h2>
         <p className="text-slate-700">{accountLocalityNames}</p>
       </section>
 
