@@ -35,6 +35,7 @@ yarn-error.log*
 
 # local credentials / repo info (do not push)
 github.md
+scripts/.token-joshthemuscat
 
 # database backups / dumps (contain data, not for version control)
 *.dump

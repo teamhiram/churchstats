@@ -38,14 +38,26 @@ export default async function MemberDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  // #region agent log
+  try {
+  // #endregion
   const { id } = await params;
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9c8fc5'},body:JSON.stringify({sessionId:'9c8fc5',location:'members/[id]/page.tsx:entry',message:'Member page entry',data:{id,hasEnvUrl:!!process.env.NEXT_PUBLIC_SUPABASE_URL,hasEnvKey:!!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   const supabase = await createClient();
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9c8fc5'},body:JSON.stringify({sessionId:'9c8fc5',location:'members/[id]/page.tsx:afterCreateClient',message:'createClient ok',data:{},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
   const [memberRes, allMembersRes] = await Promise.all([
     supabase.from("members").select("*").eq("id", id).single(),
     supabase.from("members").select("id, name").order("name"),
   ]);
   const { data: member } = memberRes;
   const allMembers = (allMembersRes.data ?? []) as { id: string; name: string }[];
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9c8fc5'},body:JSON.stringify({sessionId:'9c8fc5',location:'members/[id]/page.tsx:afterFirstQuery',message:'first query result',data:{memberError:memberRes.error?.message ?? null,allMembersError:allMembersRes.error?.message ?? null,hasMember:!!member},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
   if (!member) notFound();
 
   const [districtRes, groupRes, localityRes, followerRes, periodsRes, dispatchRes] = await Promise.all([
@@ -78,8 +90,14 @@ export default async function MemberDetailPage({
     dispatch_memo: string | null;
     visitor_ids?: string[] | null;
   }[];
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9c8fc5'},body:JSON.stringify({sessionId:'9c8fc5',location:'members/[id]/page.tsx:beforeWeekUtils',message:'before getSundayWeeksInYear',data:{dispatchRecordsLength:dispatchRecords.length},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{});
+  // #endregion
   const dispatchGroupIds = [...new Set(dispatchRecords.map((r) => r.group_id))];
   const visitorIds = [...new Set(dispatchRecords.flatMap((r) => r.visitor_ids ?? []))];
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9c8fc5'},body:JSON.stringify({sessionId:'9c8fc5',location:'members/[id]/page.tsx:afterDispatchData',message:'after dispatchRecords processing',data:{visitorIdsLength:visitorIds.length,dispatchGroupIdsLength:dispatchGroupIds.length},timestamp:Date.now(),hypothesisId:'E'})}).catch(()=>{});
+  // #endregion
   const visitorIdToName = new Map(allMembers.map((m) => [m.id, m.name]));
   if (visitorIds.length > 0) {
     const missing = visitorIds.filter((vid) => !visitorIdToName.has(vid));
@@ -293,4 +311,13 @@ export default async function MemberDetailPage({
       <MemberAttendanceMatrix memberId={id} />
     </div>
   );
+  // #region agent log
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const errStack = err instanceof Error ? err.stack : undefined;
+    console.error('[MemberDetailPage]', errMsg, errStack);
+    fetch('http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9c8fc5'},body:JSON.stringify({sessionId:'9c8fc5',location:'members/[id]/page.tsx:catch',message:'Member page error',data:{error:errMsg,stack:errStack?.slice(0,500)},timestamp:Date.now(),hypothesisId:'error'})}).catch(()=>{});
+    throw err;
+  }
+  // #endregion
 }
