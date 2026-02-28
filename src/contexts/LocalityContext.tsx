@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -127,12 +128,15 @@ function buildLocalitiesByArea(
 
 export function LocalityProvider({
   initialCurrentLocalityId,
+  syncCookieToLocalityId,
   initialAccessibleLocalities,
   initialAreas,
   initialPrefectures,
   children,
 }: {
   initialCurrentLocalityId: string | null;
+  /** サーバーで補正した地方 ID。渡された場合、マウント時に Cookie に同期する（Server Action で set） */
+  syncCookieToLocalityId: string | null;
   initialAccessibleLocalities: LocalityOption[];
   initialAreas: { id: string; name: string }[];
   initialPrefectures: { id: string; name: string; area_id: string; sort_order?: number }[];
@@ -145,6 +149,13 @@ export function LocalityProvider({
     () => buildLocalitiesByArea(initialAccessibleLocalities, initialAreas, initialPrefectures),
     [initialAccessibleLocalities, initialAreas, initialPrefectures]
   );
+
+  useEffect(() => {
+    if (!syncCookieToLocalityId) return;
+    setCurrentLocalityIdAction(syncCookieToLocalityId).then(() => {
+      router.refresh();
+    });
+  }, [syncCookieToLocalityId, router]);
 
   const setCurrentLocalityId = useCallback(
     async (localityId: string) => {

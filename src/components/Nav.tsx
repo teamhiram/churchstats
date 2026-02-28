@@ -8,6 +8,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/queryClient";
 import type { MembersApiResponse } from "@/app/api/members/route";
+import { AccountSignOut } from "@/app/(dashboard)/settings/account/AccountSignOut";
 
 const baseLinks: { href: string; label: string }[] = [
   { href: "/dashboard", label: "ダッシュボード" },
@@ -41,6 +42,8 @@ const settingsModalDebugItems = [
 type NavProps = {
   displayName?: string | null;
   roleLabel?: string;
+  /** グローバル権限がある場合のみ渡す */
+  globalRoleLabel?: string | null;
   localityName?: string | null;
   showDebug?: boolean;
   /** グローバル管理者のとき true（設定モーダルでユーザ・ロール管理を表示） */
@@ -83,22 +86,36 @@ function SearchIcon({ className }: { className?: string }) {
   );
 }
 
-export function Nav({ displayName, roleLabel, localityName: _localityName, showDebug = false, showRolesManagement = false }: NavProps) {
+export function Nav({ displayName, roleLabel, globalRoleLabel, localityName: _localityName, showDebug = false, showRolesManagement = false }: NavProps) {
   const pathname = usePathname();
   const { fullWidth } = useDisplaySettings();
-  const { currentLocalityName, currentLocalityId, localitiesByArea, setCurrentLocalityId } = useLocality();
-  const showLocalitySwitcher =
-    localitiesByArea.some((s) => s.prefectures.some((p) => p.localities.length > 0)) &&
-    localitiesByArea.flatMap((s) => s.prefectures).flatMap((p) => p.localities).length > 1;
+  const { currentLocalityName, currentLocalityId, localitiesByArea, accessibleLocalities, setCurrentLocalityId } = useLocality();
+  const hasOneLocality = accessibleLocalities.length === 1;
+  const hasMultipleLocalities = accessibleLocalities.length > 1;
+  const showLocalitySwitcher = hasMultipleLocalities;
+  /** アクセス可能な地方が1件のときはドロップダウンにせず表示のみ */
+  const showLocalityNameOnly = hasOneLocality;
   /** その他タブを隠した表示用セクション */
   const visibleSections = localitiesByArea.filter((s) => s.areaName !== "その他");
   const [localityPopupOpen, setLocalityPopupOpen] = useState(false);
+  const [accountModalOpen, setAccountModalOpen] = useState(false);
+  /** アカウントメニューをボタン直下・右寄せで表示するための位置（fixed） */
+  const [accountMenuPosition, setAccountMenuPosition] = useState<{
+    top?: number;
+    bottom?: number;
+    right: number;
+    maxWidth: number;
+    maxHeight: number;
+  } | null>(null);
   const [localityPopupAreaIndex, setLocalityPopupAreaIndex] = useState(0);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const localityPopupRef = useRef<HTMLDivElement>(null);
+  const accountModalRef = useRef<HTMLDivElement>(null);
+  const accountButtonPcRef = useRef<HTMLButtonElement>(null);
+  const accountButtonMobileRef = useRef<HTMLButtonElement>(null);
   const settingsModalRef = useRef<HTMLDivElement>(null);
   const mobileSearchModalRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
@@ -163,14 +180,25 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
   }, [settingsModalOpen]);
 
   useEffect(() => {
-    if (localityPopupOpen || settingsModalOpen || mobileSearchOpen) {
+    if (!accountModalOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (accountModalRef.current && !accountModalRef.current.contains(e.target as Node)) {
+        setAccountModalOpen(false);
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [accountModalOpen]);
+
+  useEffect(() => {
+    if (localityPopupOpen || settingsModalOpen || mobileSearchOpen || accountModalOpen) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
       return () => {
         document.body.style.overflow = prev;
       };
     }
-  }, [localityPopupOpen, settingsModalOpen, mobileSearchOpen]);
+  }, [localityPopupOpen, settingsModalOpen, mobileSearchOpen, accountModalOpen]);
 
   useEffect(() => {
     const justOpened = localityPopupOpen && !prevLocalityPopupOpen.current;
@@ -208,6 +236,48 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
     }
   }, [mobileSearchOpen]);
 
+  /** アカウントメニュー: 開いたときにボタン直下・右寄せの位置を計算し、リサイズ時も再計算 */
+  useEffect(() => {
+    if (!accountModalOpen) {
+      setAccountMenuPosition(null);
+      return;
+    }
+    const updatePosition = () => {
+      const isPc = typeof window !== "undefined" && window.innerWidth >= 768;
+      const btn = isPc ? accountButtonPcRef.current : accountButtonMobileRef.current;
+      if (!btn) return;
+      const rect = btn.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const gap = 4;
+      const padding = 8;
+      const maxPanelWidth = 384;
+      const right = vw - rect.right;
+      const maxWidth = Math.min(maxPanelWidth, rect.right - padding);
+
+      if (isPc) {
+        const top = rect.bottom + gap;
+        setAccountMenuPosition({
+          top,
+          right,
+          maxWidth: Math.max(200, maxWidth),
+          maxHeight: vh - top - padding,
+        });
+      } else {
+        const bottom = vh - rect.top + gap;
+        setAccountMenuPosition({
+          bottom,
+          right,
+          maxWidth: Math.max(200, maxWidth),
+          maxHeight: rect.top - gap - padding,
+        });
+      }
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    return () => window.removeEventListener("resize", updatePosition);
+  }, [accountModalOpen]);
+
   return (
     <>
       {/* モバイル: 薄い固定ヘッダー（アプリ名＋バージョン＋地方選択） */}
@@ -217,23 +287,42 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
             召会生活統計
           </Link>
           <span className="ml-1.5 inline-flex items-baseline shrink-0">
-            <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.20.2</span>
+            <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.21.0</span>
           </span>
         </div>
+        {showLocalityNameOnly && (
+          <span className="flex items-center gap-1 px-2 py-1 text-slate-300 text-xs max-w-[50%] min-w-0 shrink-0 truncate" aria-label="表示中の地方とログイン中ユーザ">
+            <span className="truncate">{currentLocalityName ?? "—"}</span>
+            {displayName != null && displayName !== "" && (
+              <>
+                <span className="text-slate-500 shrink-0" aria-hidden>·</span>
+                <span className="truncate">{displayName}</span>
+              </>
+            )}
+          </span>
+        )}
         {showLocalitySwitcher && (
-          <button
-            type="button"
-            onClick={() => setLocalityPopupOpen(true)}
-            className="flex items-center gap-0.5 px-2 py-1 rounded text-slate-300 hover:bg-slate-700 active:bg-slate-600 text-xs max-w-[50%] min-w-0 shrink-0 touch-target"
-            aria-expanded={localityPopupOpen}
-            aria-haspopup="dialog"
-            aria-label="地方を切り替え"
-          >
-            <span className="truncate">{currentLocalityName ?? "地方"}</span>
-            <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+          <span className="flex items-center gap-1 min-w-0 shrink-0 max-w-[50%]">
+            <button
+              type="button"
+              onClick={() => setLocalityPopupOpen(true)}
+              className="flex items-center gap-0.5 px-2 py-1 rounded text-slate-300 hover:bg-slate-700 active:bg-slate-600 text-xs min-w-0 shrink touch-target"
+              aria-expanded={localityPopupOpen}
+              aria-haspopup="dialog"
+              aria-label="地方を切り替え"
+            >
+              <span className="truncate">{currentLocalityName ?? "地方"}</span>
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {displayName != null && displayName !== "" && (
+              <>
+                <span className="text-slate-500 text-xs shrink-0" aria-hidden>·</span>
+                <span className="truncate text-slate-300 text-xs py-1">{displayName}</span>
+              </>
+            )}
+          </span>
         )}
       </header>
 
@@ -248,9 +337,20 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
             <Link href="/" className="text-white text-sm font-semibold whitespace-nowrap hover:text-white/90">
               召会生活統計
             </Link>
-            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.20.2</span>
+            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.21.0</span>
+            {showLocalityNameOnly && !searchOpen && (
+              <span className="flex items-center gap-1 px-2 py-1 text-slate-300 text-xs min-w-0 max-w-[16rem]" aria-label="表示中の地方とログイン中ユーザ">
+                <span className="truncate">{currentLocalityName ?? "—"}</span>
+                {displayName != null && displayName !== "" && (
+                  <>
+                    <span className="text-slate-500 shrink-0" aria-hidden>·</span>
+                    <span className="truncate">{displayName}</span>
+                  </>
+                )}
+              </span>
+            )}
             {showLocalitySwitcher && !searchOpen && (
-              <div className="relative">
+              <div className="relative flex items-center gap-1 min-w-0">
                 <button
                   type="button"
                   onClick={() => setLocalityPopupOpen(true)}
@@ -264,6 +364,12 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
+                {displayName != null && displayName !== "" && (
+                  <>
+                    <span className="text-slate-500 text-xs shrink-0" aria-hidden>·</span>
+                    <span className="truncate text-slate-300 text-xs max-w-[8rem]">{displayName}</span>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -356,17 +462,18 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
           </div>
 
           {/* 右端固定: アカウントボタン（常に同じ位置） */}
-          <Link
-            href="/settings/account"
+          <button
+            ref={accountButtonPcRef}
+            type="button"
+            onClick={() => setAccountModalOpen(true)}
             aria-label="アカウント詳細"
+            aria-expanded={accountModalOpen}
             className={`flex items-center justify-center h-full px-4 touch-target shrink-0 border-l border-slate-600/50 ${
-              pathname.startsWith("/settings/account")
-                ? "bg-primary-600 text-white"
-                : "text-slate-300 hover:bg-slate-700"
+              accountModalOpen ? "bg-primary-600 text-white" : "text-slate-300 hover:bg-slate-700"
             }`}
           >
             <PersonIcon className="w-5 h-5" />
-          </Link>
+          </button>
         </div>
       </header>
 
@@ -467,6 +574,71 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
         </div>
       )}
 
+      {/* アカウント詳細メニュー（ボタン直下・右寄せ、はみ出し防止） */}
+      {accountModalOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-[100] bg-black/20"
+            role="presentation"
+            aria-hidden
+            onClick={() => setAccountModalOpen(false)}
+          />
+          {accountMenuPosition && (
+            <div
+              ref={accountModalRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label="アカウント詳細"
+              className="fixed z-[101] w-full max-w-sm overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
+              style={{
+                top: accountMenuPosition.top,
+                bottom: accountMenuPosition.bottom,
+                right: accountMenuPosition.right,
+                maxWidth: accountMenuPosition.maxWidth,
+                maxHeight: accountMenuPosition.maxHeight,
+              }}
+            >
+              <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 shrink-0">
+                <h2 className="text-sm font-semibold text-slate-800">アカウント</h2>
+                <button
+                  type="button"
+                  onClick={() => setAccountModalOpen(false)}
+                  className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 touch-target"
+                  aria-label="閉じる"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="p-4 space-y-3 overflow-y-auto">
+                <div className="text-sm text-slate-600 space-y-1">
+                  <p>
+                    <span className="font-medium text-slate-500">氏名</span>
+                    <span className="ml-2 text-slate-800">{displayName && displayName !== "" ? displayName : "—"}</span>
+                  </p>
+                  {globalRoleLabel != null && globalRoleLabel !== "" && (
+                    <p>
+                      <span className="font-medium text-slate-500">グローバルロール</span>
+                      <span className="ml-2 text-slate-800">{globalRoleLabel}</span>
+                    </p>
+                  )}
+                  <p>
+                    <span className="font-medium text-slate-500">ローカルロール</span>
+                    <span className="ml-2 text-slate-800">{roleLabel ?? "—"}</span>
+                  </p>
+                  <p>
+                    <span className="font-medium text-slate-500">所属地方</span>
+                    <span className="ml-2 text-slate-800">{_localityName && _localityName !== "" ? _localityName : "—"}</span>
+                  </p>
+                </div>
+                <AccountSignOut />
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
       {/* モバイル: 固定フッター（速報｜週別｜出欠｜名簿｜設定｜アカウント） */}
       <footer className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-800 pb-[env(safe-area-inset-bottom)]">
         <nav className={`flex h-[1.875rem] items-stretch ${contentWidthClass(fullWidth)}`} aria-label="メインメニュー">
@@ -510,17 +682,18 @@ export function Nav({ displayName, roleLabel, localityName: _localityName, showD
           >
             <SearchIcon className="w-5 h-5" />
           </button>
-          <Link
-            href="/settings/account"
+          <button
+            ref={accountButtonMobileRef}
+            type="button"
+            onClick={() => setAccountModalOpen(true)}
             aria-label="アカウント詳細"
+            aria-expanded={accountModalOpen}
             className={`shrink-0 w-12 h-full flex items-center justify-center min-h-0 ${
-              pathname.startsWith("/settings/account")
-                ? "text-white bg-primary-600"
-                : "text-slate-300 active:bg-slate-700"
+              accountModalOpen ? "text-white bg-primary-600" : "text-slate-300 active:bg-slate-700"
             }`}
           >
             <PersonIcon className="w-5 h-5" />
-          </Link>
+          </button>
         </nav>
       </footer>
       {settingsModalOpen && (

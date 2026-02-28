@@ -7,8 +7,6 @@ import { DisplaySettingsProvider } from "@/contexts/DisplaySettingsContext";
 import { LocalityProvider } from "@/contexts/LocalityContext";
 import { getCurrentUserWithProfile, getCachedLocalities, getCachedAreas, getCachedPrefectures } from "@/lib/cachedData";
 import { getCurrentLocalityId } from "@/lib/locality";
-import { CURRENT_LOCALITY_COOKIE_NAME } from "@/lib/localityConstants";
-import { cookies } from "next/headers";
 import { getMeetingDuplicateGroupCount } from "@/app/(dashboard)/debug/meeting-duplicates/actions";
 import { getDuplicateAttendanceGroupCount } from "@/app/(dashboard)/meetings/list/actions";
 import { getEnrollmentUncertainCount } from "@/app/(dashboard)/debug/enrollment-uncertain/actions";
@@ -46,25 +44,24 @@ export default async function DashboardLayout({
     data.profile?.role === "admin" ? getDuplicateAttendanceGroupCount() : Promise.resolve(0),
     data.profile?.role === "admin" ? getEnrollmentUncertainCount() : Promise.resolve(0),
   ]);
-  const cookieStore = await cookies();
-  let effectiveLocalityId = cookieLocalityId;
-  if (localities.length === 1 && !effectiveLocalityId) {
-    effectiveLocalityId = localities[0].id;
-    cookieStore.set(CURRENT_LOCALITY_COOKIE_NAME, effectiveLocalityId, {
-      path: "/",
-      maxAge: 365 * 24 * 60 * 60,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    });
-  } else if (!effectiveLocalityId && localities.length > 0) {
-    effectiveLocalityId = localities[0].id;
+  // Cookie は Server Component では変更できないため、無効 or 未設定時は effective だけ計算し、
+  // クライアントで setCurrentLocalityIdAction を一度呼んで Cookie を同期する
+  let effectiveLocalityId = cookieLocalityId && localities.some((l) => l.id === cookieLocalityId) ? cookieLocalityId : null;
+  if (!effectiveLocalityId && localities.length > 0) {
+    effectiveLocalityId =
+      data.profile?.locality_id && localities.some((l) => l.id === data.profile!.locality_id!)
+        ? data.profile.locality_id
+        : localities[0].id;
   }
+  const syncCookieToLocalityId =
+    effectiveLocalityId && effectiveLocalityId !== cookieLocalityId ? effectiveLocalityId : null;
 
   return (
     <QueryProvider>
       <DisplaySettingsProvider>
         <LocalityProvider
           initialCurrentLocalityId={effectiveLocalityId}
+          syncCookieToLocalityId={syncCookieToLocalityId}
           initialAccessibleLocalities={localities}
           initialAreas={areas}
           initialPrefectures={prefectures}
@@ -73,6 +70,7 @@ export default async function DashboardLayout({
             <Nav
               displayName={data.displayName}
               roleLabel={data.roleLabel}
+              globalRoleLabel={data.globalRoleLabel}
               localityName={data.localityName}
               showDebug={data.profile?.role === "admin"}
               showRolesManagement={data.profile?.global_role === "admin"}

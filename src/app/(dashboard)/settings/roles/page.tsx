@@ -14,7 +14,7 @@ export default async function RolesPage() {
   const supabase = await createClient();
   const { data: profilesRaw } = await supabase
     .from("profiles")
-    .select("id, email, full_name, role, global_role, main_district_id, districts!main_district_id(locality_id, localities(name))")
+    .select("id, email, full_name, role, global_role, main_district_id, locality_id, districts!main_district_id(locality_id, localities(name)), localities(name)")
     .order("created_at", { ascending: true });
 
   type Row = {
@@ -24,7 +24,9 @@ export default async function RolesPage() {
     role: string;
     global_role: string | null;
     main_district_id: string | null;
+    locality_id: string | null;
     districts: { locality_id: string | null; localities: { name: string } | null } | null;
+    localities: { name: string } | null;
   };
   const profiles = ((profilesRaw ?? []) as unknown as Row[]).map((row) => ({
     id: row.id,
@@ -32,7 +34,8 @@ export default async function RolesPage() {
     full_name: row.full_name,
     role: row.role,
     global_role: row.global_role,
-    main_locality_name: row.districts?.localities?.name ?? null,
+    locality_id: row.locality_id,
+    main_locality_name: row.localities?.name ?? row.districts?.localities?.name ?? null,
   }));
 
   const [areas, localities] = await Promise.all([getCachedAreas(), getCachedLocalities()]);

@@ -171,6 +171,8 @@ export interface Profile {
   global_role?: GlobalRole | null;
   full_name: string | null;
   main_district_id: string | null;
+  /** サイト初回表示のデフォルト地方。040 で追加 */
+  locality_id?: string | null;
   created_at?: string;
   updated_at?: string;
 }
