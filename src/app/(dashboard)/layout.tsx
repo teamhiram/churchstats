@@ -40,9 +40,9 @@ export default async function DashboardLayout({
     getCachedAreas(),
     getCachedPrefectures(),
     getCurrentLocalityId(),
-    data.profile?.role === "admin" ? getMeetingDuplicateGroupCount() : Promise.resolve(0),
-    data.profile?.role === "admin" ? getDuplicateAttendanceGroupCount() : Promise.resolve(0),
-    data.profile?.role === "admin" ? getEnrollmentUncertainCount() : Promise.resolve(0),
+    data.profile?.global_role === "admin" ? getMeetingDuplicateGroupCount() : Promise.resolve(0),
+    data.profile?.global_role === "admin" ? getDuplicateAttendanceGroupCount() : Promise.resolve(0),
+    data.profile?.global_role === "admin" ? getEnrollmentUncertainCount() : Promise.resolve(0),
   ]);
   // Cookie は Server Component では変更できないため、無効 or 未設定時は effective だけ計算し、
   // クライアントで setCurrentLocalityIdAction を一度呼んで Cookie を同期する
@@ -73,12 +73,12 @@ export default async function DashboardLayout({
               roleLabel={data.roleLabel}
               globalRoleLabel={data.globalRoleLabel}
               localityName={data.localityName}
-              showDebug={data.profile?.role === "admin"}
+              showDebug={data.profile?.global_role === "admin"}
               showRolesManagement={data.profile?.global_role === "admin"}
             />
             <main className="flex-1 flex flex-col min-h-0 pt-[var(--header-height)] px-0 pb-[calc(1.875rem+env(safe-area-inset-bottom,0px))] md:pb-6 overflow-hidden">
               <MainContentWrapper>
-                <SettingsShell showDebug={data.profile?.role === "admin"} showRolesManagement={data.profile?.global_role === "admin"} meetingDuplicateGroupCount={meetingDuplicateGroupCount} duplicateAttendanceGroupCount={duplicateAttendanceGroupCount} enrollmentUncertainCount={enrollmentUncertainCount}>
+                <SettingsShell showDebug={data.profile?.global_role === "admin"} showRolesManagement={data.profile?.global_role === "admin"} meetingDuplicateGroupCount={meetingDuplicateGroupCount} duplicateAttendanceGroupCount={duplicateAttendanceGroupCount} enrollmentUncertainCount={enrollmentUncertainCount}>
                   {children}
                 </SettingsShell>
               </MainContentWrapper>

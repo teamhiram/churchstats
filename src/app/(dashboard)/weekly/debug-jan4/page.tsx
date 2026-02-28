@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserWithProfile } from "@/lib/cachedData";
 import { getDebugJan4SundayAttendees, getDebugSundayAttendees } from "../actions";
 
-/** デバッグページは管理者のみアクセス可能 */
+/** デバッグページはグローバル管理者のみアクセス可能 */
 export default async function DebugJan4Page({
   searchParams,
 }: {
@@ -10,7 +10,7 @@ export default async function DebugJan4Page({
 }) {
   const { user, profile } = await getCurrentUserWithProfile();
   if (!user) redirect("/login");
-  if (profile?.role !== "admin") redirect("/weekly");
+  if (profile?.global_role !== "admin") redirect("/weekly");
 
   const params = await searchParams;
   const data = params.date

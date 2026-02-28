@@ -94,22 +94,20 @@ export function SettingsShell({
           />
         </>
       )}
-      <div className="flex-1 min-w-0 overflow-auto flex items-stretch">
+        <div className="flex-1 min-w-0 overflow-auto flex items-stretch">
         {!sidebarOpen && (
-          <div className="shrink-0 w-10 md:w-12 flex flex-col border-r border-slate-200 bg-slate-50/80">
-            <div className="flex justify-end p-2 border-b border-slate-200 bg-white/80">
-              <button
-                type="button"
-                onClick={() => setSidebarOpen(true)}
-                className="p-2 rounded-lg text-slate-500 hover:bg-slate-200 hover:text-slate-700 touch-target"
-                aria-label="メニューを開く"
-                title="メニュー"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
+          <div className="shrink-0 flex items-start pt-2 md:pt-4 pl-1 md:pl-2">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="flex items-center justify-center w-9 h-9 rounded-full border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-700 hover:border-slate-400 touch-target shadow-sm"
+              aria-label="メニューを開く"
+              title="メニューを開く"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
         )}
         <div className="flex-1 min-w-0 overflow-auto px-4 py-4 md:px-6 md:py-5">

@@ -3,7 +3,7 @@ import { getCurrentUserWithProfile } from "@/lib/cachedData";
 import { getDuplicateMainAttendance } from "../actions";
 import { DuplicatesList } from "./DuplicatesList";
 
-/** 重複出席ページは管理者のみアクセス可能 */
+/** 重複出席ページはグローバル管理者のみアクセス可能 */
 export default async function DuplicatesPage({
   searchParams,
 }: {
@@ -11,7 +11,7 @@ export default async function DuplicatesPage({
 }) {
   const { user, profile } = await getCurrentUserWithProfile();
   if (!user) redirect("/login");
-  if (profile?.role !== "admin") redirect("/weekly");
+  if (profile?.global_role !== "admin") redirect("/weekly");
 
   const params = await searchParams;
   const year = params.year && Number.isFinite(Number(params.year)) ? Number(params.year) : new Date().getFullYear();
