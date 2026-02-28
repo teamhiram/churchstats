@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { MeetingsListFilters } from "./MeetingsListFilters";
 import { MeetingsListTable } from "./MeetingsListTable";
@@ -69,15 +68,6 @@ export function MeetingsListPageClient({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <Link
-          href={`/meetings/sunday?year=${year}`}
-          className="inline-flex items-center justify-center px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg touch-target hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-500"
-        >
-          ← 出欠登録
-        </Link>
-      </div>
-
       <MeetingsListFilters
         year={year}
         localOnly={localOnly}
@@ -85,7 +75,7 @@ export function MeetingsListPageClient({
       />
 
       <p className="text-xs text-slate-500">
-        隔週をクリック/タップすると、各種集会の出席者が表示されます。
+        各週をクリック/タップすると、各種集会の出席者が表示されます。
       </p>
 
       <MeetingsListTable

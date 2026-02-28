@@ -8,7 +8,7 @@ import { LocalityProvider } from "@/contexts/LocalityContext";
 import { getCurrentUserWithProfile, getCachedLocalities, getCachedAreas, getCachedPrefectures } from "@/lib/cachedData";
 import { getCurrentLocalityId } from "@/lib/locality";
 import { getMeetingDuplicateGroupCount } from "@/app/(dashboard)/debug/meeting-duplicates/actions";
-import { getDuplicateAttendanceGroupCount } from "@/app/(dashboard)/meetings/list/actions";
+import { getDuplicateAttendanceGroupCount } from "@/app/(dashboard)/weekly/actions";
 import { getEnrollmentUncertainCount } from "@/app/(dashboard)/debug/enrollment-uncertain/actions";
 
 export const dynamic = "force-dynamic";
@@ -69,6 +69,7 @@ export default async function DashboardLayout({
           <div className="min-h-screen flex flex-col bg-slate-50">
             <Nav
               displayName={data.displayName}
+              email={data.email}
               roleLabel={data.roleLabel}
               globalRoleLabel={data.globalRoleLabel}
               localityName={data.localityName}

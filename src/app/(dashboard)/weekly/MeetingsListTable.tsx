@@ -2,16 +2,9 @@
 
 import { Fragment, useState } from "react";
 import Link from "next/link";
+import { EditPencilIcon } from "@/components/icons/EditPencilIcon";
 import { getWeekDetail } from "./actions";
 import type { WeekRow, WeekDetail } from "./types";
-
-function PencilIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-      <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
-    </svg>
-  );
-}
 
 type Props = {
   weeks: WeekRow[];
@@ -93,12 +86,12 @@ export function MeetingsListTable({
                               <p className="font-bold text-slate-700 mb-1 flex items-center gap-1.5">
                                 主日集会
                                 <Link
-                                  href={`/meetings/sunday?week_start=${row.weekStart}`}
+                                  href={`/attendance/lordsday?week_start=${row.weekStart}`}
                                   onClick={(e) => e.stopPropagation()}
                                   className="text-slate-400 hover:text-primary-600 transition-colors"
                                   title="出欠を編集"
                                 >
-                                  <PencilIcon />
+                                  <EditPencilIcon className="w-3.5 h-3.5" aria-hidden />
                                 </Link>
                               </p>
                               <div className="space-y-1.5">
@@ -126,12 +119,12 @@ export function MeetingsListTable({
                               <p className="font-bold text-slate-700 mb-1 flex items-center gap-1.5">
                                 祈りの集会
                                 <Link
-                                  href={`/meetings/prayer?week_start=${row.weekStart}`}
+                                  href={`/attendance/prayer?week_start=${row.weekStart}`}
                                   onClick={(e) => e.stopPropagation()}
                                   className="text-slate-400 hover:text-primary-600 transition-colors"
                                   title="出欠を編集"
                                 >
-                                  <PencilIcon />
+                                  <EditPencilIcon className="w-3.5 h-3.5" aria-hidden />
                                 </Link>
                               </p>
                               <p className="text-slate-800">
@@ -146,12 +139,12 @@ export function MeetingsListTable({
                               <p className="font-bold text-slate-700 mb-1 flex items-center gap-1.5">
                                 小組
                                 <Link
-                                  href={`/meetings/small-group?week_start=${row.weekStart}`}
+                                  href={`/attendance/small-group?week_start=${row.weekStart}`}
                                   onClick={(e) => e.stopPropagation()}
                                   className="text-slate-400 hover:text-primary-600 transition-colors"
                                   title="出欠を編集"
                                 >
-                                  <PencilIcon />
+                                  <EditPencilIcon className="w-3.5 h-3.5" aria-hidden />
                                 </Link>
                               </p>
                               <p className="text-slate-800">
@@ -164,12 +157,12 @@ export function MeetingsListTable({
                               <p className="font-bold text-slate-700 mb-1 flex items-center gap-1.5">
                                 派遣先
                                 <Link
-                                  href={`/meetings/organic?week_start=${row.weekStart}`}
+                                  href={`/attendance/organic?week_start=${row.weekStart}`}
                                   onClick={(e) => e.stopPropagation()}
                                   className="text-slate-400 hover:text-primary-600 transition-colors"
                                   title="出欠を編集"
                                 >
-                                  <PencilIcon />
+                                  <EditPencilIcon className="w-3.5 h-3.5" aria-hidden />
                                 </Link>
                               </p>
                               <p className="text-slate-800">

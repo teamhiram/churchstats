@@ -85,7 +85,7 @@ export default async function DebugMeetingsListPage() {
                 </td>
                 <td className="px-3 py-2">
                   <Link
-                    href={`/meetings/${row.id}`}
+                    href={`/attendance/${row.id}`}
                     className="text-primary-600 hover:underline"
                   >
                     詳細

@@ -38,7 +38,7 @@ export default async function SmallGroupAttendancePage({
     q.set("district_id", "__all__");
     if (params.year != null) q.set("year", params.year);
     if (params.week_start != null) q.set("week_start", params.week_start);
-    redirect(`/meetings/small-group?${q.toString()}`);
+    redirect(`/attendance/small-group?${q.toString()}`);
   }
 
   return (

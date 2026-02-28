@@ -10,7 +10,7 @@ export default async function DebugJan4Page({
 }) {
   const { user, profile } = await getCurrentUserWithProfile();
   if (!user) redirect("/login");
-  if (profile?.role !== "admin") redirect("/meetings/list");
+  if (profile?.role !== "admin") redirect("/weekly");
 
   const params = await searchParams;
   const data = params.date
@@ -59,7 +59,7 @@ export default async function DebugJan4Page({
       {!params.date && (
         <p className="text-sm text-slate-500">
           週別集計で 37→39 のように差が出る週の日曜日が分かれば、{" "}
-          <code className="bg-slate-100 px-1 rounded">/meetings/list/debug-jan4?date=yyyy-MM-dd</code>{" "}
+          <code className="bg-slate-100 px-1 rounded">/weekly/debug-jan4?date=yyyy-MM-dd</code>{" "}
           でその週の非ローカル出席者を確認できます。
         </p>
       )}

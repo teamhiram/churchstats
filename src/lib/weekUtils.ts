@@ -101,6 +101,14 @@ export function formatDateYmd(d: Date): string {
   return format(d, "yyyy-MM-dd");
 }
 
+/** 日付文字列（yyyy-MM-dd）から、その日が含まれる週の日曜日を yyyy-MM-dd で返す。派遣記録の week_start 算出に使用。 */
+export function getWeekStartForDate(dateStr: string): string {
+  const [y, m, d] = dateStr.slice(0, 10).split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const sunday = addDays(date, -getDay(date));
+  return format(sunday, "yyyy-MM-dd");
+}
+
 /** 週の日曜（yyyy-MM-dd, week_start）から、その週の日曜日を yyyy/MM/dd で返す。主日表示用。 */
 export function getSundayFromWeekStart(weekStartIso: string): string {
   const [y, m, d] = weekStartIso.split("-").map(Number);

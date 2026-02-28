@@ -11,17 +11,17 @@ import type { MembersApiResponse } from "@/app/api/members/route";
 import { AccountSignOut } from "@/app/(dashboard)/settings/account/AccountSignOut";
 
 const baseLinks: { href: string; label: string }[] = [
-  { href: "/dashboard", label: "ダッシュボード" },
-  { href: "/meetings/list", label: "週別集計" },
-  { href: "/meetings", label: "出欠登録" },
-  { href: "/members", label: "名簿管理" },
+  { href: "/charts", label: "チャート" },
+  { href: "/weekly", label: "週別集計" },
+  { href: "/attendance", label: "出欠" },
+  { href: "/members", label: "名簿" },
 ];
 
-/** モバイルフッター用: 速報｜週別｜出欠｜名簿｜設定 */
+/** モバイルフッター用: チャート｜週別｜出欠｜名簿｜設定 */
 const footerMainItems = [
-  { href: "/dashboard", label: "速報" },
-  { href: "/meetings/list", label: "週別" },
-  { href: "/meetings", label: "出欠" },
+  { href: "/charts", label: "チャート" },
+  { href: "/weekly", label: "週別" },
+  { href: "/attendance", label: "出欠" },
   { href: "/members", label: "名簿" },
 ] as const;
 
@@ -36,11 +36,13 @@ const settingsModalDebugItems = [
   { href: "/debug/meetings-list", label: "集会一覧" },
   { href: "/debug/enrollment-uncertain", label: "在籍期間不確定" },
   { href: "/debug/meeting-duplicates", label: "集会重複検知" },
-  { href: "/meetings/list/duplicates", label: "重複出席" },
+  { href: "/weekly/duplicates", label: "重複出席" },
 ] as const;
 
 type NavProps = {
   displayName?: string | null;
+  /** ログイン中のメールアドレス（アカウントモーダル表示用） */
+  email?: string | null;
   roleLabel?: string;
   /** グローバル権限がある場合のみ渡す */
   globalRoleLabel?: string | null;
@@ -53,7 +55,7 @@ type NavProps = {
 /** 設定画面（サイドバー付き）のパスか */
 function isSettingsSectionPath(pathname: string, showDebug: boolean) {
   if (pathname.startsWith("/settings")) return true;
-  if (showDebug && (pathname.startsWith("/debug") || pathname.startsWith("/meetings/list/duplicates"))) return true;
+  if (showDebug && (pathname.startsWith("/debug") || pathname.startsWith("/weekly/duplicates"))) return true;
   return false;
 }
 
@@ -86,7 +88,7 @@ function SearchIcon({ className }: { className?: string }) {
   );
 }
 
-export function Nav({ displayName, roleLabel, globalRoleLabel, localityName: _localityName, showDebug = false, showRolesManagement = false }: NavProps) {
+export function Nav({ displayName, email, roleLabel, globalRoleLabel, localityName: _localityName, showDebug = false, showRolesManagement = false }: NavProps) {
   const pathname = usePathname();
   const { fullWidth } = useDisplaySettings();
   const { currentLocalityName, currentLocalityId, localitiesByArea, accessibleLocalities, setCurrentLocalityId } = useLocality();
@@ -287,17 +289,14 @@ export function Nav({ displayName, roleLabel, globalRoleLabel, localityName: _lo
             召会生活統計
           </Link>
           <span className="ml-1.5 inline-flex items-baseline shrink-0">
-            <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.21.0</span>
+            <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.22.0</span>
           </span>
         </div>
         {showLocalityNameOnly && (
           <span className="flex items-center gap-1 px-2 py-1 text-slate-300 text-xs max-w-[50%] min-w-0 shrink-0 truncate" aria-label="表示中の地方とログイン中ユーザ">
             <span className="truncate">{currentLocalityName ?? "—"}</span>
             {displayName != null && displayName !== "" && (
-              <>
-                <span className="text-slate-500 shrink-0" aria-hidden>·</span>
-                <span className="truncate">{displayName}</span>
-              </>
+              <span className="truncate">{displayName}</span>
             )}
           </span>
         )}
@@ -317,10 +316,7 @@ export function Nav({ displayName, roleLabel, globalRoleLabel, localityName: _lo
               </svg>
             </button>
             {displayName != null && displayName !== "" && (
-              <>
-                <span className="text-slate-500 text-xs shrink-0" aria-hidden>·</span>
-                <span className="truncate text-slate-300 text-xs py-1">{displayName}</span>
-              </>
+              <span className="truncate text-slate-300 text-xs py-1">{displayName}</span>
             )}
           </span>
         )}
@@ -337,15 +333,12 @@ export function Nav({ displayName, roleLabel, globalRoleLabel, localityName: _lo
             <Link href="/" className="text-white text-sm font-semibold whitespace-nowrap hover:text-white/90">
               召会生活統計
             </Link>
-            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.21.0</span>
+            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.22.0</span>
             {showLocalityNameOnly && !searchOpen && (
               <span className="flex items-center gap-1 px-2 py-1 text-slate-300 text-xs min-w-0 max-w-[16rem]" aria-label="表示中の地方とログイン中ユーザ">
                 <span className="truncate">{currentLocalityName ?? "—"}</span>
                 {displayName != null && displayName !== "" && (
-                  <>
-                    <span className="text-slate-500 shrink-0" aria-hidden>·</span>
-                    <span className="truncate">{displayName}</span>
-                  </>
+                  <span className="truncate">{displayName}</span>
                 )}
               </span>
             )}
@@ -365,10 +358,7 @@ export function Nav({ displayName, roleLabel, globalRoleLabel, localityName: _lo
                   </svg>
                 </button>
                 {displayName != null && displayName !== "" && (
-                  <>
-                    <span className="text-slate-500 text-xs shrink-0" aria-hidden>·</span>
-                    <span className="truncate text-slate-300 text-xs max-w-[8rem]">{displayName}</span>
-                  </>
+                  <span className="truncate text-slate-300 text-xs max-w-[8rem]">{displayName}</span>
                 )}
               </div>
             )}
@@ -424,9 +414,9 @@ export function Nav({ displayName, roleLabel, globalRoleLabel, localityName: _lo
                   const { href, label } = item;
                   const isActive =
                     pathname === href ||
-                    (href === "/meetings" &&
-                      pathname.startsWith("/meetings") &&
-                      !pathname.startsWith("/meetings/list"));
+                    (href === "/attendance" &&
+                      pathname.startsWith("/attendance") &&
+                      !pathname.startsWith("/weekly"));
                   return (
                     <Link
                       key={href}
@@ -617,6 +607,10 @@ export function Nav({ displayName, roleLabel, globalRoleLabel, localityName: _lo
                     <span className="font-medium text-slate-500">氏名</span>
                     <span className="ml-2 text-slate-800">{displayName && displayName !== "" ? displayName : "—"}</span>
                   </p>
+                  <p>
+                    <span className="font-medium text-slate-500">メールアドレス</span>
+                    <span className="ml-2 text-slate-800 break-all">{email && email !== "" ? email : "—"}</span>
+                  </p>
                   {globalRoleLabel != null && globalRoleLabel !== "" && (
                     <p>
                       <span className="font-medium text-slate-500">グローバルロール</span>
@@ -639,14 +633,14 @@ export function Nav({ displayName, roleLabel, globalRoleLabel, localityName: _lo
         </>
       )}
 
-      {/* モバイル: 固定フッター（速報｜週別｜出欠｜名簿｜設定｜アカウント） */}
+      {/* モバイル: 固定フッター（チャート｜週別｜出欠｜名簿｜設定｜アカウント） */}
       <footer className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-800 pb-[env(safe-area-inset-bottom)]">
         <nav className={`flex h-[1.875rem] items-stretch ${contentWidthClass(fullWidth)}`} aria-label="メインメニュー">
           {footerMainItems.map(({ href, label }) => {
             const isActive =
-              (href === "/dashboard" && pathname === "/dashboard") ||
-              (href === "/meetings/list" && pathname.startsWith("/meetings/list")) ||
-              (href === "/meetings" && pathname.startsWith("/meetings") && !pathname.startsWith("/meetings/list")) ||
+              (href === "/charts" && pathname === "/charts") ||
+              (href === "/weekly" && pathname.startsWith("/weekly")) ||
+              (href === "/attendance" && pathname.startsWith("/attendance") && !pathname.startsWith("/weekly")) ||
               (href === "/members" && pathname.startsWith("/members"));
             return (
               <Link
@@ -833,7 +827,7 @@ export function Nav({ displayName, roleLabel, globalRoleLabel, localityName: _lo
                     }
                   }}
                   placeholder="名前・ふりがなで検索…"
-                  className="w-full h-10 pl-3 pr-9 py-2 rounded-lg border border-slate-300 bg-slate-50 text-slate-900 placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full h-10 pl-3 pr-9 py-2 rounded-lg border border-slate-300 bg-slate-50 text-slate-900 placeholder-slate-400 text-base focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   aria-label="メンバー検索"
                 />
                 <SearchIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />

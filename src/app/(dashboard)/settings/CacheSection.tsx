@@ -27,7 +27,7 @@ export function CacheSection() {
     <section>
       <h2 className="font-semibold text-slate-800 mb-4">キャッシュ</h2>
       <p className="text-slate-600 text-sm mb-3">
-        ダッシュボードや集会一覧などは表示を速くするためキャッシュしています。「キャッシュをリフレッシュ」を押すとキャッシュをクリアし、次回表示時に最新のデータを再取得します。
+        チャートや集会一覧などは表示を速くするためキャッシュしています。「キャッシュをリフレッシュ」を押すとキャッシュをクリアし、次回表示時に最新のデータを再取得します。
       </p>
       <div className="flex items-center gap-3">
         <button

@@ -17,6 +17,7 @@
 - **Type Safety**: TypeScriptを使用している場合、`any` を禁止し、型定義を厳格に行うこと。
 - **Error Handling**: ユーザーが忘れていても、必ずtry-catchやエラー境界を設定し、アプリが落ちないようにすること。
 - **Directory Structure**: フォルダ構成が乱れてきたら、整理を提案すること。
+- **SQL ファイル**: 新規作成する SQL ファイルの 1 行目に、ファイル名をコメントで記載すること。例: `-- 041_locality_rls_use_profile_locality_id.sql`
 
 ## Response Style
 - 実装前に「何を、なぜ、どう変えるか」を3行以内で宣言してから着手してください。

@@ -65,8 +65,7 @@ type Props = {
   weekOptions: WeekOption[];
 };
 
-const DISPATCH_OPTIONS: { value: "" | DispatchType; label: string }[] = [
-  { value: "", label: "選択" },
+const DISPATCH_OPTIONS: { value: DispatchType; label: string }[] = [
   { value: "message", label: DISPATCH_TYPE_LABELS.message },
   { value: "phone", label: DISPATCH_TYPE_LABELS.phone },
   { value: "in_person", label: DISPATCH_TYPE_LABELS.in_person },
@@ -512,7 +511,7 @@ export function OrganicDispatchForm({
     setRecordPopupMemberId(memberId);
     setPopupForm({
       type: (localType.get(memberId) ?? "") as "" | DispatchType,
-      date: localDate.get(memberId) ?? "",
+      date: localDate.get(memberId) ?? weekStartIso,
       memo: localMemo.get(memberId) ?? "",
       visitors: localVisitors.get(memberId) ?? [],
     });
@@ -532,7 +531,11 @@ export function OrganicDispatchForm({
     const { type, date, memo, visitors } = popupForm;
     const allFilled = type !== "" && date.trim() !== "" && memo.trim() !== "";
     if (!allFilled) {
-      setSaveError("派遣種類・派遣日・メモの3項目をすべて入力してください。");
+      if (!type) {
+        setSaveError("派遣種類を選択してください。");
+      } else {
+        setSaveError("派遣日・メモをすべて入力してください。");
+      }
       return;
     }
     setSaveError(null);
@@ -910,17 +913,22 @@ export function OrganicDispatchForm({
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">派遣種類</label>
-                <select
-                  value={popupForm.type}
-                  onChange={(e) => setPopupForm((prev) => prev && { ...prev, type: (e.target.value || "") as "" | DispatchType })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
-                >
+                <div className="flex flex-wrap gap-2" role="group" aria-label="派遣種類">
                   {DISPATCH_OPTIONS.map((opt) => (
-                    <option key={opt.value || "empty"} value={opt.value}>
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setPopupForm((prev) => prev && { ...prev, type: opt.value })}
+                      className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors touch-target ${
+                        popupForm.type === opt.value
+                          ? `${DISPATCH_TYPE_TEXT_COLORS[opt.value]} bg-violet-100 border-2 border-violet-400`
+                          : "bg-slate-100 text-slate-700 border-2 border-transparent hover:bg-slate-200"
+                      }`}
+                    >
                       {opt.label}
-                    </option>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
 
               <div>
@@ -980,18 +988,15 @@ export function OrganicDispatchForm({
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">派遣日</label>
-                <select
+                <input
+                  type="date"
                   value={popupForm.date}
                   onChange={(e) => setPopupForm((prev) => prev && { ...prev, date: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
-                >
-                  <option value="">—</option>
-                  {getDaysInWeek(weekStartIso).map((day) => (
-                    <option key={day.value} value={day.value}>
-                      {day.label}
-                    </option>
-                  ))}
-                </select>
+                  min={weekStartIso}
+                  max={getDaysInWeek(weekStartIso)[6]?.value ?? weekStartIso}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target bg-white"
+                />
+                <p className="text-xs text-slate-500 mt-0.5">選択した週の範囲内の日付を選べます</p>
               </div>
 
               <div>

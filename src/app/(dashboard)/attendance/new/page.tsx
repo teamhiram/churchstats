@@ -66,7 +66,7 @@ export default function NewMeetingPage() {
       return;
     }
     if (meeting?.id) {
-      router.push(`/meetings/${meeting.id}`);
+      router.push(`/attendance/${meeting.id}`);
       router.refresh();
     }
   };
@@ -74,7 +74,7 @@ export default function NewMeetingPage() {
   return (
     <div className="space-y-6 max-w-lg">
       <div className="flex items-center gap-2">
-        <Link href="/meetings" className="text-slate-600 hover:text-slate-800 text-sm">
+        <Link href="/attendance" className="text-slate-600 hover:text-slate-800 text-sm">
           ← 週別集計
         </Link>
       </div>
