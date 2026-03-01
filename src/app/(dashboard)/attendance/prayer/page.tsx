@@ -26,19 +26,21 @@ export default async function PrayerMeetingPage({
           ? defaultWeekStart
           : formatDateYmd(sundayWeeks[0]?.weekStart ?? new Date(initialYear, 0, 1)));
 
-  const { user, profile, districts } = await getMeetingsLayoutData();
+  const { user, profile, districts, allDistricts } = await getMeetingsLayoutData();
   if (!user) redirect("/login");
 
   const supabase = await createClient();
   const { data: groups } = await supabase.from("groups").select("id, name, district_id").order("name");
 
   const layoutDefault = (profile?.main_district_id && districts.some((d) => d.id === profile.main_district_id) ? profile.main_district_id : null) ?? districts[0]?.id ?? "";
-  const defaultDistrictId = effectiveDistrictIdForCurrentLocality(params.district_id, { districts, defaultDistrictId: layoutDefault });
+  const defaultDistrictId = effectiveDistrictIdForCurrentLocality(params.district_id, { districts: allDistricts, defaultDistrictId: layoutDefault }, { allowAllDistricts: true });
+
+  const districtsForComponent = defaultDistrictId === "__all__" ? allDistricts : districts;
 
   return (
     <div className="space-y-6">
       <PrayerMeetingAttendance
-        districts={districts}
+        districts={districtsForComponent}
         groups={groups ?? []}
         defaultDistrictId={defaultDistrictId}
         initialYear={initialYear}

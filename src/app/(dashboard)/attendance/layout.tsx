@@ -8,14 +8,14 @@ export default async function MeetingsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, profile, districts, defaultDistrictId, currentLocalityId } = await getMeetingsLayoutData();
+  const { user, profile, districts, allDistricts, defaultDistrictId, currentLocalityId } = await getMeetingsLayoutData();
   if (!user) redirect("/login");
 
   return (
     <div className="space-y-0" key={currentLocalityId ?? "all"}>
       <div className="-mx-4 md:-mx-6">
         <MeetingsFilterBar
-          districts={districts}
+          districts={allDistricts}
           defaultDistrictId={defaultDistrictId}
         />
         <MeetingTabs />

@@ -180,6 +180,8 @@ export type MeetingsLayoutData = {
   user: { id: string } | null;
   profile: { role: Role; main_district_id: string | null } | null;
   districts: { id: string; name: string; locality_id?: string }[];
+  /** 地方フィルタ前の全地区（「全ての地区」表示用）。canSeeAllDistricts でない場合は districts と同一ソース。 */
+  allDistricts: { id: string; name: string; locality_id?: string }[];
   defaultDistrictId: string;
   currentLocalityId: string | null;
 };
@@ -188,7 +190,7 @@ export type MeetingsLayoutData = {
 export const getMeetingsLayoutData = cache(async (): Promise<MeetingsLayoutData> => {
   const { user, profile } = await getCurrentUserWithProfile();
   if (!user) {
-    return { user: null, profile: null, districts: [], defaultDistrictId: "", currentLocalityId: null };
+    return { user: null, profile: null, districts: [], allDistricts: [], defaultDistrictId: "", currentLocalityId: null };
   }
 
   const currentLocalityId = await getEffectiveCurrentLocalityId();
@@ -233,6 +235,7 @@ export const getMeetingsLayoutData = cache(async (): Promise<MeetingsLayoutData>
     user: { id: user.id },
     profile: profile ? { role: profile.role, main_district_id: profile.main_district_id } : null,
     districts: filtered,
+    allDistricts: districtsList,
     defaultDistrictId,
     currentLocalityId,
   };
