@@ -47,7 +47,7 @@ function LoginFormInner() {
       <div className="text-center">
         <h1 className="text-2xl font-bold text-slate-800">召会生活統計</h1>
         <span className="inline-block mt-2 px-3 py-1.5 text-sm font-semibold rounded-lg bg-primary-600 text-white" aria-label="バージョン">
-          v0.23.0
+          v0.23.1
         </span>
       </div>
       <p className="text-center text-slate-600 text-sm">ログイン</p>
