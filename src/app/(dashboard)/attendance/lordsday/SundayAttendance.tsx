@@ -1261,53 +1261,55 @@ const { data: guestData } = await supabase
             </button>
             {accordionOpen && (
               <div className="border-t border-slate-200 px-4 pb-4 pt-2">
-                <div className="flex flex-wrap items-end gap-2 sm:gap-3">
-                  <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-initial">
-                    <label className="hidden sm:inline text-sm font-medium text-slate-700 shrink-0">並び順</label>
-                    <select
-                      value={sortOrder}
-                      onChange={(e) => setSortOrder(e.target.value as SortOption)}
-                      className="min-w-0 flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
-                    >
-                      {(Object.keys(SORT_LABELS) as SortOption[]).map((k) => (
-                        <option key={k} value={k}>{SORT_LABELS[k]}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-initial">
-                    <label className="hidden sm:inline text-sm font-medium text-slate-700 shrink-0">グルーピング1層目</label>
-                    <select
-                      value={group1}
-                      onChange={(e) => {
-                        const v = e.target.value as GroupOption | "";
-                        setGroup1(v);
-                        if (v === group2) setGroup2("");
-                      }}
-                      className="min-w-0 flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
-                    >
-                      <option value="">なし</option>
-                      {(Object.keys(GROUP_LABELS) as GroupOption[]).map((k) => (
-                        <option key={k} value={k}>{GROUP_LABELS[k]}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {group1 && (
+                <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-end gap-2 sm:gap-3">
+                  <div className="flex items-end gap-2 flex-shrink-0">
                     <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-initial">
-                      <label className="hidden sm:inline text-sm font-medium text-slate-700 shrink-0">グルーピング2層目</label>
+                      <label className="hidden sm:inline text-sm font-medium text-slate-700 shrink-0">並び順</label>
                       <select
-                        value={group2}
-                        onChange={(e) => setGroup2(e.target.value as GroupOption | "")}
+                        value={sortOrder}
+                        onChange={(e) => setSortOrder(e.target.value as SortOption)}
+                        className="min-w-0 flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+                      >
+                        {(Object.keys(SORT_LABELS) as SortOption[]).map((k) => (
+                          <option key={k} value={k}>{SORT_LABELS[k]}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-initial">
+                      <label className="hidden sm:inline text-sm font-medium text-slate-700 shrink-0">グルーピング1層目</label>
+                      <select
+                        value={group1}
+                        onChange={(e) => {
+                          const v = e.target.value as GroupOption | "";
+                          setGroup1(v);
+                          if (v === group2) setGroup2("");
+                        }}
                         className="min-w-0 flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
                       >
                         <option value="">なし</option>
-                        {group2Options.map((k) => (
+                        {(Object.keys(GROUP_LABELS) as GroupOption[]).map((k) => (
                           <option key={k} value={k}>{GROUP_LABELS[k]}</option>
                         ))}
                       </select>
                     </div>
-                  )}
+                    {group1 && (
+                      <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-initial">
+                        <label className="hidden sm:inline text-sm font-medium text-slate-700 shrink-0">グルーピング2層目</label>
+                        <select
+                          value={group2}
+                          onChange={(e) => setGroup2(e.target.value as GroupOption | "")}
+                          className="min-w-0 flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+                        >
+                          <option value="">なし</option>
+                          {group2Options.map((k) => (
+                            <option key={k} value={k}>{GROUP_LABELS[k]}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
                   {isEditMode && (
-                    <div className="min-w-[200px] flex-1 relative">
+                    <div className="w-full sm:min-w-[200px] sm:flex-1 relative">
                       <input
                         type="text"
                         value={searchQuery}
