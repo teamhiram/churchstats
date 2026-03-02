@@ -5,11 +5,11 @@ import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { Toggle } from "@/components/Toggle";
 import { formatDateYmd, getDaysInWeek } from "@/lib/weekUtils";
-import { getGojuonRowLabel, GOJUON_ROW_LABELS } from "@/lib/furigana";
+import { getGojuonRowLabel, GOJUON_ROW_LABELS, hiraganaToKatakana, escapeForIlike } from "@/lib/furigana";
 import { CATEGORY_LABELS } from "@/types/database";
 import type { Category } from "@/types/database";
 import { isInEnrollmentPeriod } from "@/lib/enrollmentPeriod";
-import { removeDistrictRegularMember } from "@/app/(dashboard)/settings/organization/actions";
+import { useAttendanceEditMode } from "../AttendanceEditModeContext";
 
 type District = { id: string; name: string };
 type Group = { id: string; name: string; district_id: string };
@@ -96,16 +96,19 @@ export function PrayerMeetingAttendance({
   }, [isEditMode]);
 
   const [sectionOpen, setSectionOpen] = useState<Record<string, boolean>>({});
-  const [accordionOpen, setAccordionOpen] = useState(false);
+  const [accordionOpen, setAccordionOpen] = useState(true);
   const [saving, setSaving] = useState(false);
+  const { setEditMode: setGlobalEditMode } = useAttendanceEditMode();
+  useEffect(() => {
+    setGlobalEditMode(isEditMode);
+    return () => setGlobalEditMode(false);
+  }, [isEditMode, setGlobalEditMode]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [enrollmentBlockedMemberId, setEnrollmentBlockedMemberId] = useState<string | null>(null);
-  const [excludedMemberIds, setExcludedMemberIds] = useState<Set<string>>(new Set());
-  const [excludedForDeletion, setExcludedForDeletion] = useState<Map<string, string>>(new Map());
-  const [regularListExcludePopup, setRegularListExcludePopup] = useState<{ memberId: string; member: MemberRow; districtId: string } | null>(null);
   const [memberTierMap, setMemberTierMap] = useState<Map<string, "regular" | "semi" | "pool">>(new Map());
   const [guestIds, setGuestIds] = useState<Set<string>>(new Set());
   const [showDeleteRecordConfirm, setShowDeleteRecordConfirm] = useState(false);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
 
   const districtMap = useMemo(() => new Map(districts.map((d) => [d.id, d.name])), [districts]);
   const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
@@ -368,13 +371,17 @@ export function PrayerMeetingAttendance({
       setSearchResults([]);
       return;
     }
+    const q = searchQuery.trim();
+    const qKata = hiraganaToKatakana(q);
+    const patFurigana = `%${escapeForIlike(qKata)}%`;
+    const patName = `%${escapeForIlike(q)}%`;
     const supabase = createClient();
     supabase
       .from("members")
       .select(
         "id, name, furigana, district_id, group_id, age_group, is_baptized, local_member_join_date, local_member_leave_date, districts(name, localities(name)), groups(name)"
       )
-      .ilike("name", `%${searchQuery.trim()}%`)
+      .or(`furigana.ilike.${patFurigana},name.ilike.${patName}`)
       .limit(15)
       .then(({ data }) => {
         const rows = (data ?? []).map((row: Record<string, unknown>) => {
@@ -399,33 +406,6 @@ export function PrayerMeetingAttendance({
   }, [searchQuery]);
 
   const refDateForEnrollment = eventDate || weekStartIso;
-  const handleExclude = async (member: MemberRow) => {
-    const rec = attendanceMap.get(member.id);
-    const did = districtId === "__all__" ? (member.district_id ?? "") : districtId;
-    if (!did) {
-      setExcludedMemberIds((prev) => new Set(prev).add(member.id));
-      if (rec?.id) setExcludedForDeletion((prev) => new Map(prev).set(member.id, rec.id));
-      setAttendanceMap((prev) => { const n = new Map(prev); n.delete(member.id); return n; });
-      setMemos((prev) => { const n = new Map(prev); n.delete(member.id); return n; });
-      return;
-    }
-    const supabase = createClient();
-    const { data: onList } = await supabase
-      .from("district_regular_list")
-      .select("id")
-      .eq("district_id", did)
-      .eq("member_id", member.id)
-      .maybeSingle();
-    if (onList) {
-      setRegularListExcludePopup({ memberId: member.id, member, districtId: did });
-    } else {
-      setExcludedMemberIds((prev) => new Set(prev).add(member.id));
-      if (rec?.id) setExcludedForDeletion((prev) => new Map(prev).set(member.id, rec.id));
-      setAttendanceMap((prev) => { const n = new Map(prev); n.delete(member.id); return n; });
-      setMemos((prev) => { const n = new Map(prev); n.delete(member.id); return n; });
-    }
-  };
-
   const addFromSearch = (member: MemberRow) => {
     if (!isEditMode) return;
     if (attendanceMap.has(member.id)) {
@@ -470,10 +450,10 @@ export function PrayerMeetingAttendance({
 
   const displayRoster = useMemo(() => {
     const base = isEditMode
-      ? roster.filter((m) => !excludedMemberIds.has(m.id))
+      ? roster
       : roster.filter((m) => attendanceMap.has(m.id));
     return base;
-  }, [isEditMode, roster, excludedMemberIds, attendanceMap]);
+  }, [isEditMode, roster, attendanceMap]);
   const sortedMembers = useMemo(() => {
     const list = [...displayRoster];
     const collator = new Intl.Collator("ja");
@@ -670,6 +650,95 @@ export function PrayerMeetingAttendance({
 
   const isAllDistricts = districtId === "__all__";
 
+  const performSave = async () => {
+    setSaving(true);
+    setMessage("");
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    const uid = user?.id ?? null;
+    const isAll = districtId === "__all__";
+    try {
+      if (isAll) {
+        const districtIds = [...new Set(roster.filter((m) => attendanceMap.has(m.id)).map((m) => m.district_id).filter(Boolean))] as string[];
+        const recordIdMap: Record<string, string> = {};
+        for (const did of districtIds) {
+          const rid = await ensurePrayerMeetingRecordForDistrict(did);
+          if (rid) recordIdMap[did] = rid;
+        }
+        for (const [memberId, rec] of attendanceMap) {
+          const member = roster.find((m) => m.id === memberId);
+          const did = member?.district_id ?? "";
+          const rid = recordIdMap[did];
+          if (!rid) continue;
+          const memo = (memos.get(memberId) ?? "").trim() || null;
+          if (rec.id) {
+            await supabase
+              .from("prayer_meeting_attendance")
+              .update({
+                attended: rec.attended,
+                is_online: rec.is_online ?? false,
+                is_away: rec.is_away ?? false,
+                memo,
+              })
+              .eq("id", rec.id);
+          } else {
+            await supabase.from("prayer_meeting_attendance").insert({
+              prayer_meeting_record_id: rid,
+              member_id: memberId,
+              memo,
+              is_online: rec.is_online ?? false,
+              is_away: rec.is_away ?? false,
+              attended: rec.attended !== false,
+              reported_by_user_id: uid,
+            });
+          }
+        }
+      } else {
+        let rid = recordId;
+        if (!rid) {
+          rid = await ensurePrayerMeetingRecord(eventDate || undefined);
+          if (rid) setRecordId(rid);
+        }
+        if (!rid) {
+          setMessage("集会の登録に失敗しました。");
+          setSaving(false);
+          return;
+        }
+        for (const [memberId, rec] of attendanceMap) {
+          const memo = (memos.get(memberId) ?? "").trim() || null;
+          if (rec.id) {
+            await supabase
+              .from("prayer_meeting_attendance")
+              .update({
+                attended: rec.attended,
+                is_online: rec.is_online ?? false,
+                is_away: rec.is_away ?? false,
+                memo,
+              })
+              .eq("id", rec.id);
+          } else {
+            await supabase.from("prayer_meeting_attendance").insert({
+              prayer_meeting_record_id: rid,
+              member_id: memberId,
+              memo,
+              is_online: rec.is_online ?? false,
+              is_away: rec.is_away ?? false,
+              attended: rec.attended !== false,
+              reported_by_user_id: uid,
+            });
+          }
+        }
+      }
+      setSaving(false);
+      setIsEditMode(false);
+      setMessage("保存しました。");
+      setRefreshTrigger((t) => t + 1);
+    } catch {
+      setMessage("保存に失敗しました。");
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {!districtId ? (
@@ -699,144 +768,62 @@ export function PrayerMeetingAttendance({
 
           {districtId && (
             <>
-              <div className="sticky top-0 z-10 flex justify-end gap-2 py-2 bg-white border-b border-slate-200 -mx-4 px-4 md:-mx-6 md:px-6">
-                {!isEditMode ? (
-                  <>
+              <div className="flex flex-nowrap items-center justify-end gap-3 py-2 bg-white border-b border-slate-200 -mx-4 px-4 md:-mx-6 md:px-6">
+                <div className="flex flex-nowrap items-center gap-2 shrink-0">
+                  {isEditMode && (
                     <button
                       type="button"
-                      onClick={() => setShowDeleteRecordConfirm(true)}
-                      disabled={loading}
-                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 touch-target disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      記録を削除する
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsEditMode(true)}
-                      className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 touch-target"
-                    >
-                    記録モードに切り替える
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsEditMode(false);
-                        setExcludedMemberIds(new Set());
-                        setExcludedForDeletion(new Map());
-                        setRegularListExcludePopup(null);
-                      }}
+                      onClick={() => performSave()}
                       disabled={saving}
-                      className="px-4 py-2 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50 touch-target disabled:opacity-50"
-                    >
-                      キャンセル
-                    </button>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setSaving(true);
-                        setMessage("");
-                        const supabase = createClient();
-                        const { data: { user } } = await supabase.auth.getUser();
-                        const uid = user?.id ?? null;
-                        const isAll = districtId === "__all__";
-                        try {
-                          for (const [, recId] of excludedForDeletion) {
-                            await supabase.from("prayer_meeting_attendance").delete().eq("id", recId);
-                          }
-                          if (isAll) {
-                            const districtIds = [...new Set(roster.filter((m) => attendanceMap.has(m.id)).map((m) => m.district_id).filter(Boolean))] as string[];
-                            const recordIdMap: Record<string, string> = {};
-                            for (const did of districtIds) {
-                              const rid = await ensurePrayerMeetingRecordForDistrict(did);
-                              if (rid) recordIdMap[did] = rid;
-                            }
-                            for (const [memberId, rec] of attendanceMap) {
-                              const member = roster.find((m) => m.id === memberId);
-                              const did = member?.district_id ?? "";
-                              const rid = recordIdMap[did];
-                              if (!rid) continue;
-                              const memo = (memos.get(memberId) ?? "").trim() || null;
-                              if (rec.id) {
-                                await supabase
-                                  .from("prayer_meeting_attendance")
-                                  .update({
-                                    attended: rec.attended,
-                                    is_online: rec.is_online ?? false,
-                                    is_away: rec.is_away ?? false,
-                                    memo,
-                                  })
-                                  .eq("id", rec.id);
-                              } else {
-                                await supabase.from("prayer_meeting_attendance").insert({
-                                  prayer_meeting_record_id: rid,
-                                  member_id: memberId,
-                                  memo,
-                                  is_online: rec.is_online ?? false,
-                                  is_away: rec.is_away ?? false,
-                                  attended: rec.attended !== false,
-                                  reported_by_user_id: uid,
-                                });
-                              }
-                            }
-                          } else {
-                            let rid = recordId;
-                            if (!rid) {
-                              rid = await ensurePrayerMeetingRecord(eventDate || undefined);
-                              if (rid) setRecordId(rid);
-                            }
-                            if (!rid) {
-                              setMessage("集会の登録に失敗しました。");
-                              setSaving(false);
-                              return;
-                            }
-                            for (const [memberId, rec] of attendanceMap) {
-                              const memo = (memos.get(memberId) ?? "").trim() || null;
-                              if (rec.id) {
-                                await supabase
-                                  .from("prayer_meeting_attendance")
-                                  .update({
-                                    attended: rec.attended,
-                                    is_online: rec.is_online ?? false,
-                                    is_away: rec.is_away ?? false,
-                                    memo,
-                                  })
-                                  .eq("id", rec.id);
-                              } else {
-                                await supabase.from("prayer_meeting_attendance").insert({
-                                  prayer_meeting_record_id: rid,
-                                  member_id: memberId,
-                                  memo,
-                                  is_online: rec.is_online ?? false,
-                                  is_away: rec.is_away ?? false,
-                                  attended: rec.attended !== false,
-                                  reported_by_user_id: uid,
-                                });
-                              }
-                            }
-                          }
-                          setSaving(false);
-                          setIsEditMode(false);
-                          setExcludedMemberIds(new Set());
-                          setExcludedForDeletion(new Map());
-                          setMessage("保存しました。");
-                          setRefreshTrigger((t) => t + 1);
-                        } catch {
-                          setMessage("保存に失敗しました。");
-                          setSaving(false);
-                        }
-                      }}
-                      disabled={saving}
-                      className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 touch-target disabled:opacity-50"
+                      className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 touch-target"
                     >
                       {saving ? "保存中…" : "保存する"}
                     </button>
-                  </>
-                )}
+                  )}
+                  <span className="text-sm font-medium text-slate-700">モード：</span>
+                  <span
+                    className="inline-flex rounded-lg border border-slate-300 overflow-hidden bg-slate-50"
+                    role="group"
+                    aria-label="閲覧・記録モード切替"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isEditMode) {
+                          setIsEditMode(false);
+                          setMessage("");
+                        } else {
+                          setIsEditMode(true);
+                        }
+                      }}
+                      disabled={saving}
+                      className={`px-4 py-2 text-sm font-medium touch-target rounded-l-lg transition-colors disabled:opacity-50 ${
+                        !isEditMode ? "bg-primary-600 text-white" : "bg-transparent text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      閲覧
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!isEditMode) {
+                          setIsEditMode(true);
+                        } else {
+                          setIsEditMode(false);
+                          setMessage("");
+                        }
+                      }}
+                      disabled={saving}
+                      className={`px-4 py-2 text-sm font-medium touch-target rounded-r-lg transition-colors disabled:opacity-50 ${
+                        isEditMode ? "bg-primary-600 text-white" : "bg-transparent text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      記録
+                    </button>
+                  </span>
+                </div>
               </div>
-              <div className="border border-slate-200 rounded-lg bg-white overflow-hidden">
+              <div className="border border-slate-200 rounded-lg bg-white">
                 <button
                   type="button"
                   onClick={() => setAccordionOpen((o) => !o)}
@@ -854,59 +841,22 @@ export function PrayerMeetingAttendance({
                   </svg>
                 </button>
                 {accordionOpen && (
-                  <div className="border-t border-slate-200 px-4 pb-4 pt-2 space-y-4">
-                    {isEditMode && (
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">フリー検索（名前）</label>
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="名前で検索（他地区・他地方も可）"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
-                      />
-                      {searchResults.length > 0 && (
-                        <ul className="mt-1 border border-slate-200 rounded-lg divide-y divide-slate-100 bg-white shadow-lg max-h-60 overflow-auto">
-                          {searchResults
-                            .filter((m) => !attendanceMap.has(m.id))
-                            .map((m) => {
-                              const outOfEnrollment = !isInEnrollmentPeriod(m, refDateForEnrollment);
-                              return (
-                                <li key={m.id}>
-                                  <button
-                                    type="button"
-                                    onClick={() => addFromSearch(m)}
-                                    className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 touch-target ${outOfEnrollment ? "text-red-600" : ""}`}
-                                  >
-                                    <span className="font-medium">{m.name}</span>
-                                    <span className={`ml-2 text-xs ${outOfEnrollment ? "text-red-500" : "text-slate-500"}`}>
-                                      {[m.locality_name, m.district_name, m.group_name, m.age_group ? CATEGORY_LABELS[m.age_group] : ""]
-                                        .filter(Boolean)
-                                        .join(" · ")}
-                                    </span>
-                                  </button>
-                                </li>
-                              );
-                            })}
-                        </ul>
-                      )}
-                    </div>
-                    )}
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
-                      <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium text-slate-700">並び順</label>
+                  <div className="border-t border-slate-200 px-4 pb-4 pt-2">
+                    <div className="flex flex-wrap items-end gap-2 sm:gap-3">
+                      <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-initial">
+                        <label className="hidden sm:inline text-sm font-medium text-slate-700 shrink-0">並び順</label>
                         <select
                           value={sortOrder}
                           onChange={(e) => setSortOrder(e.target.value as SortOption)}
-                          className="px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+                          className="min-w-0 flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
                         >
                           {(Object.keys(SORT_LABELS) as SortOption[]).map((k) => (
                             <option key={k} value={k}>{SORT_LABELS[k]}</option>
                           ))}
                         </select>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium text-slate-700">グルーピング1層目</label>
+                      <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-initial">
+                        <label className="hidden sm:inline text-sm font-medium text-slate-700 shrink-0">グルーピング1層目</label>
                         <select
                           value={group1}
                           onChange={(e) => {
@@ -914,7 +864,7 @@ export function PrayerMeetingAttendance({
                             setGroup1(v);
                             if (v === group2) setGroup2("");
                           }}
-                          className="px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+                          className="min-w-0 flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
                         >
                           <option value="">なし</option>
                           {(Object.keys(GROUP_LABELS) as GroupOption[]).map((k) => (
@@ -923,18 +873,56 @@ export function PrayerMeetingAttendance({
                         </select>
                       </div>
                       {group1 && (
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm font-medium text-slate-700">グルーピング2層目</label>
+                        <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-initial">
+                          <label className="hidden sm:inline text-sm font-medium text-slate-700 shrink-0">グルーピング2層目</label>
                           <select
                             value={group2}
                             onChange={(e) => setGroup2(e.target.value as GroupOption | "")}
-                            className="px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+                            className="min-w-0 flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
                           >
                             <option value="">なし</option>
                             {group2Options.map((k) => (
                               <option key={k} value={k}>{GROUP_LABELS[k]}</option>
                             ))}
                           </select>
+                        </div>
+                      )}
+                      {isEditMode && (
+                        <div className="min-w-[200px] flex-1 relative">
+                          <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="名前で検索（他地区・他地方も可）"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
+                          />
+                          {searchResults.length > 0 && (
+                            <ul className="absolute left-0 right-0 top-full z-20 mt-1 border border-slate-200 rounded-lg divide-y divide-slate-100 bg-white shadow-lg max-h-60 overflow-auto">
+                              {searchResults.map((m) => {
+                                  const outOfEnrollment = !isInEnrollmentPeriod(m, refDateForEnrollment);
+                                  const isAdded = attendanceMap.has(m.id);
+                                  return (
+                                    <li key={m.id}>
+                                      <button
+                                        type="button"
+                                        onClick={() => !isAdded && addFromSearch(m)}
+                                        disabled={isAdded}
+                                        className={`w-full text-left px-3 py-2 text-sm touch-target ${isAdded ? "cursor-default bg-slate-50 text-slate-500" : "hover:bg-slate-50"} ${outOfEnrollment && !isAdded ? "text-red-600" : ""}`}
+                                      >
+                                        <span className="font-medium">{m.name}</span>
+                                        {m.furigana && <span className="ml-2 text-xs text-slate-400">{m.furigana}</span>}
+                                        <span className={`ml-2 text-xs ${outOfEnrollment && !isAdded ? "text-red-500" : "text-slate-500"}`}>
+                                          {[m.locality_name, m.district_name, m.group_name, m.age_group ? CATEGORY_LABELS[m.age_group] : ""]
+                                            .filter(Boolean)
+                                            .join(" · ")}
+                                        </span>
+                                        {isAdded && <span className="ml-2 text-xs font-medium text-emerald-600">追加済み</span>}
+                                      </button>
+                                    </li>
+                                  );
+                                })}
+                            </ul>
+                          )}
                         </div>
                       )}
                     </div>
@@ -952,6 +940,7 @@ export function PrayerMeetingAttendance({
                 ) : !isEditMode && displayRoster.length === 0 ? (
                   <p className="text-slate-500 text-sm py-8 text-center">まだ記録はありません。</p>
                 ) : (
+                  <>
                   <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
                     <table className="min-w-full divide-y divide-slate-200">
                       <thead className="bg-slate-50">
@@ -1054,19 +1043,8 @@ export function PrayerMeetingAttendance({
                                   const rowBgClass = tier === "semi" ? "bg-amber-50 hover:bg-amber-100" : tier === "pool" ? "bg-sky-50 hover:bg-sky-100" : "hover:bg-slate-50";
                                   return (
                                     <tr key={m.id} className={rowBgClass}>
-                                      <td className="px-3 py-0.5 text-slate-800">
+                                      <td className="px-3 py-0.5 text-slate-800 text-sm">
                                         <div className="flex items-center gap-1">
-                                          {isEditMode && (
-                                            <button
-                                              type="button"
-                                              onClick={() => handleExclude(m)}
-                                              className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-red-600 hover:bg-red-50 touch-target text-sm font-bold"
-                                              aria-label={`${m.name}を除外`}
-                                              title="除外"
-                                            >
-                                              −
-                                            </button>
-                                          )}
                                           {isEditMode ? (
                                             <span className={guestIds.has(m.id) ? "text-slate-400" : ""}>{m.name}</span>
                                           ) : (
@@ -1152,69 +1130,36 @@ export function PrayerMeetingAttendance({
                       </tbody>
                     </table>
                   </div>
+                {!isEditMode && (
+                  <div className="flex justify-end pt-4 pb-2 -mx-4 px-4 md:-mx-6 md:px-6">
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteRecordConfirm(true)}
+                      disabled={loading}
+                      className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 touch-target disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      記録を削除する
+                    </button>
+                  </div>
+                )}
+                {isEditMode && (
+                  <div className="flex justify-end pt-4 pb-2 -mx-4 px-4 md:-mx-6 md:px-6">
+                    <button
+                      type="button"
+                      onClick={() => performSave()}
+                      disabled={saving}
+                      className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 touch-target"
+                    >
+                      {saving ? "保存中…" : "保存する"}
+                    </button>
+                  </div>
+                )}
+                </>
                 )}
               </div>
             </>
           )}
         </>
-      )}
-
-      {regularListExcludePopup && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="regular-list-exclude-title"
-          onClick={() => setRegularListExcludePopup(null)}
-        >
-          <div className="w-full max-w-sm bg-white rounded-lg shadow-lg p-4" onClick={(e) => e.stopPropagation()}>
-            <h2 id="regular-list-exclude-title" className="text-sm font-medium text-slate-700 mb-2">レギュラーリストに登録されている名前です</h2>
-            <p className="text-sm text-slate-600 mb-4">
-              レギュラーリストからも削除しますか？
-              過去の記録に影響はありません。今週以降に影響します。地区のレギュラーリストから外れると、今後その地区の主日の登録モードで「レギュラーリストで補完する」を押したときに、その名前一覧に含まれなくなります。
-            </p>
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => setRegularListExcludePopup(null)}
-                className="w-full px-4 py-2 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg touch-target"
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const { memberId, member, districtId } = regularListExcludePopup;
-                  const rec = attendanceMap.get(memberId);
-                  setExcludedMemberIds((prev) => new Set(prev).add(memberId));
-                  if (rec?.id) setExcludedForDeletion((prev) => new Map(prev).set(memberId, rec.id));
-                  setAttendanceMap((prev) => { const n = new Map(prev); n.delete(memberId); return n; });
-                  setMemos((prev) => { const n = new Map(prev); n.delete(memberId); return n; });
-                  await removeDistrictRegularMember(districtId, memberId);
-                  setRegularListExcludePopup(null);
-                }}
-                className="w-full px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg touch-target"
-              >
-                削除する
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const { memberId } = regularListExcludePopup;
-                  const rec = attendanceMap.get(memberId);
-                  setExcludedMemberIds((prev) => new Set(prev).add(memberId));
-                  if (rec?.id) setExcludedForDeletion((prev) => new Map(prev).set(memberId, rec.id));
-                  setAttendanceMap((prev) => { const n = new Map(prev); n.delete(memberId); return n; });
-                  setMemos((prev) => { const n = new Map(prev); n.delete(memberId); return n; });
-                  setRegularListExcludePopup(null);
-                }}
-                className="w-full px-4 py-2 text-sm font-medium text-slate-700 border border-slate-300 rounded-lg touch-target"
-              >
-                削除しない
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {enrollmentBlockedMemberId && (
@@ -1247,25 +1192,42 @@ export function PrayerMeetingAttendance({
           role="dialog"
           aria-modal="true"
           aria-labelledby="delete-record-title"
-          onClick={() => setShowDeleteRecordConfirm(false)}
+          onClick={() => {
+            setShowDeleteRecordConfirm(false);
+            setDeleteConfirmInput("");
+          }}
         >
           <div className="w-full max-w-sm bg-white rounded-lg shadow-lg p-4" onClick={(e) => e.stopPropagation()}>
             <h2 id="delete-record-title" className="text-sm font-medium text-slate-800 mb-2">記録を削除</h2>
             <p className="text-sm text-slate-600 mb-4">
               本当に記録を削除しますか？削除した出欠データは復元できません。
             </p>
+            <p className="text-sm text-slate-600 mb-2">確認のため「削除する」と入力してください。</p>
+            <input
+              type="text"
+              value={deleteConfirmInput}
+              onChange={(e) => setDeleteConfirmInput(e.target.value)}
+              placeholder="削除する"
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg mb-4 touch-target"
+              aria-label="削除する と入力"
+            />
             <div className="flex gap-2 justify-end">
               <button
                 type="button"
-                onClick={() => setShowDeleteRecordConfirm(false)}
+                onClick={() => {
+                  setShowDeleteRecordConfirm(false);
+                  setDeleteConfirmInput("");
+                }}
                 className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 touch-target"
               >
                 キャンセル
               </button>
               <button
                 type="button"
+                disabled={deleteConfirmInput !== "削除する"}
                 onClick={async () => {
                   setShowDeleteRecordConfirm(false);
+                  setDeleteConfirmInput("");
                   const supabase = createClient();
                   try {
                     if (districtId === "__all__") {
@@ -1288,7 +1250,7 @@ export function PrayerMeetingAttendance({
                     setMessage("記録の削除に失敗しました。");
                   }
                 }}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 touch-target"
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 touch-target disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 削除する
               </button>
