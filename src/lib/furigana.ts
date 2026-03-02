@@ -7,6 +7,13 @@ export function hiraganaToKatakana(str: string): string {
   );
 }
 
+/**
+ * ilike のパターンに埋め込む文字列をエスケープする（%, _ をエスケープ）
+ */
+export function escapeForIlike(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
 /** 五十音の行ラベル（あ行→か行→…）の表示順 */
 export const GOJUON_ROW_LABELS = ["あ", "か", "さ", "た", "な", "は", "ま", "や", "ら", "わ", "その他"] as const;
 

@@ -10,9 +10,10 @@ type District = { id: string; name: string };
 type Props = {
   districts: District[];
   defaultDistrictId: string;
+  disabled?: boolean;
 };
 
-export function MeetingsFilterBar({ districts, defaultDistrictId }: Props) {
+export function MeetingsFilterBar({ districts, defaultDistrictId, disabled = false }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -78,7 +79,7 @@ export function MeetingsFilterBar({ districts, defaultDistrictId }: Props) {
 
   return (
     <div className="bg-white border-b border-slate-200 px-4 py-3 md:px-6 m-0">
-      <div className="grid gap-4 sm:grid-cols-[minmax(0,0.4fr)_1.7fr_minmax(0,0.5fr)] max-w-3xl">
+      <div className="grid grid-cols-2 gap-3 gap-y-3 sm:grid-cols-[minmax(0,0.4fr)_1.7fr_minmax(0,0.5fr)] sm:gap-4 max-w-3xl">
         <div className="min-w-0">
           <select
             value={year}
@@ -91,7 +92,8 @@ export function MeetingsFilterBar({ districts, defaultDistrictId }: Props) {
                 : formatDateYmd(weeks[0]?.weekStart ?? new Date(y, 0, 1));
               updateParams({ year: y, week_start: ws });
             }}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
+            disabled={disabled}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {years.map((y) => (
               <option key={y} value={y}>
@@ -100,11 +102,12 @@ export function MeetingsFilterBar({ districts, defaultDistrictId }: Props) {
             ))}
           </select>
         </div>
-        <div className="min-w-0 flex items-center gap-2">
+        <div className="min-w-0 order-3 sm:order-2 col-span-2 row-start-2 sm:col-span-1 sm:row-auto flex items-center gap-2 text-sm sm:text-base">
           <button
             type="button"
             onClick={goPrevWeek}
-            className="shrink-0 px-2 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 touch-target text-sm text-slate-700"
+            disabled={disabled}
+            className="shrink-0 px-2 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 touch-target text-slate-700 disabled:opacity-60 disabled:cursor-not-allowed"
             aria-label="先週"
           >
             先週
@@ -112,7 +115,8 @@ export function MeetingsFilterBar({ districts, defaultDistrictId }: Props) {
           <select
             value={weekStartIso}
             onChange={(e) => updateParams({ week_start: e.target.value })}
-            className="min-w-0 flex-1 px-3 py-2 border border-slate-300 rounded-lg touch-target"
+            disabled={disabled}
+            className="min-w-0 flex-1 px-3 py-2 border border-slate-300 rounded-lg touch-target disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {weekOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -123,17 +127,19 @@ export function MeetingsFilterBar({ districts, defaultDistrictId }: Props) {
           <button
             type="button"
             onClick={goNextWeek}
-            className="shrink-0 px-2 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 touch-target text-sm text-slate-700"
+            disabled={disabled}
+            className="shrink-0 px-2 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 touch-target text-slate-700 disabled:opacity-60 disabled:cursor-not-allowed"
             aria-label="翌週"
           >
             翌週
           </button>
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 order-2 sm:order-3">
           <select
             value={districtId}
             onChange={(e) => updateParams({ district_id: e.target.value })}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
+            disabled={disabled}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <option value="">選択</option>
             <option value="__all__">全ての地区</option>

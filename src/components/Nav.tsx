@@ -289,7 +289,7 @@ export function Nav({ displayName, email, roleLabel, globalRoleLabel, localityNa
             召会生活統計
           </Link>
           <span className="ml-1.5 inline-flex items-baseline shrink-0">
-            <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.23.1</span>
+            <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.24.0</span>
           </span>
         </div>
         {showLocalityNameOnly && (
@@ -333,7 +333,7 @@ export function Nav({ displayName, email, roleLabel, globalRoleLabel, localityNa
             <Link href="/" className="text-white text-sm font-semibold whitespace-nowrap hover:text-white/90">
               召会生活統計
             </Link>
-            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.23.1</span>
+            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.24.0</span>
             {showLocalityNameOnly && !searchOpen && (
               <span className="flex items-center gap-1 px-2 py-1 text-slate-300 text-xs min-w-0 max-w-[16rem]" aria-label="表示中の地方とログイン中ユーザ">
                 <span className="truncate">{currentLocalityName ?? "—"}</span>

@@ -5,7 +5,7 @@ import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
 import { formatDateYmd, getDaysInWeek, getSundayWeeksInYear } from "@/lib/weekUtils";
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
-import { getGojuonRowLabel, GOJUON_ROW_LABELS } from "@/lib/furigana";
+import { getGojuonRowLabel, GOJUON_ROW_LABELS, hiraganaToKatakana, escapeForIlike } from "@/lib/furigana";
 import { DISPATCH_TYPE_LABELS, CATEGORY_LABELS, DISPATCH_TYPE_TEXT_COLORS } from "@/types/database";
 import type { DispatchType } from "@/types/database";
 import type { Category } from "@/types/database";
@@ -103,7 +103,7 @@ export function OrganicDispatchForm({
   const [group1, setGroup1] = useState<GroupOption | "">("");
   const [group2, setGroup2] = useState<GroupOption | "">("");
   const [sectionOpen, setSectionOpen] = useState<Record<string, boolean>>({});
-  const [accordionOpen, setAccordionOpen] = useState(false);
+  const [accordionOpen, setAccordionOpen] = useState(true);
   const [recordPopupMemberId, setRecordPopupMemberId] = useState<string | null>(null);
   type PopupForm = { type: "" | DispatchType; date: string; memo: string; visitors: string[] };
   const [popupForm, setPopupForm] = useState<PopupForm | null>(null);
@@ -263,13 +263,17 @@ export function OrganicDispatchForm({
       setSearchResults([]);
       return;
     }
+    const q = searchQuery.trim();
+    const qKata = hiraganaToKatakana(q);
+    const patFurigana = `%${escapeForIlike(qKata)}%`;
+    const patName = `%${escapeForIlike(q)}%`;
     const supabase = createClient();
     supabase
       .from("members")
       .select(
         "id, name, furigana, district_id, group_id, age_group, is_baptized, districts(name, localities(name)), groups(name)"
       )
-      .ilike("name", `%${searchQuery.trim()}%`)
+      .or(`furigana.ilike.${patFurigana},name.ilike.${patName}`)
       .limit(15)
       .then(({ data }) => {
         const rows = (data ?? []).map((row: Record<string, unknown>) => {
@@ -621,7 +625,7 @@ export function OrganicDispatchForm({
 
       {groupId && (
         <div>
-          <div className="border border-slate-200 rounded-lg bg-white overflow-hidden mb-4">
+          <div className="border border-slate-200 rounded-lg bg-white mb-4">
             <button
               type="button"
               onClick={() => setAccordionOpen((o) => !o)}
@@ -639,54 +643,22 @@ export function OrganicDispatchForm({
               </svg>
             </button>
             {accordionOpen && (
-              <div className="border-t border-slate-200 px-4 pb-4 pt-2 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">フリー検索（名前）</label>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="名前で検索（他地区・他小組も可）"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
-                  />
-                  {searchResults.length > 0 && (
-                    <ul className="mt-1 border border-slate-200 rounded-lg divide-y divide-slate-100 bg-white shadow-lg max-h-60 overflow-auto">
-                      {searchResults
-                        .filter((m) => !roster.some((r) => r.id === m.id))
-                        .map((m) => (
-                          <li key={m.id}>
-                            <button
-                              type="button"
-                              onClick={() => addFromSearch(m)}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 touch-target"
-                            >
-                              <span className="font-medium">{m.name}</span>
-                              <span className="ml-2 text-slate-500 text-xs">
-                                {[m.locality_name, m.district_name, m.group_name, m.age_group ? CATEGORY_LABELS[m.age_group] : ""]
-                                  .filter(Boolean)
-                                  .join(" · ")}
-                              </span>
-                            </button>
-                          </li>
-                        ))}
-                    </ul>
-                  )}
-                </div>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-slate-700">並び順</label>
+              <div className="border-t border-slate-200 px-4 pb-4 pt-2">
+                <div className="flex flex-wrap items-end gap-2 sm:gap-3">
+                  <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-initial">
+                    <label className="hidden sm:inline text-sm font-medium text-slate-700 shrink-0">並び順</label>
                     <select
                       value={sortOrder}
                       onChange={(e) => setSortOrder(e.target.value as SortOption)}
-                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+                      className="min-w-0 flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
                     >
                       {(Object.keys(SORT_LABELS) as SortOption[]).map((k) => (
                         <option key={k} value={k}>{SORT_LABELS[k]}</option>
                       ))}
                     </select>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-slate-700">グルーピング1層目</label>
+                  <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-initial">
+                    <label className="hidden sm:inline text-sm font-medium text-slate-700 shrink-0">グルーピング1層目</label>
                     <select
                       value={group1}
                       onChange={(e) => {
@@ -694,7 +666,7 @@ export function OrganicDispatchForm({
                         setGroup1(v);
                         if (v === group2) setGroup2("");
                       }}
-                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+                      className="min-w-0 flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
                     >
                       <option value="">なし</option>
                       {(Object.keys(GROUP_LABELS) as GroupOption[]).map((k) => (
@@ -703,12 +675,12 @@ export function OrganicDispatchForm({
                     </select>
                   </div>
                   {group1 && (
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm font-medium text-slate-700">グルーピング2層目</label>
+                    <div className="flex items-center gap-2 min-w-0 flex-1 sm:flex-initial">
+                      <label className="hidden sm:inline text-sm font-medium text-slate-700 shrink-0">グルーピング2層目</label>
                       <select
                         value={group2}
                         onChange={(e) => setGroup2(e.target.value as GroupOption | "")}
-                        className="px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
+                        className="min-w-0 flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
                       >
                         <option value="">なし</option>
                         {group2Options.map((k) => (
@@ -717,6 +689,41 @@ export function OrganicDispatchForm({
                       </select>
                     </div>
                   )}
+                  <div className="min-w-[200px] flex-1 relative">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="名前で検索（他地区・他小組も可）"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg touch-target"
+                    />
+                    {searchResults.length > 0 && (
+                      <ul className="absolute left-0 right-0 top-full z-20 mt-1 border border-slate-200 rounded-lg divide-y divide-slate-100 bg-white shadow-lg max-h-60 overflow-auto">
+                        {searchResults.map((m) => {
+                            const isAdded = roster.some((r) => r.id === m.id);
+                            return (
+                              <li key={m.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => !isAdded && addFromSearch(m)}
+                                  disabled={isAdded}
+                                  className={`w-full text-left px-3 py-2 text-sm touch-target ${isAdded ? "cursor-default bg-slate-50 text-slate-500" : "hover:bg-slate-50"}`}
+                                >
+                                  <span className="font-medium">{m.name}</span>
+                                  {m.furigana && <span className="ml-2 text-xs text-slate-400">{m.furigana}</span>}
+                                  <span className="ml-2 text-slate-500 text-xs">
+                                    {[m.locality_name, m.district_name, m.group_name, m.age_group ? CATEGORY_LABELS[m.age_group] : ""]
+                                      .filter(Boolean)
+                                      .join(" · ")}
+                                  </span>
+                                  {isAdded && <span className="ml-2 text-xs font-medium text-emerald-600">追加済み</span>}
+                                </button>
+                              </li>
+                            );
+                          })}
+                      </ul>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -866,7 +873,7 @@ export function OrganicDispatchForm({
                       key={m.id}
                       className={hasRecord ? "bg-primary-50/70 hover:bg-primary-100/70 border-l-2 border-l-primary-500" : "hover:bg-slate-50"}
                     >
-                      <td className="px-3 py-1.5 text-slate-800">{m.name}</td>
+                      <td className="px-3 py-1.5 text-slate-800 text-sm">{m.name}</td>
                       <td className="px-3 py-1.5">
                         <button
                           type="button"
