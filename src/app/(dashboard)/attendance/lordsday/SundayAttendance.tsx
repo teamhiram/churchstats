@@ -155,7 +155,7 @@ export function SundayAttendance({
   }, [isEditMode, dirtyMemberIds.size]);
 
   useEffect(() => {
-    setGroup2(isEditMode ? "list" : "");
+    setGroup2("");
   }, [isEditMode]);
 
   const districtMap = useMemo(() => new Map(districts.map((d) => [d.id, d.name])), [districts]);
