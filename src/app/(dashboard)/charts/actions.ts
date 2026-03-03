@@ -119,8 +119,16 @@ export async function getDispatchMonitorData(localityId: string | null = null): 
   const mainAttendedThisWeek = new Set(
     mainAttData.filter((a) => a.attended !== false).map((a) => a.member_id)
   );
+  /** 今週の主日で明示的に欠席（attended === false）として記録されたメンバー。記録対象外（ー）は含めない。 */
+  const mainExplicitAbsentThisWeek = new Set(
+    mainAttData.filter((a) => a.attended === false).map((a) => a.member_id)
+  );
   const groupAttendedThisWeek = new Set(
     groupAttData.filter((a) => a.attended !== false).map((a) => a.member_id)
+  );
+  /** 今週の小組で明示的に欠席（attended === false）として記録されたメンバー。記録対象外（ー）は含めない。 */
+  const groupExplicitAbsentThisWeek = new Set(
+    groupAttData.filter((a) => a.attended === false).map((a) => a.member_id)
   );
 
   const districtRegularRows = (districtRegularRes.data ?? []) as { district_id: string; member_id: string }[];
@@ -186,10 +194,10 @@ export async function getDispatchMonitorData(localityId: string | null = null): 
   }
 
   const mainAbsentMemberIds = [...mainSourceIds].filter(
-    (id) => localMemberIds.has(id) && !mainAttendedThisWeek.has(id)
+    (id) => localMemberIds.has(id) && mainExplicitAbsentThisWeek.has(id)
   );
   const groupAbsentMemberIds = [...groupSourceIds].filter(
-    (id) => localMemberIds.has(id) && !groupAttendedThisWeek.has(id)
+    (id) => localMemberIds.has(id) && groupExplicitAbsentThisWeek.has(id)
   );
 
   const dispatchRows = (dispatchRes.data ?? []) as {
