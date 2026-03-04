@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo } from "react";
 import { addDays } from "date-fns";
 import { getSundayWeeksInYear, getDefaultSundayWeekStart, formatDateYmd } from "@/lib/weekUtils";
+import { useWeekSelectorActive } from "./WeekSelectorActiveContext";
 
 type District = { id: string; name: string };
 
@@ -17,6 +18,8 @@ export function MeetingsFilterBar({ districts, defaultDistrictId, disabled = fal
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { setWeekSelectorActive } = useWeekSelectorActive();
+  const isLordsday = pathname === "/attendance/lordsday";
 
   const currentYear = new Date().getFullYear();
   const yearParam = searchParams.get("year");
@@ -55,13 +58,15 @@ export function MeetingsFilterBar({ districts, defaultDistrictId, disabled = fal
   const nextWeekIso = formatDateYmd(nextWeekStart);
 
   const goPrevWeek = useCallback(() => {
+    setWeekSelectorActive(true);
     const newYear = prevWeekStart.getFullYear();
     updateParams({ year: newYear, week_start: prevWeekIso });
-  }, [prevWeekIso, prevWeekStart, updateParams]);
+  }, [prevWeekIso, prevWeekStart, updateParams, setWeekSelectorActive]);
   const goNextWeek = useCallback(() => {
+    setWeekSelectorActive(true);
     const newYear = nextWeekStart.getFullYear();
     updateParams({ year: newYear, week_start: nextWeekIso });
-  }, [nextWeekIso, nextWeekStart, updateParams]);
+  }, [nextWeekIso, nextWeekStart, updateParams, setWeekSelectorActive]);
 
   const showFilter =
     pathname === "/attendance" ||
@@ -83,7 +88,10 @@ export function MeetingsFilterBar({ districts, defaultDistrictId, disabled = fal
         <div className="min-w-0">
           <select
             value={year}
+            onFocus={() => setWeekSelectorActive(true)}
+            onBlur={() => { if (!isLordsday) setWeekSelectorActive(false); }}
             onChange={(e) => {
+              setWeekSelectorActive(true);
               const y = Number(e.target.value);
               const weeks = getSundayWeeksInYear(y);
               const def = formatDateYmd(getDefaultSundayWeekStart(y));
@@ -114,7 +122,12 @@ export function MeetingsFilterBar({ districts, defaultDistrictId, disabled = fal
           </button>
           <select
             value={weekStartIso}
-            onChange={(e) => updateParams({ week_start: e.target.value })}
+            onFocus={() => setWeekSelectorActive(true)}
+            onBlur={() => { if (!isLordsday) setWeekSelectorActive(false); }}
+            onChange={(e) => {
+              setWeekSelectorActive(true);
+              updateParams({ week_start: e.target.value });
+            }}
             disabled={disabled}
             className="min-w-0 flex-1 px-3 py-2 border border-slate-300 rounded-lg touch-target disabled:opacity-60 disabled:cursor-not-allowed"
           >
