@@ -12,6 +12,7 @@ import type { Category } from "@/types/database";
 import { ensureSundayMeetingsBatch, getSundayMeetingModes, setSundayMeetingMode } from "./actions";
 import { isInEnrollmentPeriod } from "@/lib/enrollmentPeriod";
 import { useAttendanceEditMode } from "../AttendanceEditModeContext";
+import { useWeekSelectorActive } from "../WeekSelectorActiveContext";
 
 type District = { id: string; name: string; locality_id?: string };
 type Group = { id: string; name: string; district_id: string };
@@ -97,6 +98,7 @@ export function SundayAttendance({
   const [isEditMode, setIsEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const { setEditMode: setGlobalEditMode } = useAttendanceEditMode();
+  const { weekSelectorActive, setWeekSelectorActive } = useWeekSelectorActive();
   useEffect(() => {
     setGlobalEditMode(isEditMode);
     return () => setGlobalEditMode(false);
@@ -157,6 +159,10 @@ export function SundayAttendance({
   useEffect(() => {
     setGroup2("");
   }, [isEditMode]);
+
+  useEffect(() => {
+    if (!loading) setWeekSelectorActive(false);
+  }, [loading, setWeekSelectorActive]);
 
   const districtMap = useMemo(() => new Map(districts.map((d) => [d.id, d.name])), [districts]);
   const groupMap = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
@@ -271,6 +277,7 @@ export function SundayAttendance({
     }
     let cancelled = false;
     setLoading(true);
+    setWeekSelectorActive(true);
     const supabase = createClient();
     const isAllDistricts = districtId === "__all__";
     const district = districts.find((d) => d.id === districtId);
@@ -1205,7 +1212,7 @@ const { data: guestData } = await supabase
                         setIsEditMode(true);
                       }
                     }}
-                    disabled={saving}
+                    disabled={saving || loading || weekSelectorActive}
                     className={`px-4 py-2 text-sm font-medium touch-target rounded-l-lg transition-colors disabled:opacity-50 ${
                       !isEditMode
                         ? "bg-primary-600 text-white"
@@ -1230,7 +1237,7 @@ const { data: guestData } = await supabase
                         setMessage("");
                       }
                     }}
-                    disabled={saving}
+                    disabled={saving || loading || weekSelectorActive}
                     className={`px-4 py-2 text-sm font-medium touch-target rounded-r-lg transition-colors disabled:opacity-50 ${
                       isEditMode
                         ? "bg-primary-600 text-white"

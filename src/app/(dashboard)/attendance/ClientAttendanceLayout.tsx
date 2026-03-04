@@ -3,6 +3,7 @@
 import { MeetingsFilterBar } from "./MeetingsFilterBar";
 import { MeetingTabs } from "./MeetingTabs";
 import { AttendanceEditModeProvider, useAttendanceEditMode } from "./AttendanceEditModeContext";
+import { WeekSelectorActiveProvider } from "./WeekSelectorActiveContext";
 
 type District = { id: string; name: string };
 
@@ -42,9 +43,11 @@ export function ClientAttendanceLayout({
 }) {
   return (
     <AttendanceEditModeProvider>
-      <AttendanceLayoutInner districts={districts} defaultDistrictId={defaultDistrictId}>
-        {children}
-      </AttendanceLayoutInner>
+      <WeekSelectorActiveProvider>
+        <AttendanceLayoutInner districts={districts} defaultDistrictId={defaultDistrictId}>
+          {children}
+        </AttendanceLayoutInner>
+      </WeekSelectorActiveProvider>
     </AttendanceEditModeProvider>
   );
 }
