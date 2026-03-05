@@ -1,5 +1,6 @@
 "use server";
 
+import { devIngestAsync } from "@/lib/devIngest";
 import { createClient } from "@/lib/supabase/server";
 
 /** 主日の合同集会モードを取得。localityId -> isCombined */
@@ -76,16 +77,12 @@ export async function ensureSundayMeetingsBatch(
       if (r.district_id) byDistrict[r.district_id] = r.id;
       if (r.locality_id) byLocality[r.locality_id] = r.id;
     });
-    await fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        location: "actions.ts:ensureSundayMeetingsBatch",
-        message: "existing meetings for date",
-        data: { sundayIso, districtIds, existingCount: existingList.length, byDistrict, byLocality, allMeetings },
-        timestamp: Date.now(),
-        hypothesisId: "H4",
-      }),
+    await devIngestAsync({
+      location: "actions.ts:ensureSundayMeetingsBatch",
+      message: "existing meetings for date",
+      data: { sundayIso, districtIds, existingCount: existingList.length, byDistrict, byLocality, allMeetings },
+      timestamp: Date.now(),
+      hypothesisId: "H4",
     });
   } catch (_) {}
   // #endregion
