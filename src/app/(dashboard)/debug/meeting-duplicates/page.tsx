@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { devIngest } from "@/lib/devIngest";
 import { createClient } from "@/lib/supabase/server";
 import { deleteMeetingFromDebug } from "./actions";
 import { DebugMeetingDuplicatesClient } from "./DebugMeetingDuplicatesClient";
@@ -25,11 +26,7 @@ export default async function DebugMeetingDuplicatesPage() {
     message: string;
     data: Record<string, unknown>;
   }) => {
-    fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...payload, timestamp: Date.now() }),
-    }).catch(() => {});
+    devIngest({ ...payload, timestamp: Date.now() });
   };
 
   const { data: meetings } = await supabase

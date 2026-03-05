@@ -1,5 +1,6 @@
 "use client";
 
+import { devIngest } from "@/lib/devIngest";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { deleteMeetingFromDebug, deleteMeetingsFromDebug } from "./actions";
@@ -44,22 +45,18 @@ export function DebugMeetingDuplicatesClient() {
       ]);
 
       // #region agent log H4
-      fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          runId: "meeting-dup-debug-2",
-          hypothesisId: "H4",
-          location: "debug/meeting-duplicates/DebugMeetingDuplicatesClient.tsx:load-meetings",
-          message: "client-side meetings load result",
-          data: {
-            userId: authData.user?.id ?? null,
-            meetingsError: meetingsError?.message ?? null,
-            loadedCount: (meetingsData ?? []).length,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
+      devIngest({
+        runId: "meeting-dup-debug-2",
+        hypothesisId: "H4",
+        location: "debug/meeting-duplicates/DebugMeetingDuplicatesClient.tsx:load-meetings",
+        message: "client-side meetings load result",
+        data: {
+          userId: authData.user?.id ?? null,
+          meetingsError: meetingsError?.message ?? null,
+          loadedCount: (meetingsData ?? []).length,
+        },
+        timestamp: Date.now(),
+      });
       // #endregion
 
       const rows = (meetingsData ?? []) as MeetingRow[];
@@ -136,27 +133,23 @@ export function DebugMeetingDuplicatesClient() {
     );
 
     // #region agent log H5
-    fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        runId: "meeting-dup-debug-2",
-        hypothesisId: "H5",
-        location: "debug/meeting-duplicates/DebugMeetingDuplicatesClient.tsx:grouping",
-        message: "separated duplicate grouping result",
-        data: {
-          totalMeetings: meetings.length,
-          mainDuplicates: mainDuplicates.length,
-          groupDuplicates: groupDuplicates.length,
-          sample: merged.slice(0, 6).map((g) => ({
-            kind: g.kind,
-            key: g.key,
-            size: g.rows.length,
-          })),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
+    devIngest({
+      runId: "meeting-dup-debug-2",
+      hypothesisId: "H5",
+      location: "debug/meeting-duplicates/DebugMeetingDuplicatesClient.tsx:grouping",
+      message: "separated duplicate grouping result",
+      data: {
+        totalMeetings: meetings.length,
+        mainDuplicates: mainDuplicates.length,
+        groupDuplicates: groupDuplicates.length,
+        sample: merged.slice(0, 6).map((g) => ({
+          kind: g.kind,
+          key: g.key,
+          size: g.rows.length,
+        })),
+      },
+      timestamp: Date.now(),
+    });
     // #endregion
 
     return merged;

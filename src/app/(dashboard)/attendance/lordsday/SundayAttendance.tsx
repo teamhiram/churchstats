@@ -1,5 +1,6 @@
 "use client";
 
+import { devIngest } from "@/lib/devIngest";
 import { createClient } from "@/lib/supabase/client";
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
@@ -284,24 +285,20 @@ export function SundayAttendance({
     const lid = district?.locality_id;
     const isCombined = lid ? (isCombinedPerLocality[lid] ?? false) : false;
     // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        location: "SundayAttendance.tsx:useEffect",
-        message: "load branch",
-        data: {
-          districtId,
-          sundayIso,
-          isAllDistricts,
-          isCombined,
-          branch: isAllDistricts ? "all" : lid && isCombined ? "combined" : "single",
-          districtsLen: districts.length,
-        },
-        timestamp: Date.now(),
-        hypothesisId: "H5",
-      }),
-    }).catch(() => {});
+    devIngest({
+      location: "SundayAttendance.tsx:useEffect",
+      message: "load branch",
+      data: {
+        districtId,
+        sundayIso,
+        isAllDistricts,
+        isCombined,
+        branch: isAllDistricts ? "all" : lid && isCombined ? "combined" : "single",
+        districtsLen: districts.length,
+      },
+      timestamp: Date.now(),
+      hypothesisId: "H5",
+    });
     // #endregion
 
     const resolveBestMeetingMapForDistricts = async (targetDistrictIds: string[]) => {
@@ -357,17 +354,13 @@ export function SundayAttendance({
         if (cancelled) return;
         setMeetingId(null);
         // #region agent log
-        fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            location: "SundayAttendance.tsx:allDistrictLoad",
-            message: "resolved meetings for all districts",
-            data: { sundayIso, districtIdsToLoad, meetingIdMap, meetingIdsCount: meetingIds.length, runId: "post-fix" },
-            timestamp: Date.now(),
-            hypothesisId: "H14",
-          }),
-        }).catch(() => {});
+        devIngest({
+          location: "SundayAttendance.tsx:allDistrictLoad",
+          message: "resolved meetings for all districts",
+          data: { sundayIso, districtIdsToLoad, meetingIdMap, meetingIdsCount: meetingIds.length, runId: "post-fix" },
+          timestamp: Date.now(),
+          hypothesisId: "H14",
+        });
         // #endregion
 
         const { data: membersData } = await supabase
@@ -454,17 +447,13 @@ const { data: guestData } = await supabase
         if (cancelled) return;
         setMeetingId(meetingIdMap[districtId] ?? null);
         // #region agent log
-        fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            location: "SundayAttendance.tsx:combinedLoad",
-            message: "resolved meetings for combined locality load",
-            data: { sundayIso, districtIdsInLocality, meetingIdMap, meetingIdsCount: meetingIds.length, runId: "post-fix" },
-            timestamp: Date.now(),
-            hypothesisId: "H15",
-          }),
-        }).catch(() => {});
+        devIngest({
+          location: "SundayAttendance.tsx:combinedLoad",
+          message: "resolved meetings for combined locality load",
+          data: { sundayIso, districtIdsInLocality, meetingIdMap, meetingIdsCount: meetingIds.length, runId: "post-fix" },
+          timestamp: Date.now(),
+          hypothesisId: "H15",
+        });
         // #endregion
         const { data: membersData } = await supabase
           .from("members")
@@ -534,23 +523,19 @@ const { data: guestData } = await supabase
       const district = districts.find((d) => d.id === districtId);
       const lid = district?.locality_id;
       // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          location: "SundayAttendance.tsx:singleDistrictLoad",
-          message: "single district load entry",
-          data: {
-            districtId,
-            sundayIso,
-            districtFound: !!district,
-            districtIdMatch: district?.id === districtId,
-            branch: "singleDistrictNonCombined",
-          },
-          timestamp: Date.now(),
-          hypothesisId: "H1,H3",
-        }),
-      }).catch(() => {});
+      devIngest({
+        location: "SundayAttendance.tsx:singleDistrictLoad",
+        message: "single district load entry",
+        data: {
+          districtId,
+          sundayIso,
+          districtFound: !!district,
+          districtIdMatch: district?.id === districtId,
+          branch: "singleDistrictNonCombined",
+        },
+        timestamp: Date.now(),
+        hypothesisId: "H1,H3",
+      });
       // #endregion
       const { data: existingMeetingsData } = await supabase
         .from("lordsday_meeting_records")
@@ -574,44 +559,36 @@ const { data: guestData } = await supabase
         mid = [...existingMeetingIds]
           .sort((a, b) => (countByMeeting.get(b) ?? 0) - (countByMeeting.get(a) ?? 0))[0] ?? null;
         // #region agent log
-        fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            location: "SundayAttendance.tsx:duplicateMeetingResolution",
-            message: "resolved duplicate meetings for single district",
-            data: {
-              districtId,
-              sundayIso,
-              existingMeetingIds,
-              chosenMeetingId: mid,
-              counts: Object.fromEntries(existingMeetingIds.map((id) => [id, countByMeeting.get(id) ?? 0])),
-              runId: "post-fix",
-            },
-            timestamp: Date.now(),
-            hypothesisId: "H13",
-          }),
-        }).catch(() => {});
+        devIngest({
+          location: "SundayAttendance.tsx:duplicateMeetingResolution",
+          message: "resolved duplicate meetings for single district",
+          data: {
+            districtId,
+            sundayIso,
+            existingMeetingIds,
+            chosenMeetingId: mid,
+            counts: Object.fromEntries(existingMeetingIds.map((id) => [id, countByMeeting.get(id) ?? 0])),
+            runId: "post-fix",
+          },
+          timestamp: Date.now(),
+          hypothesisId: "H13",
+        });
         // #endregion
       }
       if (cancelled) return;
       // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          location: "SundayAttendance.tsx:afterBatch",
-          message: "after ensureSundayMeetingsBatch",
-          data: {
-            districtId,
-            meetingIdMapKeys: existingMeetingIds,
-            mid,
-            mapLen: existingMeetingIds.length,
-          },
-          timestamp: Date.now(),
-          hypothesisId: "H1,H2",
-        }),
-      }).catch(() => {});
+      devIngest({
+        location: "SundayAttendance.tsx:afterBatch",
+        message: "after ensureSundayMeetingsBatch",
+        data: {
+          districtId,
+          meetingIdMapKeys: existingMeetingIds,
+          mid,
+          mapLen: existingMeetingIds.length,
+        },
+        timestamp: Date.now(),
+        hypothesisId: "H1,H2",
+      });
       // #endregion
       setMeetingId(mid);
       const { data: membersRes } = await supabase
@@ -649,31 +626,23 @@ const { data: guestData } = await supabase
           .eq("district_id", districtId)
           .maybeSingle();
         // #region agent log
-        fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            location: "SundayAttendance.tsx:directMeetingProbe",
-            message: "direct meeting probe result",
-            data: { districtId, sundayIso, mid, directMeetingId: directMeeting?.id ?? null, runId: "post-fix" },
-            timestamp: Date.now(),
-            hypothesisId: "H6",
-          }),
-        }).catch(() => {});
+        devIngest({
+          location: "SundayAttendance.tsx:directMeetingProbe",
+          message: "direct meeting probe result",
+          data: { districtId, sundayIso, mid, directMeetingId: directMeeting?.id ?? null, runId: "post-fix" },
+          timestamp: Date.now(),
+          hypothesisId: "H6",
+        });
         // #endregion
         if (directMeeting?.id && directMeeting.id !== mid) {
           // #region agent log
-          fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              location: "SundayAttendance.tsx:fallbackUsed",
-              message: "direct meeting fallback",
-              data: { districtId, sundayIso, mid, directMeetingId: directMeeting.id, runId: "post-fix" },
-              timestamp: Date.now(),
-              hypothesisId: "fallback",
-            }),
-          }).catch(() => {});
+          devIngest({
+            location: "SundayAttendance.tsx:fallbackUsed",
+            message: "direct meeting fallback",
+            data: { districtId, sundayIso, mid, directMeetingId: directMeeting.id, runId: "post-fix" },
+            timestamp: Date.now(),
+            hypothesisId: "fallback",
+          });
           // #endregion
           const { data: directAtt } = await supabase
             .from("lordsday_meeting_attendance")
@@ -691,17 +660,13 @@ const { data: guestData } = await supabase
             .eq("locality_id", lid)
             .maybeSingle();
           // #region agent log
-          fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              location: "SundayAttendance.tsx:localityMeetingProbe",
-              message: "locality meeting probe result",
-              data: { districtId, sundayIso, lid, localityMeetingId: localityMeeting?.id ?? null, runId: "post-fix" },
-              timestamp: Date.now(),
-              hypothesisId: "H7",
-            }),
-          }).catch(() => {});
+          devIngest({
+            location: "SundayAttendance.tsx:localityMeetingProbe",
+            message: "locality meeting probe result",
+            data: { districtId, sundayIso, lid, localityMeetingId: localityMeeting?.id ?? null, runId: "post-fix" },
+            timestamp: Date.now(),
+            hypothesisId: "H7",
+          });
           // #endregion
           if (localityMeeting?.id) {
             const { data: locAtt } = await supabase
@@ -716,24 +681,20 @@ const { data: guestData } = await supabase
         }
       }
       // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/39fe22d5-aab7-4e37-aff0-0746864bb5ec", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          location: "SundayAttendance.tsx:afterAttLoad",
-          message: "after attendance load",
-          data: {
-            districtId,
-            mid,
-            recordsCount: records.length,
-            rosterCount: districtMembers.length,
-            displayRosterWouldBe: records.length,
-            runId: "post-fix",
-          },
-          timestamp: Date.now(),
-          hypothesisId: "H2,H4",
-        }),
-      }).catch(() => {});
+      devIngest({
+        location: "SundayAttendance.tsx:afterAttLoad",
+        message: "after attendance load",
+        data: {
+          districtId,
+          mid,
+          recordsCount: records.length,
+          rosterCount: districtMembers.length,
+          displayRosterWouldBe: records.length,
+          runId: "post-fix",
+        },
+        timestamp: Date.now(),
+        hypothesisId: "H2,H4",
+      });
       // #endregion
       const map = new Map<string, AttendanceRow>();
       const memoMap = new Map<string, string>();
