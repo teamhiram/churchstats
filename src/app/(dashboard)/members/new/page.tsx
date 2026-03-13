@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { hiraganaToKatakana } from "@/lib/furigana";
-import { CATEGORY_LABELS } from "@/types/database";
+import { CATEGORY_LABELS, CATEGORY_ORDER } from "@/types/database";
 import type { Category } from "@/types/database";
 import { addDistrictRegularMember, addGroupRegularMember } from "@/app/(dashboard)/settings/organization/actions";
 import { Toggle } from "@/components/Toggle";
@@ -14,7 +14,7 @@ import { QUERY_KEYS } from "@/lib/queryClient";
 import { useLocality } from "@/contexts/LocalityContext";
 
 /** ローカルでないメンバー（ゲスト）は locality_id なし。ローカルは現在選択中の地方を設定。 */
-const CATEGORIES: Category[] = ["adult", "university", "high_school", "junior_high", "elementary", "preschool"];
+const CATEGORIES = CATEGORY_ORDER;
 
 function ButtonGroup<T extends string>({
   value,

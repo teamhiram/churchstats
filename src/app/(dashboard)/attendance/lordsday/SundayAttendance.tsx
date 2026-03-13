@@ -8,7 +8,7 @@ import { Toggle } from "@/components/Toggle";
 import { PencilButton } from "@/components/PencilButton";
 import { formatDateYmd } from "@/lib/weekUtils";
 import { getGojuonRowLabel, GOJUON_ROW_LABELS, hiraganaToKatakana, escapeForIlike } from "@/lib/furigana";
-import { CATEGORY_LABELS } from "@/types/database";
+import { CATEGORY_LABELS, CATEGORY_ORDER } from "@/types/database";
 import type { Category } from "@/types/database";
 import { ensureSundayMeetingsBatch, getSundayMeetingModes, setSundayMeetingMode } from "./actions";
 import { isInEnrollmentPeriod } from "@/lib/enrollmentPeriod";
@@ -909,7 +909,7 @@ const { data: guestData } = await supabase
       const gb = groupMap.get(b.group_id ?? "") ?? "";
       return collator.compare(ga, gb) || byName(a, b);
     };
-    const ageOrder: Category[] = ["adult", "university", "high_school", "junior_high", "elementary", "preschool"];
+    const ageOrder = CATEGORY_ORDER;
     const byAgeGroup = (a: MemberRow, b: MemberRow) => {
       const ai = a.age_group ? ageOrder.indexOf(a.age_group) : -1;
       const bi = b.age_group ? ageOrder.indexOf(b.age_group) : -1;
@@ -952,7 +952,7 @@ const { data: guestData } = await supabase
       if (opt === "district") return new Intl.Collator("ja").compare(districtMap.get(a) ?? "", districtMap.get(b) ?? "");
       if (opt === "group") return new Intl.Collator("ja").compare(groupMap.get(a) ?? "", groupMap.get(b) ?? "");
       if (opt === "age_group") {
-        const order: Category[] = ["adult", "university", "high_school", "junior_high", "elementary", "preschool"];
+        const order = CATEGORY_ORDER;
         return (order.indexOf(a as Category) >= 0 ? order.indexOf(a as Category) : 999) - (order.indexOf(b as Category) >= 0 ? order.indexOf(b as Category) : 999);
       }
       return a === "believer" ? -1 : 1;

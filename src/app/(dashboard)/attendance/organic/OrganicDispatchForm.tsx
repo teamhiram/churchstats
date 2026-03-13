@@ -6,7 +6,7 @@ import { formatDateYmd, getDaysInWeek, getSundayWeeksInYear } from "@/lib/weekUt
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
 import { getGojuonRowLabel, GOJUON_ROW_LABELS, hiraganaToKatakana, escapeForIlike } from "@/lib/furigana";
-import { DISPATCH_TYPE_LABELS, CATEGORY_LABELS, DISPATCH_TYPE_TEXT_COLORS } from "@/types/database";
+import { DISPATCH_TYPE_LABELS, CATEGORY_LABELS, CATEGORY_ORDER, DISPATCH_TYPE_TEXT_COLORS } from "@/types/database";
 import type { DispatchType } from "@/types/database";
 import type { Category } from "@/types/database";
 
@@ -318,7 +318,7 @@ export function OrganicDispatchForm({
       const gb = groupMap.get(b.group_id ?? "") ?? "";
       return collator.compare(ga, gb) || byName(a, b);
     };
-    const ageOrder: Category[] = ["adult", "university", "high_school", "junior_high", "elementary", "preschool"];
+    const ageOrder = CATEGORY_ORDER;
     const byAgeGroup = (a: MemberRow, b: MemberRow) => {
       const ai = a.age_group ? ageOrder.indexOf(a.age_group) : -1;
       const bi = b.age_group ? ageOrder.indexOf(b.age_group) : -1;
@@ -354,7 +354,7 @@ export function OrganicDispatchForm({
       if (opt === "district") return new Intl.Collator("ja").compare(districtMap.get(a) ?? "", districtMap.get(b) ?? "");
       if (opt === "group") return new Intl.Collator("ja").compare(groupMap.get(a) ?? "", groupMap.get(b) ?? "");
       if (opt === "age_group") {
-        const order: Category[] = ["adult", "university", "high_school", "junior_high", "elementary", "preschool"];
+        const order = CATEGORY_ORDER;
         return (order.indexOf(a as Category) >= 0 ? order.indexOf(a as Category) : 999) - (order.indexOf(b as Category) >= 0 ? order.indexOf(b as Category) : 999);
       }
       return a === "believer" ? -1 : 1;

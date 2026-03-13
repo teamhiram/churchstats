@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Fragment, useState, useMemo } from "react";
-import { CATEGORY_LABELS } from "@/types/database";
+import { CATEGORY_LABELS, CATEGORY_ORDER } from "@/types/database";
 import type { Category } from "@/types/database";
 import { getLanguageLabel } from "@/lib/languages";
 import { EnrollmentMemoHtml } from "@/components/EnrollmentMemoHtml";
@@ -183,7 +183,7 @@ export function MembersList({
       const gb = groupMap.get(b.group_id ?? "") ?? "";
       return collator.compare(ga, gb) || byName(a, b);
     };
-    const ageOrder: Category[] = ["adult", "university", "high_school", "junior_high", "elementary", "preschool"];
+    const ageOrder = CATEGORY_ORDER;
     const byAgeGroup = (a: MemberRow, b: MemberRow) => {
       const ai = a.age_group ? ageOrder.indexOf(a.age_group) : -1;
       const bi = b.age_group ? ageOrder.indexOf(b.age_group) : -1;
@@ -215,7 +215,7 @@ export function MembersList({
       if (opt === "district") return new Intl.Collator("ja").compare(districtMap.get(a) ?? "", districtMap.get(b) ?? "");
       if (opt === "group") return new Intl.Collator("ja").compare(groupMap.get(a) ?? "", groupMap.get(b) ?? "");
       if (opt === "age_group") {
-        const order: Category[] = ["adult", "university", "high_school", "junior_high", "elementary", "preschool"];
+        const order = CATEGORY_ORDER;
         return (order.indexOf(a as Category) >= 0 ? order.indexOf(a as Category) : 999) - (order.indexOf(b as Category) >= 0 ? order.indexOf(b as Category) : 999);
       }
       return a === "believer" ? -1 : 1;
@@ -331,7 +331,7 @@ export function MembersList({
           className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
         >
           <option value="">年齢層を選択</option>
-          {(Object.keys(CATEGORY_LABELS) as Category[]).map((k) => (
+          {CATEGORY_ORDER.map((k) => (
             <option key={k} value={k}>{CATEGORY_LABELS[k]}</option>
           ))}
         </select>
@@ -510,7 +510,7 @@ export function MembersList({
           className="px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target"
         >
           <option value="">年齢層を選択</option>
-          {(Object.keys(CATEGORY_LABELS) as Category[]).map((k) => (
+          {CATEGORY_ORDER.map((k) => (
             <option key={k} value={k}>{CATEGORY_LABELS[k]}</option>
           ))}
         </select>
