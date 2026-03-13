@@ -13,10 +13,13 @@ export type MeetingType = "main" | "group"; // 主日 / 小組
 export type Category =
   | "adult"
   | "university"
-  | "high_school"
   | "junior_high"
   | "elementary"
-  | "preschool";
+  | "preschool"
+  | "young"
+  | "middle"
+  | "late_middle"
+  | "senior";
 
 export type BaptismDatePrecision = "exact" | "unknown" | "approximate";
 
@@ -261,13 +264,29 @@ export interface LoginLog {
   created_at: string;
 }
 
+/** 年代の表示順（未就学→小学生→中高生→青年→中年→壮年→年長→大学生→大人(年代不詳)）。凡例・メンバー登録・一覧ソートで共通利用 */
+export const CATEGORY_ORDER: Category[] = [
+  "preschool",
+  "elementary",
+  "junior_high",
+  "young",
+  "middle",
+  "late_middle",
+  "senior",
+  "university",
+  "adult",
+];
+
 export const CATEGORY_LABELS: Record<Category, string> = {
-  adult: "大人",
+  adult: "社会人(年代不詳)",
   university: "大学生",
-  high_school: "高校生",
-  junior_high: "中学生",
+  junior_high: "中高生",
   elementary: "小学生",
   preschool: "未就学児",
+  young: "青年",
+  middle: "中年",
+  late_middle: "壮年",
+  senior: "年長",
 };
 
 export const ROLE_LABELS: Record<Role, string> = {

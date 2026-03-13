@@ -14,7 +14,7 @@ import {
 } from "recharts";
 import { format, subWeeks, startOfWeek, endOfWeek } from "date-fns";
 import { ja } from "date-fns/locale";
-import { CATEGORY_LABELS } from "@/types/database";
+import { CATEGORY_LABELS, CATEGORY_ORDER } from "@/types/database";
 import { Toggle } from "@/components/Toggle";
 import type { Category } from "@/types/database";
 
@@ -145,11 +145,14 @@ function WeeklyBarTooltip({
     </div>
   );
 }
-const CATEGORY_KEYS: Category[] = ["adult", "university", "high_school", "junior_high", "elementary", "preschool"];
+const CATEGORY_KEYS = CATEGORY_ORDER;
 const CATEGORY_COLORS: Record<string, string> = {
-  adult: "#a5b4fc",
-  university: "#fdba74",
-  high_school: "#67e8f9",
+  young: "#67e8f9",
+  middle: "#a5b4fc",
+  late_middle: "#fdba74",
+  senior: "#94a3b8",
+  adult: "#c4b5fd",
+  university: "#fcd34d",
   junior_high: "#fde047",
   elementary: "#86efac",
   preschool: "#f9a8d4",

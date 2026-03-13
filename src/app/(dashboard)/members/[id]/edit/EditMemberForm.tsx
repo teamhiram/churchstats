@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
-import { CATEGORY_LABELS } from "@/types/database";
+import { CATEGORY_LABELS, CATEGORY_ORDER } from "@/types/database";
 import type { Category } from "@/types/database";
 import {
   addDistrictRegularMember,
@@ -26,7 +26,7 @@ import { Toggle } from "@/components/Toggle";
 import { useLocality } from "@/contexts/LocalityContext";
 import { updateMemberAction } from "./actions";
 
-const CATEGORIES: Category[] = ["adult", "university", "high_school", "junior_high", "elementary", "preschool"];
+const CATEGORIES = CATEGORY_ORDER;
 
 function ButtonGroup<T extends string>({
   value,
