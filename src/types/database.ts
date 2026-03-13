@@ -264,16 +264,16 @@ export interface LoginLog {
   created_at: string;
 }
 
-/** 年代の表示順（未就学→小学生→中高生→青年→中年→壮年→年長→大学生→大人(年代不詳)）。凡例・メンバー登録・一覧ソートで共通利用 */
+/** 年代の表示順（未就学→小学生→中高生→大学生→青年→中年→壮年→年長→大人(年代不詳)）。凡例・メンバー登録・一覧ソートで共通利用 */
 export const CATEGORY_ORDER: Category[] = [
   "preschool",
   "elementary",
   "junior_high",
+  "university",
   "young",
   "middle",
   "late_middle",
   "senior",
-  "university",
   "adult",
 ];
 
