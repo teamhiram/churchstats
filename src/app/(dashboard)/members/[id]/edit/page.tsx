@@ -93,8 +93,16 @@ export default async function EditMemberPage({
         returnSearchParams={search.filter || search.type ? search : undefined}
         initialUpdatedAt={(member as { updated_at?: string }).updated_at ?? null}
         initial={{
-          name: String(member.name ?? ""),
-          furigana: String(member.furigana ?? ""),
+          status: String((member as { status?: string | null }).status ?? "active") as
+            | "active"
+            | "left"
+            | "rest"
+            | "inactive"
+            | "tobedeleted",
+          last_name: String((member as { last_name?: string | null }).last_name ?? ""),
+          first_name: String((member as { first_name?: string | null }).first_name ?? ""),
+          last_furigana: String((member as { last_furigana?: string | null }).last_furigana ?? ""),
+          first_furigana: String((member as { first_furigana?: string | null }).first_furigana ?? ""),
           gender: (member.gender === "female" ? "female" : "male") as "male" | "female",
           is_local: Boolean(member.is_local),
           district_id: String(member.district_id ?? ""),

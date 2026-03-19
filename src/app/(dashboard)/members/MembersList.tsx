@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Fragment, useState, useMemo } from "react";
 import { CATEGORY_LABELS, CATEGORY_ORDER } from "@/types/database";
 import type { Category } from "@/types/database";
+import { formatMemberName, formatMemberFurigana } from "@/lib/memberName";
 import { getLanguageLabel } from "@/lib/languages";
 import { EnrollmentMemoHtml } from "@/components/EnrollmentMemoHtml";
 
@@ -81,8 +82,10 @@ function formatBaptismDate(m: MemberRow): string {
 
 type MemberRow = {
   id: string;
-  name: string;
-  furigana: string | null;
+  last_name: string | null;
+  first_name: string | null;
+  last_furigana: string | null;
+  first_furigana: string | null;
   gender: string;
   is_local: boolean;
   district_id: string | null;
@@ -171,8 +174,8 @@ export function MembersList({
     const list = [...filteredMembers];
     const collator = new Intl.Collator("ja");
     const byFurigana = (a: MemberRow, b: MemberRow) =>
-      collator.compare((a.furigana ?? a.name), (b.furigana ?? b.name));
-    const byName = (a: MemberRow, b: MemberRow) => collator.compare(a.name, b.name);
+      collator.compare(formatMemberFurigana(a), formatMemberFurigana(b));
+    const byName = (a: MemberRow, b: MemberRow) => collator.compare(formatMemberName(a), formatMemberName(b));
     const byDistrict = (a: MemberRow, b: MemberRow) => {
       const da = districtMap.get(a.district_id ?? "") ?? "";
       const db = districtMap.get(b.district_id ?? "") ?? "";
@@ -222,7 +225,7 @@ export function MembersList({
     });
   };
 
-  const memberNameMap = useMemo(() => new Map(members.map((m) => [m.id, m.name])), [members]);
+  const memberNameMap = useMemo(() => new Map(members.map((m) => [m.id, formatMemberName(m)])), [members]);
 
   const sections = useMemo((): Section[] => {
     if (!group1) return [{ group1Key: "", group1Label: "", group2Key: "", group2Label: "", members: sortedMembers }];
@@ -651,10 +654,10 @@ export function MembersList({
                               onClick={(e) => e.stopPropagation()}
                               className="text-sm font-medium text-primary-600 hover:underline"
                             >
-                              {m.name}
+                              {formatMemberName(m)}
                             </Link>
                           </td>
-                          <td className="hidden md:table-cell px-1.5 py-1 text-sm text-slate-600 whitespace-nowrap">{m.furigana ?? "—"}</td>
+                          <td className="hidden md:table-cell px-1.5 py-1 text-sm text-slate-600 whitespace-nowrap">{formatMemberFurigana(m) || "—"}</td>
                           <td className="px-1.5 py-1 text-sm text-slate-600 whitespace-nowrap">{districtMap.get(m.district_id ?? "") ?? "—"}</td>
                           <td className="px-1.5 py-1 text-sm text-slate-600 whitespace-nowrap">{groupMap.get(m.group_id ?? "") ?? (m.is_local ? "未所属" : "—")}</td>
                           <td className="px-1.5 py-1 text-sm text-slate-600 whitespace-nowrap">{m.age_group ? CATEGORY_LABELS[m.age_group] : "—"}</td>
@@ -665,7 +668,7 @@ export function MembersList({
                             <td colSpan={7} className="px-1.5 py-1.5 bg-slate-50 border-b border-slate-200">
                               <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
                                 <span className="text-slate-500 md:hidden">フリガナ</span>
-                                <span className="text-slate-800 md:hidden">{m.furigana ?? "—"}</span>
+                                <span className="text-slate-800 md:hidden">{formatMemberFurigana(m) || "—"}</span>
                                 <span className="text-slate-500">性別</span>
                                 <span className="text-slate-800">{m.gender === "male" ? "男" : "女"}</span>
                                 <span className="text-slate-500">ローカル/ゲスト</span>

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { Category } from "@/types/database";
+import { formatMemberName, formatMemberFurigana } from "@/lib/memberName";
 import { MembersList } from "./MembersList";
 import { useMembersData } from "./useMembersData";
 import { useLocality } from "@/contexts/LocalityContext";
@@ -43,8 +44,10 @@ export function MembersPageClient({ initialData, searchParams }: Props) {
   const raw = data!;
   const rows = raw.members.map((m) => ({
     id: m.id,
-    name: m.name,
-    furigana: m.furigana ?? null,
+    last_name: m.last_name ?? null,
+    first_name: m.first_name ?? null,
+    last_furigana: m.last_furigana ?? null,
+    first_furigana: m.first_furigana ?? null,
     gender: m.gender,
     is_local: m.is_local,
     district_id: m.district_id,

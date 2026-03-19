@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { formatMemberName } from "@/lib/memberName";
 
 export type ListNames = { regularNames: string[]; nonRegularNames: string[]; poolNames: string[] };
 
@@ -115,10 +116,10 @@ export async function GET() {
           .order("sort_order")
       : Promise.resolve({ data: [] }),
     districtIdsSet.size > 0
-      ? supabase.from("members").select("id, name, district_id").in("district_id", [...districtIdsSet])
+      ? supabase.from("members").select("id, last_name, first_name, district_id").in("district_id", [...districtIdsSet])
       : Promise.resolve({ data: [] }),
     groupIdsSet.size > 0
-      ? supabase.from("members").select("id, name, group_id").in("group_id", [...groupIdsSet])
+      ? supabase.from("members").select("id, last_name, first_name, group_id").in("group_id", [...groupIdsSet])
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -128,8 +129,10 @@ export async function GET() {
   const gSemiList = (groupSemiRows.data ?? []) as { group_id: string; member_id: string; sort_order: number }[];
   const dPoolList = (districtPoolRows.data ?? []) as { district_id: string; member_id: string; sort_order: number }[];
   const gPoolList = (groupPoolRows.data ?? []) as { group_id: string; member_id: string; sort_order: number }[];
-  const membersD = (membersByDistrict.data ?? []) as { id: string; name: string; district_id: string }[];
-  const membersG = (membersByGroup.data ?? []) as { id: string; name: string; group_id: string }[];
+  const membersDRaw = (membersByDistrict.data ?? []) as { id: string; last_name: string | null; first_name: string | null; district_id: string }[];
+  const membersGRaw = (membersByGroup.data ?? []) as { id: string; last_name: string | null; first_name: string | null; group_id: string }[];
+  const membersD = membersDRaw.map((m) => ({ id: m.id, name: formatMemberName(m), district_id: m.district_id }));
+  const membersG = membersGRaw.map((m) => ({ id: m.id, name: formatMemberName(m), group_id: m.group_id }));
 
   const districtRegularByDistrict = new Map<string, Set<string>>();
   const districtSemiByDistrict = new Map<string, Set<string>>();

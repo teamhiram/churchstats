@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { formatMemberName } from "@/lib/memberName";
 
 export type MemberOption = { id: string; name: string };
 
@@ -62,12 +63,20 @@ export function MemberNameDropdown({ currentId, members }: Props) {
     const supabase = createClient();
     const req = supabase
       .from("members")
-      .select("id, name")
-      .ilike("name", `%${q}%`)
-      .order("name")
+      .select("id, last_name, first_name")
+      .or(`last_name.ilike.%${q}%,first_name.ilike.%${q}%`)
+      .order("last_furigana")
       .limit(20);
-    Promise.resolve(req.then(({ data }) => setSearchResults((data ?? []) as MemberOption[])))
-      .finally(() => setSearching(false));
+    Promise.resolve(
+      req.then(({ data }) =>
+        setSearchResults(
+          ((data ?? []) as { id: string; last_name: string | null; first_name: string | null }[]).map((m) => ({
+            id: m.id,
+            name: formatMemberName(m),
+          }))
+        )
+      )
+    ).finally(() => setSearching(false));
   }, [showSearchModal, searchQuery]);
 
   useEffect(() => {

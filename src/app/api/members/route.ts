@@ -13,8 +13,10 @@ export type EnrollmentPeriodApi = {
 
 export type MembersApiRow = {
   id: string;
-  name: string;
-  furigana: string | null;
+  last_name: string | null;
+  first_name: string | null;
+  last_furigana: string | null;
+  first_furigana: string | null;
   gender: string;
   is_local: boolean;
   district_id: string | null;
@@ -61,8 +63,9 @@ export async function GET(request: NextRequest) {
 
   const membersQuery = supabase
     .from("members")
-    .select("id, name, furigana, gender, is_local, district_id, group_id, locality_id, age_group, is_baptized, baptism_year, baptism_month, baptism_day, baptism_date_precision, language_main, language_sub, follower_id, updated_at, local_member_join_date, local_member_leave_date")
-    .order("name");
+    .select("id, last_name, first_name, last_furigana, first_furigana, gender, is_local, district_id, group_id, locality_id, age_group, is_baptized, baptism_year, baptism_month, baptism_day, baptism_date_precision, language_main, language_sub, follower_id, updated_at, local_member_join_date, local_member_leave_date")
+    .neq("status", "tobedeleted")
+    .order("last_furigana");
   if (localityId != null) {
     membersQuery.eq("locality_id", localityId);
   }

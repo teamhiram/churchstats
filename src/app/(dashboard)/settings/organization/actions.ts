@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { formatMemberName, formatMemberFurigana } from "@/lib/memberName";
 
 export async function addDistrictAction(formData: FormData) {
   const localityId = (formData.get("localityId") as string)?.trim();
@@ -121,9 +122,14 @@ export async function getDistrictRegularList(districtId: string): Promise<Regula
   const memberIds = [...new Set(rows.map((r) => r.member_id))];
   const { data: membersData } = await supabase
     .from("members")
-    .select("id, name")
+    .select("id, last_name, first_name")
     .in("id", memberIds);
-  const nameMap = new Map(((membersData ?? []) as { id: string; name: string }[]).map((m) => [m.id, m.name]));
+  const nameMap = new Map(
+    ((membersData ?? []) as { id: string; last_name: string | null; first_name: string | null }[]).map((m) => [
+      m.id,
+      formatMemberName(m),
+    ])
+  );
   return rows.map((r) => ({
     id: r.id,
     member_id: r.member_id,
@@ -145,9 +151,14 @@ export async function getGroupRegularList(groupId: string): Promise<RegularListI
   const memberIds = [...new Set(rows.map((r) => r.member_id))];
   const { data: membersData } = await supabase
     .from("members")
-    .select("id, name")
+    .select("id, last_name, first_name")
     .in("id", memberIds);
-  const nameMap = new Map(((membersData ?? []) as { id: string; name: string }[]).map((m) => [m.id, m.name]));
+  const nameMap = new Map(
+    ((membersData ?? []) as { id: string; last_name: string | null; first_name: string | null }[]).map((m) => [
+      m.id,
+      formatMemberName(m),
+    ])
+  );
   return rows.map((r) => ({
     id: r.id,
     member_id: r.member_id,
@@ -233,8 +244,10 @@ export async function getDistrictPoolList(districtId: string): Promise<RegularLi
   const rows = (data ?? []) as { id: string; member_id: string; sort_order: number }[];
   if (rows.length === 0) return [];
   const memberIds = [...new Set(rows.map((r) => r.member_id))];
-  const { data: membersData } = await supabase.from("members").select("id, name").in("id", memberIds);
-  const nameMap = new Map(((membersData ?? []) as { id: string; name: string }[]).map((m) => [m.id, m.name]));
+  const { data: membersData } = await supabase.from("members").select("id, last_name, first_name").in("id", memberIds);
+  const nameMap = new Map(
+    ((membersData ?? []) as { id: string; last_name: string | null; first_name: string | null }[]).map((m) => [m.id, formatMemberName(m)])
+  );
   return rows.map((r) => ({ id: r.id, member_id: r.member_id, sort_order: r.sort_order, name: nameMap.get(r.member_id) ?? "" }));
 }
 
@@ -249,8 +262,10 @@ export async function getGroupPoolList(groupId: string): Promise<RegularListItem
   const rows = (data ?? []) as { id: string; member_id: string; sort_order: number }[];
   if (rows.length === 0) return [];
   const memberIds = [...new Set(rows.map((r) => r.member_id))];
-  const { data: membersData } = await supabase.from("members").select("id, name").in("id", memberIds);
-  const nameMap = new Map(((membersData ?? []) as { id: string; name: string }[]).map((m) => [m.id, m.name]));
+  const { data: membersData } = await supabase.from("members").select("id, last_name, first_name").in("id", memberIds);
+  const nameMap = new Map(
+    ((membersData ?? []) as { id: string; last_name: string | null; first_name: string | null }[]).map((m) => [m.id, formatMemberName(m)])
+  );
   return rows.map((r) => ({ id: r.id, member_id: r.member_id, sort_order: r.sort_order, name: nameMap.get(r.member_id) ?? "" }));
 }
 
@@ -303,8 +318,10 @@ export async function getDistrictSemiRegularList(districtId: string): Promise<Re
   const rows = (data ?? []) as { id: string; member_id: string; sort_order: number }[];
   if (rows.length === 0) return [];
   const memberIds = [...new Set(rows.map((r) => r.member_id))];
-  const { data: membersData } = await supabase.from("members").select("id, name").in("id", memberIds);
-  const nameMap = new Map(((membersData ?? []) as { id: string; name: string }[]).map((m) => [m.id, m.name]));
+  const { data: membersData } = await supabase.from("members").select("id, last_name, first_name").in("id", memberIds);
+  const nameMap = new Map(
+    ((membersData ?? []) as { id: string; last_name: string | null; first_name: string | null }[]).map((m) => [m.id, formatMemberName(m)])
+  );
   return rows.map((r) => ({ id: r.id, member_id: r.member_id, sort_order: r.sort_order, name: nameMap.get(r.member_id) ?? "" }));
 }
 
@@ -319,8 +336,10 @@ export async function getGroupSemiRegularList(groupId: string): Promise<RegularL
   const rows = (data ?? []) as { id: string; member_id: string; sort_order: number }[];
   if (rows.length === 0) return [];
   const memberIds = [...new Set(rows.map((r) => r.member_id))];
-  const { data: membersData } = await supabase.from("members").select("id, name").in("id", memberIds);
-  const nameMap = new Map(((membersData ?? []) as { id: string; name: string }[]).map((m) => [m.id, m.name]));
+  const { data: membersData } = await supabase.from("members").select("id, last_name, first_name").in("id", memberIds);
+  const nameMap = new Map(
+    ((membersData ?? []) as { id: string; last_name: string | null; first_name: string | null }[]).map((m) => [m.id, formatMemberName(m)])
+  );
   return rows.map((r) => ({ id: r.id, member_id: r.member_id, sort_order: r.sort_order, name: nameMap.get(r.member_id) ?? "" }));
 }
 
@@ -367,13 +386,13 @@ export async function getMembersByDistrict(districtId: string): Promise<{ id: st
   const supabase = await createClient();
   const { data } = await supabase
     .from("members")
-    .select("id, name, furigana")
+    .select("id, last_name, first_name, last_furigana, first_furigana")
     .eq("district_id", districtId)
-    .order("furigana");
-  return ((data ?? []) as { id: string; name: string; furigana: string | null }[]).map((m) => ({
+    .order("last_furigana");
+  return ((data ?? []) as { id: string; last_name: string | null; first_name: string | null; last_furigana: string | null; first_furigana: string | null }[]).map((m) => ({
     id: m.id,
-    name: m.name,
-    furigana: (m.furigana ?? m.name).trim() || m.name,
+    name: formatMemberName(m),
+    furigana: formatMemberFurigana(m).trim() || formatMemberName(m),
   }));
 }
 
@@ -382,12 +401,12 @@ export async function getMembersByGroup(groupId: string): Promise<{ id: string; 
   const supabase = await createClient();
   const { data } = await supabase
     .from("members")
-    .select("id, name, furigana")
+    .select("id, last_name, first_name, last_furigana, first_furigana")
     .eq("group_id", groupId)
-    .order("furigana");
-  return ((data ?? []) as { id: string; name: string; furigana: string | null }[]).map((m) => ({
+    .order("last_furigana");
+  return ((data ?? []) as { id: string; last_name: string | null; first_name: string | null; last_furigana: string | null; first_furigana: string | null }[]).map((m) => ({
     id: m.id,
-    name: m.name,
-    furigana: (m.furigana ?? m.name).trim() || m.name,
+    name: formatMemberName(m),
+    furigana: formatMemberFurigana(m).trim() || formatMemberName(m),
   }));
 }

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import { formatMemberName, formatMemberFurigana } from "@/lib/memberName";
 
 export const dynamic = "force-dynamic";
 
@@ -11,11 +12,23 @@ export default async function DebugEnrollmentUncertainPage() {
     .order("member_id")
     .order("period_no");
   const memberIds = [...new Set((periods ?? []).map((p) => (p as { member_id: string }).member_id))];
-  const { data: members } = await supabase
+  const { data: membersRaw } = await supabase
     .from("members")
-    .select("id, name, furigana, district_id")
+    .select("id, last_name, first_name, last_furigana, first_furigana, district_id")
     .in("id", memberIds.length > 0 ? memberIds : ["__none__"]);
-  const memberMap = new Map((members ?? []).map((m) => [m.id, m]));
+  const memberMap = new Map(
+    ((membersRaw ?? []) as { id: string; last_name: string | null; first_name: string | null; last_furigana: string | null; first_furigana: string | null; district_id: string | null }[]).map(
+      (m) => [
+        m.id,
+        {
+          id: m.id,
+          name: formatMemberName(m),
+          furigana: formatMemberFurigana(m) || null,
+          district_id: m.district_id,
+        },
+      ]
+    )
+  );
 
   const byMember = new Map<string, { period_no: number; join_date: string | null; leave_date: string | null; is_uncertain: boolean }[]>();
   for (const p of periods ?? []) {

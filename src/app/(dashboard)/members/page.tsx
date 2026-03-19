@@ -15,8 +15,9 @@ export default async function MembersPage({
 
   const membersQuery = supabase
     .from("members")
-    .select("id, name, furigana, gender, is_local, district_id, group_id, locality_id, age_group, is_baptized, baptism_year, baptism_month, baptism_day, baptism_date_precision, language_main, language_sub, follower_id, updated_at, local_member_join_date, local_member_leave_date")
-    .order("name");
+    .select("id, last_name, first_name, last_furigana, first_furigana, gender, is_local, district_id, group_id, locality_id, age_group, is_baptized, baptism_year, baptism_month, baptism_day, baptism_date_precision, language_main, language_sub, follower_id, updated_at, local_member_join_date, local_member_leave_date")
+    .neq("status", "tobedeleted")
+    .order("last_furigana");
   if (currentLocalityId != null) {
     membersQuery.eq("locality_id", currentLocalityId);
   }
@@ -61,8 +62,10 @@ export default async function MembersPage({
     const enrollmentPeriods = periodsByMember.get(m.id);
     const apiRow: MembersApiRow = {
       id: m.id,
-      name: m.name,
-      furigana: m.furigana ?? null,
+      last_name: (row.last_name as string) ?? null,
+      first_name: (row.first_name as string) ?? null,
+      last_furigana: (row.last_furigana as string) ?? null,
+      first_furigana: (row.first_furigana as string) ?? null,
       gender: m.gender,
       is_local: m.is_local,
       district_id: m.district_id,

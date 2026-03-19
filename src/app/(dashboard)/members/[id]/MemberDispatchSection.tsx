@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { formatMemberName, formatMemberFurigana } from "@/lib/memberName";
 import { format, parseISO } from "date-fns";
 import { DISPATCH_TYPE_LABELS, DISPATCH_TYPE_TEXT_COLORS } from "@/types/database";
 import type { DispatchType } from "@/types/database";
@@ -67,7 +68,7 @@ export function MemberDispatchSection({
     dispatch_memo: "",
   });
   const [visitorSearchQuery, setVisitorSearchQuery] = useState("");
-  const [visitorSearchResults, setVisitorSearchResults] = useState<{ id: string; name: string; furigana: string | null }[]>([]);
+  const [visitorSearchResults, setVisitorSearchResults] = useState<{ id: string; name: string; furigana: string }[]>([]);
   const [visitorNameMap, setVisitorNameMap] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
@@ -76,13 +77,27 @@ export function MemberDispatchSection({
       return;
     }
     const supabase = createClient();
+    const q = visitorSearchQuery.trim();
     supabase
       .from("members")
-      .select("id, name, furigana")
-      .ilike("name", `%${visitorSearchQuery.trim()}%`)
+      .select("id, last_name, first_name, last_furigana, first_furigana")
+      .or(`last_name.ilike.%${q}%,first_name.ilike.%${q}%`)
       .limit(15)
       .then(({ data }) => {
-        setVisitorSearchResults((data ?? []) as { id: string; name: string; furigana: string | null }[]);
+        const rows = (data ?? []) as {
+          id: string;
+          last_name: string | null;
+          first_name: string | null;
+          last_furigana: string | null;
+          first_furigana: string | null;
+        }[];
+        setVisitorSearchResults(
+          rows.map((m) => ({
+            id: m.id,
+            name: formatMemberName(m),
+            furigana: formatMemberFurigana(m),
+          }))
+        );
       });
   }, [popupOpen, visitorSearchQuery]);
 

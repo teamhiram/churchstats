@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { SettingsSidebar } from "@/components/SettingsSidebar";
+import { useRoleOverride } from "@/contexts/RoleOverrideContext";
 
 const MOBILE_BREAKPOINT = 768;
 
@@ -14,20 +15,25 @@ function isInSettingsSection(pathname: string, showDebug: boolean) {
 
 export function SettingsShell({
   children,
-  showDebug = false,
-  showRolesManagement = false,
   meetingDuplicateGroupCount = 0,
   duplicateAttendanceGroupCount = 0,
   enrollmentUncertainCount = 0,
+  incompleteNamesCount = 0,
+  inactiveMembersCount = 0,
+  toBeDeletedMembersCount = 0,
 }: {
   children: React.ReactNode;
-  showDebug?: boolean;
-  showRolesManagement?: boolean;
   meetingDuplicateGroupCount?: number;
   duplicateAttendanceGroupCount?: number;
   enrollmentUncertainCount?: number;
+  incompleteNamesCount?: number;
+  inactiveMembersCount?: number;
+  toBeDeletedMembersCount?: number;
 }) {
   const pathname = usePathname();
+  const { effective } = useRoleOverride();
+  const showDebug = effective.globalRole === "admin";
+  const showRolesManagement = effective.globalRole === "admin";
   const showSidebar = isInSettingsSection(pathname, showDebug);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
@@ -89,6 +95,9 @@ export function SettingsShell({
             meetingDuplicateGroupCount={meetingDuplicateGroupCount}
             duplicateAttendanceGroupCount={duplicateAttendanceGroupCount}
             enrollmentUncertainCount={enrollmentUncertainCount}
+            incompleteNamesCount={incompleteNamesCount}
+            inactiveMembersCount={inactiveMembersCount}
+            toBeDeletedMembersCount={toBeDeletedMembersCount}
             onCollapse={() => setSidebarOpen(false)}
             className="fixed left-0 top-0 bottom-0 z-50 w-56 min-w-[14rem] shadow-xl md:relative md:left-auto md:top-auto md:bottom-auto md:z-0 md:shadow-none"
           />

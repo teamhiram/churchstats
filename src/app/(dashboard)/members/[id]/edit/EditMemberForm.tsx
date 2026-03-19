@@ -24,6 +24,7 @@ import { QUERY_KEYS } from "@/lib/queryClient";
 import { LANGUAGE_OPTIONS } from "@/lib/languages";
 import { Toggle } from "@/components/Toggle";
 import { useLocality } from "@/contexts/LocalityContext";
+import { formatMemberName, formatMemberFurigana } from "@/lib/memberName";
 import { updateMemberAction } from "./actions";
 
 const CATEGORIES = CATEGORY_ORDER;
@@ -66,8 +67,11 @@ type Props = {
   /** 楽観ロック用。編集中に取得した updated_at。他ユーザーが更新していると保存時にコンフリクトとして理由を表示する。 */
   initialUpdatedAt: string | null;
   initial: {
-    name: string;
-    furigana: string;
+    status?: "active" | "left" | "rest" | "inactive" | "tobedeleted";
+    last_name: string;
+    first_name: string;
+    last_furigana: string;
+    first_furigana: string;
     gender: "male" | "female";
     is_local: boolean;
     district_id: string;
@@ -95,8 +99,13 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
   const router = useRouter();
   const queryClient = useQueryClient();
   const { currentLocalityId } = useLocality();
-  const [name, setName] = useState(initial.name);
-  const [furigana, setFurigana] = useState(initial.furigana);
+  const [status, setStatus] = useState<"active" | "left" | "rest" | "inactive" | "tobedeleted">(
+    initial.status ?? "active"
+  );
+  const [lastName, setLastName] = useState(initial.last_name);
+  const [firstName, setFirstName] = useState(initial.first_name);
+  const [lastFurigana, setLastFurigana] = useState(initial.last_furigana);
+  const [firstFurigana, setFirstFurigana] = useState(initial.first_furigana);
   const [gender, setGender] = useState<"male" | "female">(initial.gender);
   const [isLocal, setIsLocal] = useState(initial.is_local);
   const [districtId, setDistrictId] = useState(initial.district_id);
@@ -155,16 +164,21 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
     e.preventDefault();
     setError("");
     setConflict(false);
-    if (!name.trim()) {
-      setError("氏名を入力してください");
+    const last = lastName.trim();
+    const first = firstName.trim();
+    if (!last && !first) {
+      setError("姓または名を入力してください");
       return;
     }
     setLoading(true);
     const result = await updateMemberAction(
       memberId,
       {
-        name: name.trim(),
-        furigana: furigana.trim() || null,
+        status,
+        last_name: last || null,
+        first_name: first || null,
+        last_furigana: lastFurigana.trim() || null,
+        first_furigana: firstFurigana.trim() || null,
         gender,
         is_local: isLocal,
         district_id: isLocal ? (districtId || null) : null,
@@ -225,27 +239,106 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
     // 遷移するため refresh は呼ばない（refresh すると現在ページの再検証で遷移が打ち消される）
   };
 
+  const handleSetSpecialStatus = async (next: "inactive" | "tobedeleted") => {
+    if (loading) return;
+    const ok = window.confirm(next === "inactive" ? "このメンバーを非表示にしますか？" : "このメンバーを削除予定にしますか？");
+    if (!ok) return;
+    setError("");
+    setConflict(false);
+    setLoading(true);
+    const result = await updateMemberAction(
+      memberId,
+      {
+        status: next,
+        last_name: lastName.trim() || null,
+        first_name: firstName.trim() || null,
+        last_furigana: lastFurigana.trim() || null,
+        first_furigana: firstFurigana.trim() || null,
+        gender,
+        is_local: isLocal,
+        district_id: isLocal ? (districtId || null) : null,
+        group_id: isLocal ? groupId : null,
+        locality_id: isLocal ? (currentLocalityId ?? null) : null,
+        age_group: ageGroup,
+        is_baptized: isBaptized,
+        language_main: languageMain || null,
+        language_sub: languageSub || null,
+        local_member_join_date: periods[0]?.join_date?.trim() || null,
+        local_member_leave_date: periods[0]?.leave_date?.trim() || null,
+        enrollment_periods: isLocal
+          ? periods.map((p, i) => ({
+              period_no: i + 1,
+              join_date: p.join_date?.trim() || null,
+              leave_date: p.leave_date?.trim() || null,
+              is_uncertain: p.is_uncertain,
+              memo: p.memo?.trim() || null,
+            }))
+          : undefined,
+      },
+      initialUpdatedAt
+    );
+    setLoading(false);
+    if (!result.ok) {
+      setError(result.error ?? "保存に失敗しました。");
+      setConflict(result.conflict ?? false);
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.members });
+    router.push(`/members/${memberId}`);
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-0.5">氏名 *</label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
+        <label className="block text-sm font-medium text-slate-700 mb-1">ステータス</label>
+        <ButtonGroup
+          value={status}
+          onChange={setStatus}
+          options={["active", "left", "rest"]}
+          getLabel={(v) => (v === "active" ? "正常" : v === "left" ? "転出" : "逝去")}
         />
       </div>
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-0.5">フリガナ</label>
-        <input
-          type="text"
-          value={furigana}
-          onChange={(e) => setFurigana(e.target.value)}
-          placeholder="カタカナまたはひらがな"
-          className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
-        />
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-0.5">姓 *</label>
+          <input
+            type="text"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-0.5">名 *</label>
+          <input
+            type="text"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-0.5">姓フリガナ</label>
+          <input
+            type="text"
+            value={lastFurigana}
+            onChange={(e) => setLastFurigana(e.target.value)}
+            placeholder="カタカナ"
+            className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-0.5">名フリガナ</label>
+          <input
+            type="text"
+            value={firstFurigana}
+            onChange={(e) => setFirstFurigana(e.target.value)}
+            placeholder="カタカナ"
+            className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
+          />
+        </div>
       </div>
       <div className="flex flex-wrap items-end gap-4">
         <div>
@@ -558,6 +651,36 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
         >
           キャンセル
         </Link>
+      </div>
+
+      <div className="pt-2 border-t border-slate-200 space-y-2">
+        <button
+          type="button"
+          onClick={() => handleSetSpecialStatus("inactive")}
+          disabled={loading}
+          className="text-sm text-slate-700 hover:underline disabled:opacity-60 touch-target"
+        >
+          非表示にする
+        </button>
+        <p className="text-xs text-slate-500 leading-relaxed">
+          注：データ自体は統計に反映されますが、出欠登録画面から隠れます。
+          <br />
+          非表示になった名前は「設定→ローカル設定→非表示リスト」で確認できます。
+        </p>
+
+        <button
+          type="button"
+          onClick={() => handleSetSpecialStatus("tobedeleted")}
+          disabled={loading}
+          className="text-sm text-red-700 hover:underline disabled:opacity-60 touch-target"
+        >
+          削除する
+        </button>
+        <p className="text-xs text-slate-500 leading-relaxed">
+          注：データ自体が統計に反映されなくなります。
+          <br />
+          削除された名前は「設定→ローカル設定→削除予定」で確認できます。
+        </p>
       </div>
     </form>
   );

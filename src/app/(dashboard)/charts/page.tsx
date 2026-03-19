@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { formatMemberName } from "@/lib/memberName";
 import { getCurrentUserWithProfile, getEffectiveCurrentLocalityId } from "@/lib/cachedData";
 import { StatisticsChartsDynamic } from "../statistics/StatisticsChartsDynamic";
 import { DispatchMonitor } from "./DispatchMonitor";
@@ -18,7 +19,10 @@ export default async function DashboardPage() {
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
   const yearStartIso = oneYearAgo.toISOString().slice(0, 10);
 
-  const membersCountQuery = supabase.from("members").select("id", { count: "exact", head: true });
+  const membersCountQuery = supabase
+    .from("members")
+    .select("id", { count: "exact", head: true })
+    .neq("status", "tobedeleted");
   const districtsCountQuery = supabase.from("districts").select("id", { count: "exact", head: true });
   if (currentLocalityId != null) {
     membersCountQuery.eq("locality_id", currentLocalityId);
@@ -40,7 +44,7 @@ export default async function DashboardPage() {
   const districtIds = districtsList.map((d) => d.id);
   let groupsCountRes: { count: number | null };
   let meetingsRes: { data: { id: string; event_date: string; meeting_type: string; district_id: string | null; name: string }[] | null };
-  let membersRes: { data: { id: string; name: string; is_local: boolean; district_id: string | null; group_id: string | null; is_baptized: boolean }[] | null };
+  let membersRes: { data: { id: string; last_name: string | null; first_name: string | null; is_local: boolean; district_id: string | null; group_id: string | null; is_baptized: boolean }[] | null };
   if (currentLocalityId != null && districtIds.length > 0) {
     [groupsCountRes, meetingsRes, membersRes] = await Promise.all([
       supabase.from("groups").select("id", { count: "exact", head: true }).in("district_id", districtIds),
@@ -51,7 +55,8 @@ export default async function DashboardPage() {
         .or(`district_id.in.(${districtIds.join(",")}),locality_id.eq.${currentLocalityId}`),
       supabase
         .from("members")
-        .select("id, name, is_local, district_id, group_id, is_baptized")
+        .select("id, last_name, first_name, is_local, district_id, group_id, is_baptized")
+        .neq("status", "tobedeleted")
         .eq("locality_id", currentLocalityId),
     ]);
   } else if (currentLocalityId != null) {
@@ -65,9 +70,18 @@ export default async function DashboardPage() {
         .from("lordsday_meeting_records")
         .select("id, event_date, meeting_type, district_id, name")
         .gte("event_date", yearStartIso),
-      supabase.from("members").select("id, name, is_local, district_id, group_id, is_baptized"),
+      supabase.from("members").select("id, last_name, first_name, is_local, district_id, group_id, is_baptized").neq("status", "tobedeleted"),
     ]);
   }
+
+  const membersForCharts = (membersRes.data ?? []).map((m) => ({
+    id: m.id,
+    name: formatMemberName(m),
+    is_local: m.is_local,
+    district_id: m.district_id,
+    group_id: m.group_id,
+    is_baptized: m.is_baptized,
+  }));
 
   const meetings = meetingsRes.data ?? [];
   const meetingIds = meetings.map((m) => m.id);
@@ -127,7 +141,7 @@ export default async function DashboardPage() {
       <StatisticsChartsDynamic
         attendance={attendance}
         meetings={meetings}
-        members={membersRes.data ?? []}
+        members={membersForCharts}
         districts={districtsList}
         localityName={currentLocalityName}
       />

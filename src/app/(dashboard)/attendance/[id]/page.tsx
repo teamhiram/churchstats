@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
+import { formatMemberName } from "@/lib/memberName";
+import type { Category } from "@/types/database";
 import { ja } from "date-fns/locale";
 import Link from "next/link";
 import { AttendanceReport } from "./AttendanceReport";
@@ -24,10 +26,19 @@ export default async function MeetingDetailPage({
     .select("id, member_id")
     .eq("meeting_id", id);
   const memberIds = attendance?.map((a) => a.member_id) ?? [];
-  const { data: members } = await supabase
+  const { data: membersRaw } = await supabase
     .from("members")
-    .select("id, name, age_group, is_baptized, district_id, group_id, locality_id")
+    .select("id, last_name, first_name, age_group, is_baptized, district_id, group_id, locality_id")
     .in("id", memberIds.length > 0 ? memberIds : ["__none__"]);
+  const members = (membersRaw ?? []).map((m) => ({
+    id: m.id,
+    name: formatMemberName(m),
+    age_group: ((m as { age_group?: string | null }).age_group ?? null) as Category | null,
+    is_baptized: Boolean((m as { is_baptized?: boolean }).is_baptized),
+    district_id: (m as { district_id?: string | null }).district_id ?? null,
+    group_id: (m as { group_id?: string | null }).group_id ?? null,
+    locality_id: (m as { locality_id?: string | null }).locality_id ?? null,
+  }));
   const meetingLocalityId = (meeting as { locality_id?: string | null }).locality_id ?? null;
   const localityIdResolved =
     meetingLocalityId != null
@@ -61,10 +72,7 @@ export default async function MeetingDetailPage({
         districtId={meeting.district_id}
         meetingLocalityId={localityIdResolved}
         initialAttendance={attendance ?? []}
-        initialMembers={(members ?? []).map((m) => ({
-          ...m,
-          locality_id: (m as { locality_id?: string | null }).locality_id ?? null,
-        }))}
+        initialMembers={members}
         regularList={regularList ?? []}
       />
     </div>

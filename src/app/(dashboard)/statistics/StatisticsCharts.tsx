@@ -153,7 +153,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   senior: "#94a3b8",
   adult: "#c4b5fd",
   university: "#fcd34d",
-  junior_high: "#fde047",
+  adolescent: "#fde047",
   elementary: "#86efac",
   preschool: "#f9a8d4",
 };

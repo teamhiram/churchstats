@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { hiraganaToKatakana } from "@/lib/furigana";
+import { formatMemberName, formatMemberFurigana } from "@/lib/memberName";
 import { CATEGORY_LABELS, CATEGORY_ORDER } from "@/types/database";
 import type { Category } from "@/types/database";
 import { addDistrictRegularMember, addGroupRegularMember } from "@/app/(dashboard)/settings/organization/actions";
@@ -53,8 +54,10 @@ export default function NewMemberPage() {
   const { currentLocalityId } = useLocality();
   const [districts, setDistricts] = useState<{ id: string; name: string }[]>([]);
   const [groups, setGroups] = useState<{ id: string; name: string; district_id: string }[]>([]);
-  const [name, setName] = useState("");
-  const [furigana, setFurigana] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastFurigana, setLastFurigana] = useState("");
+  const [firstFurigana, setFirstFurigana] = useState("");
   const [gender, setGender] = useState<"male" | "female">("male");
   const [isLocal, setIsLocal] = useState(true);
   const [districtId, setDistrictId] = useState("");
@@ -63,6 +66,7 @@ export default function NewMemberPage() {
   const [isGroupRegular, setIsGroupRegular] = useState(false);
   const [ageGroup, setAgeGroup] = useState<Category | null>(null);
   const [isBaptized, setIsBaptized] = useState(true);
+  const [memo, setMemo] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -86,24 +90,32 @@ export default function NewMemberPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!name.trim()) {
-      setError("氏名を入力してください");
+    const last = lastName.trim();
+    const first = firstName.trim();
+    if (!last && !first) {
+      setError("姓または名を入力してください");
       return;
     }
     setLoading(true);
     const supabase = createClient();
-    const furiganaValue = furigana.trim() || null;
+    const lFur = lastFurigana.trim() ? hiraganaToKatakana(lastFurigana.trim()) : null;
+    const fFur = firstFurigana.trim() ? hiraganaToKatakana(firstFurigana.trim()) : null;
+    const memoVal = memo.trim() ? memo.trim() : null;
     const { data: inserted, error: err } = await supabase
       .from("members")
       .insert({
-        name: name.trim(),
-        furigana: furiganaValue ? hiraganaToKatakana(furiganaValue) : null,
+        status: "active",
+        last_name: last || null,
+        first_name: first || null,
+        last_furigana: lFur,
+        first_furigana: fFur,
         gender,
         is_local: isLocal,
         district_id: isLocal ? (districtId || null) : null,
         group_id: isLocal ? (groupId ?? null) : null,
         locality_id: isLocal ? (currentLocalityId ?? null) : null,
         age_group: ageGroup,
+        memo: memoVal,
         is_baptized: isBaptized,
       })
       .select("id")
@@ -129,25 +141,47 @@ export default function NewMemberPage() {
         ← 名簿管理
       </Link>
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-0.5">氏名 *</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
-          />
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-0.5">姓 *</label>
+            <input
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-0.5">名 *</label>
+            <input
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
+            />
+          </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-0.5">フリガナ</label>
-          <input
-            type="text"
-            value={furigana}
-            onChange={(e) => setFurigana(e.target.value)}
-            placeholder="カタカナまたはひらがな"
-            className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
-          />
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-0.5">姓フリガナ</label>
+            <input
+              type="text"
+              value={lastFurigana}
+              onChange={(e) => setLastFurigana(e.target.value)}
+              placeholder="カタカナ"
+              className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-0.5">名フリガナ</label>
+            <input
+              type="text"
+              value={firstFurigana}
+              onChange={(e) => setFirstFurigana(e.target.value)}
+              placeholder="カタカナ"
+              className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm"
+            />
+          </div>
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">性別</label>
@@ -289,6 +323,15 @@ export default function NewMemberPage() {
               </button>
             ))}
           </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">メモ</label>
+          <textarea
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+            placeholder="名簿の補足など（長文OK）"
+            className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm min-h-24 resize-y"
+          />
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button

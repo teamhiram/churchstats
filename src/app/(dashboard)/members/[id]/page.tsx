@@ -10,6 +10,7 @@ import { MemberAttendanceMatrix } from "./MemberAttendanceMatrix";
 import { MemberNameDropdown } from "./MemberNameDropdown";
 import { MemberDispatchSection } from "./MemberDispatchSection";
 import { EditPencilIcon } from "@/components/icons/EditPencilIcon";
+import { formatMemberName, formatMemberFurigana } from "@/lib/memberName";
 import { getSundayWeeksInYear, formatDateYmd } from "@/lib/weekUtils";
 
 const BAPTISM_PRECISION_LABELS: Record<string, string> = {
@@ -40,10 +41,11 @@ export default async function MemberDetailPage({
   const supabase = await createClient();
   const [memberRes, allMembersRes] = await Promise.all([
     supabase.from("members").select("*").eq("id", id).single(),
-    supabase.from("members").select("id, name").order("name"),
+    supabase.from("members").select("id, last_name, first_name").order("last_furigana"),
   ]);
   const { data: member } = memberRes;
-  const allMembers = (allMembersRes.data ?? []) as { id: string; name: string }[];
+  const allMembersRaw = (allMembersRes.data ?? []) as { id: string; last_name: string | null; first_name: string | null }[];
+  const allMembers = allMembersRaw.map((m) => ({ id: m.id, name: formatMemberName(m) }));
   if (!member) notFound();
 
   const [districtRes, groupRes, localityRes, followerRes, periodsRes, dispatchRes] = await Promise.all([
@@ -53,7 +55,7 @@ export default async function MemberDetailPage({
       ? supabase.from("localities").select("id, name").eq("id", (member as { locality_id: string }).locality_id).single()
       : Promise.resolve({ data: null }),
     (member as { follower_id?: string | null }).follower_id
-      ? supabase.from("members").select("id, name").eq("id", (member as { follower_id: string }).follower_id).single()
+      ? supabase.from("members").select("id, last_name, first_name").eq("id", (member as { follower_id: string }).follower_id).single()
       : Promise.resolve({ data: null }),
     supabase
       .from("member_local_enrollment_periods")
@@ -82,8 +84,10 @@ export default async function MemberDetailPage({
   if (visitorIds.length > 0) {
     const missing = visitorIds.filter((vid) => !visitorIdToName.has(vid));
     if (missing.length > 0) {
-      const { data: visitorNames } = await supabase.from("members").select("id, name").in("id", missing);
-      (visitorNames ?? []).forEach((row: { id: string; name: string }) => visitorIdToName.set(row.id, row.name));
+      const { data: visitorRows } = await supabase.from("members").select("id, last_name, first_name").in("id", missing);
+      (visitorRows ?? []).forEach((row: { id: string; last_name: string | null; first_name: string | null }) =>
+        visitorIdToName.set(row.id, formatMemberName(row))
+      );
     }
   }
   let dispatchGroupMap = new Map<string, string>();
@@ -172,6 +176,7 @@ export default async function MemberDetailPage({
   }));
 
   const m = member as Record<string, unknown>;
+  const memberMemo = (member as { memo?: string | null }).memo ?? null;
   const baptismDate = formatBaptismDate({
     baptism_year: m.baptism_year as number | null,
     baptism_month: m.baptism_month as number | null,
@@ -199,7 +204,7 @@ export default async function MemberDetailPage({
         </div>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm items-baseline">
           <dt className="text-slate-500 shrink-0">フリガナ</dt>
-          <dd className="text-slate-800 min-w-0">{member.furigana ?? "—"}</dd>
+          <dd className="text-slate-800 min-w-0">{formatMemberFurigana(member as { last_furigana?: string | null; first_furigana?: string | null }) || "—"}</dd>
           <dt className="text-slate-500 shrink-0">性別</dt>
           <dd className="text-slate-800 min-w-0">{member.gender === "male" ? "男" : "女"}</dd>
           <dt className="text-slate-500 shrink-0">ローカル/ゲスト</dt>
@@ -210,6 +215,14 @@ export default async function MemberDetailPage({
           <dd className="text-slate-800 min-w-0">{group?.name ?? (member.is_local ? "未所属" : "—")}</dd>
           <dt className="text-slate-500 shrink-0">区分</dt>
           <dd className="text-slate-800 min-w-0">{member.age_group ? CATEGORY_LABELS[member.age_group as Category] : "—"}</dd>
+          <dt className="text-slate-500 shrink-0">メモ</dt>
+          <dd className="text-slate-800 min-w-0">
+            {memberMemo && memberMemo.trim() !== "" ? (
+              <div className="whitespace-pre-wrap break-words leading-relaxed">{memberMemo}</div>
+            ) : (
+              "—"
+            )}
+          </dd>
           <dt className="text-slate-500 shrink-0">聖徒/友人</dt>
           <dd className="text-slate-800 min-w-0">{member.is_baptized ? "聖徒" : "友人"}</dd>
           <dt className="text-slate-500 shrink-0">バプテスマ日</dt>
@@ -233,7 +246,7 @@ export default async function MemberDetailPage({
           {m.follower_id && (
             <>
               <dt className="text-slate-500 shrink-0">フォロー担当</dt>
-              <dd className="text-slate-800 min-w-0">{follower?.name ?? (m.follower_id as string)}</dd>
+              <dd className="text-slate-800 min-w-0">{follower ? formatMemberName(follower as { last_name?: string | null; first_name?: string | null }) : (member.follower_id as string)}</dd>
             </>
           )}
           {member.is_local && enrollmentPeriods.length > 0 && (
@@ -269,7 +282,7 @@ export default async function MemberDetailPage({
 
       <MemberDispatchSection
         memberId={id}
-        memberName={member.name}
+        memberName={formatMemberName(member as { last_name?: string | null; first_name?: string | null })}
         defaultGroupId={member.group_id ?? null}
         dispatchRecords={dispatchRecords}
         dispatchGroupMap={dispatchGroupMap}

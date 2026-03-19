@@ -6,7 +6,8 @@
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "split-members-name": "node scripts/split-members-name.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

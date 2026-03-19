@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { addDays, format, getDay } from "date-fns";
+import { formatMemberName, formatMemberFurigana } from "@/lib/memberName";
 import { getSundayWeeksInYear, formatDateYmd } from "@/lib/weekUtils";
 import type { WeekRow, WeekDetail } from "./types";
 
@@ -144,6 +145,7 @@ async function getListDataUncached(
     const { data: localMembers } = await supabase
       .from("members")
       .select("id")
+      .neq("status", "tobedeleted")
       .eq("is_local", true);
     localMemberIds = new Set(((localMembers ?? []) as { id: string }[]).map((m) => m.id));
   }
@@ -332,21 +334,23 @@ export async function getWeekDetail(
       : Promise.resolve({ data: [] as { id: string; group_id: string }[] }),
     prayerRecordsQuery,
     dispatchPromise,
-    supabase.from("members").select("id, name, furigana, is_local"),
+    supabase.from("members").select("id, last_name, first_name, last_furigana, first_furigana, is_local").neq("status", "tobedeleted"),
   ]);
 
-  const membersList = (membersRes.data ?? []) as {
+  const membersRaw = (membersRes.data ?? []) as {
     id: string;
-    name: string;
-    furigana: string | null;
+    last_name: string | null;
+    first_name: string | null;
+    last_furigana: string | null;
+    first_furigana: string | null;
     is_local: boolean;
   }[];
   const localMemberIds = localOnly
-    ? new Set(membersList.filter((m) => m.is_local).map((m) => m.id))
+    ? new Set(membersRaw.filter((m) => m.is_local).map((m) => m.id))
     : null;
-  const memberMap = new Map(membersList.map((m) => [m.id, m.name]));
+  const memberMap = new Map(membersRaw.map((m) => [m.id, formatMemberName(m)]));
   const furiganaMap = new Map(
-    membersList.map((m) => [m.id, (m.furigana ?? m.name).trim() || m.name])
+    membersRaw.map((m) => [m.id, formatMemberFurigana(m).trim() || formatMemberName(m)])
   );
   const sortByFurigana = (
     a: { memberId: string; name: string },
@@ -500,14 +504,15 @@ export async function getDebugSundayAttendees(dateStr: string): Promise<{
 
   const { data: members } = await supabase
     .from("members")
-    .select("id, name, furigana, is_local")
+    .select("id, last_name, first_name, last_furigana, first_furigana, is_local")
+    .neq("status", "tobedeleted")
     .in("id", memberIds);
 
   const list = (members ?? []).map(
-    (m: { id: string; name: string; furigana: string | null; is_local: boolean }) => ({
+    (m: { id: string; last_name: string | null; first_name: string | null; last_furigana: string | null; first_furigana: string | null; is_local: boolean }) => ({
       memberId: m.id,
-      name: m.name,
-      furigana: (m.furigana ?? m.name).trim() || m.name,
+      name: formatMemberName(m),
+      furigana: formatMemberFurigana(m).trim() || formatMemberName(m),
       isLocal: m.is_local,
     })
   );
@@ -610,10 +615,11 @@ export async function getDuplicateMainAttendance(
 
   const { data: members } = await supabase
     .from("members")
-    .select("id, name")
+    .select("id, last_name, first_name")
+    .neq("status", "tobedeleted")
     .in("id", memberIds);
   const memberMap = new Map(
-    (members ?? []).map((m: { id: string; name: string }) => [m.id, m.name])
+    (members ?? []).map((m: { id: string; last_name: string | null; first_name: string | null }) => [m.id, formatMemberName(m)])
   );
 
   const result: DuplicateMainAttendanceGroup[] = [];

@@ -5,6 +5,7 @@ import { Fragment, useState, useEffect, useCallback, useMemo } from "react";
 import { formatDateYmd, getDaysInWeek, getSundayWeeksInYear } from "@/lib/weekUtils";
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
+import { formatMemberName, formatMemberFurigana } from "@/lib/memberName";
 import { getGojuonRowLabel, GOJUON_ROW_LABELS, hiraganaToKatakana, escapeForIlike } from "@/lib/furigana";
 import { DISPATCH_TYPE_LABELS, CATEGORY_LABELS, CATEGORY_ORDER, DISPATCH_TYPE_TEXT_COLORS } from "@/types/database";
 import type { DispatchType } from "@/types/database";
@@ -44,6 +45,23 @@ type MemberRow = {
   district_name?: string;
   group_name?: string;
 };
+
+const MEMBERS_SELECT = "id, last_name, first_name, last_furigana, first_furigana, district_id, group_id, age_group, is_baptized, status";
+
+function toMemberRow(row: Record<string, unknown> & { last_name?: string | null; first_name?: string | null; last_furigana?: string | null; first_furigana?: string | null }): MemberRow {
+  return {
+    id: row.id as string,
+    name: formatMemberName(row),
+    furigana: formatMemberFurigana(row) || null,
+    district_id: (row.district_id as string) ?? null,
+    group_id: (row.group_id as string) ?? null,
+    age_group: (row.age_group as Category) ?? null,
+    is_baptized: Boolean(row.is_baptized),
+    locality_name: (row as { locality_name?: string }).locality_name,
+    district_name: (row as { district_name?: string }).district_name,
+    group_name: (row as { group_name?: string }).group_name,
+  };
+}
 
 type DispatchRow = {
   id: string;
@@ -165,14 +183,18 @@ export function OrganicDispatchForm({
       groupId === "__all__"
         ? supabase
             .from("members")
-            .select("id, name, furigana, district_id, group_id, age_group, is_baptized")
+            .select(MEMBERS_SELECT)
+            .neq("status", "inactive")
+            .neq("status", "tobedeleted")
             .in("group_id", groupIds)
-            .order("name")
+            .order("last_furigana")
         : supabase
             .from("members")
-            .select("id, name, furigana, district_id, group_id, age_group, is_baptized")
+            .select(MEMBERS_SELECT)
+            .neq("status", "inactive")
+            .neq("status", "tobedeleted")
             .eq("group_id", groupId)
-            .order("name"),
+            .order("last_furigana"),
       supabase
         .from("organic_dispatch_records")
         .select("id, member_id, group_id, week_start, dispatch_type, dispatch_date, dispatch_memo, visitor_ids")
@@ -180,7 +202,7 @@ export function OrganicDispatchForm({
         .eq("week_start", weekStartIso),
     ]).then(([membersRes, dispatchRes]) => {
       if (cancelled) return;
-      const members = (membersRes.data ?? []) as MemberRow[];
+      const members = ((membersRes.data ?? []) as Record<string, unknown>[]).map(toMemberRow);
       const records = (dispatchRes.data ?? []) as (DispatchRow & { visitor_ids?: string[] | null })[];
       if (dispatchRes.error) {
         console.error("[organic_dispatch] fetch error", dispatchRes.error);
@@ -250,11 +272,13 @@ export function OrganicDispatchForm({
     const supabase = createClient();
     supabase
       .from("members")
-      .select("id, name, furigana, district_id, group_id, age_group, is_baptized")
-      .ilike("name", `%${popupVisitorSearchQuery.trim()}%`)
+      .select(MEMBERS_SELECT)
+      .neq("status", "inactive")
+      .neq("status", "tobedeleted")
+      .or(`last_name.ilike.%${popupVisitorSearchQuery.trim()}%,first_name.ilike.%${popupVisitorSearchQuery.trim()}%`)
       .limit(15)
       .then(({ data }) => {
-        setPopupVisitorSearchResults((data ?? []) as MemberRow[]);
+        setPopupVisitorSearchResults(((data ?? []) as Record<string, unknown>[]).map(toMemberRow));
       });
   }, [popupVisitorSearchQuery, recordPopupMemberId]);
 
@@ -271,25 +295,20 @@ export function OrganicDispatchForm({
     supabase
       .from("members")
       .select(
-        "id, name, furigana, district_id, group_id, age_group, is_baptized, districts(name, localities(name)), groups(name)"
+        `${MEMBERS_SELECT}, districts(name, localities(name)), groups(name)`
       )
-      .or(`furigana.ilike.${patFurigana},name.ilike.${patName}`)
+      .neq("status", "inactive")
+      .neq("status", "tobedeleted")
+      .or(`last_furigana.ilike.${patFurigana},first_furigana.ilike.${patFurigana},last_name.ilike.${patName},first_name.ilike.${patName}`)
       .limit(15)
       .then(({ data }) => {
         const rows = (data ?? []).map((row: Record<string, unknown>) => {
           const dist = row.districts as { name?: string; localities?: { name: string }; locality?: { name: string } } | null;
-          return {
-            id: row.id as string,
-            name: row.name as string,
-            furigana: (row.furigana as string | null) ?? null,
-            district_id: row.district_id as string | null,
-            group_id: row.group_id as string | null,
-            age_group: row.age_group as Category | null,
-            is_baptized: Boolean(row.is_baptized),
-            district_name: dist?.name,
-            locality_name: dist?.localities?.name ?? dist?.locality?.name,
-            group_name: (row.groups as { name: string } | null)?.name,
-          };
+          const r = toMemberRow(row);
+          r.district_name = dist?.name;
+          r.locality_name = dist?.localities?.name ?? dist?.locality?.name;
+          r.group_name = (row.groups as { name: string } | null)?.name;
+          return r;
         });
         setSearchResults(rows);
       });

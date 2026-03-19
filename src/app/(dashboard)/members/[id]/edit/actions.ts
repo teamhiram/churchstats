@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { hiraganaToKatakana } from "@/lib/furigana";
+import { formatMemberName, formatMemberFurigana } from "@/lib/memberName";
 import type { Category } from "@/types/database";
 import {
   addDistrictRegularMember,
@@ -28,8 +29,11 @@ export type UpdateMemberResult = {
 export async function updateMemberAction(
   memberId: string,
   data: {
-    name: string;
-    furigana: string | null;
+    status?: "active" | "left" | "rest" | "inactive" | "tobedeleted";
+    last_name: string | null;
+    first_name: string | null;
+    last_furigana: string | null;
+    first_furigana: string | null;
     gender: "male" | "female";
     is_local: boolean;
     district_id: string | null;
@@ -50,9 +54,18 @@ export async function updateMemberAction(
   const now = new Date().toISOString();
 
   const period1 = data.enrollment_periods?.find((p) => p.period_no === 1);
+  const lFur = data.last_furigana?.trim() ? hiraganaToKatakana(data.last_furigana.trim()) : null;
+  const fFur = data.first_furigana?.trim() ? hiraganaToKatakana(data.first_furigana.trim()) : null;
+  const name = formatMemberName({ last_name: data.last_name, first_name: data.first_name });
+  const furigana = formatMemberFurigana({ last_furigana: lFur, first_furigana: fFur }) || null;
   const updatePayload = {
-    name: data.name.trim(),
-    furigana: data.furigana ? hiraganaToKatakana(data.furigana) : null,
+    status: data.status ?? "active",
+    name,
+    furigana,
+    last_name: data.last_name?.trim() || null,
+    first_name: data.first_name?.trim() || null,
+    last_furigana: lFur,
+    first_furigana: fFur,
     gender: data.gender,
     is_local: data.is_local,
     district_id: data.is_local ? data.district_id : null,

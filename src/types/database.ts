@@ -13,7 +13,7 @@ export type MeetingType = "main" | "group"; // 主日 / 小組
 export type Category =
   | "adult"
   | "university"
-  | "junior_high"
+  | "adolescent"
   | "elementary"
   | "preschool"
   | "young"
@@ -57,8 +57,13 @@ export interface Meeting {
 
 export interface Member {
   id: string;
-  name: string;
-  furigana: string | null;
+  status?: "active" | "left" | "rest" | "inactive" | "tobedeleted";
+  /** 姓・名（表示は formatMemberName で last_name + 半角スペース + first_name） */
+  last_name: string | null;
+  first_name: string | null;
+  /** 姓・名ふりがな（表示は formatMemberFurigana で結合） */
+  last_furigana: string | null;
+  first_furigana: string | null;
   gender: "male" | "female";
   is_local: boolean;
   district_id: string | null;
@@ -69,6 +74,8 @@ export interface Member {
   /** ローカルメンバー転出日：この日以降、在籍期間外 */
   local_member_leave_date?: string | null;
   age_group: Category | null;
+  /** 名簿メモ（長文可） */
+  memo: string | null;
   is_baptized: boolean;
   baptism_year: number | null;
   baptism_month: number | null;
@@ -268,7 +275,7 @@ export interface LoginLog {
 export const CATEGORY_ORDER: Category[] = [
   "preschool",
   "elementary",
-  "junior_high",
+  "adolescent",
   "university",
   "young",
   "middle",
@@ -280,7 +287,7 @@ export const CATEGORY_ORDER: Category[] = [
 export const CATEGORY_LABELS: Record<Category, string> = {
   adult: "社会人(年代不詳)",
   university: "大学生",
-  junior_high: "中高生",
+  adolescent: "中高生",
   elementary: "小学生",
   preschool: "未就学児",
   young: "青年",

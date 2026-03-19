@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { addDays, format } from "date-fns";
+import { formatMemberName } from "@/lib/memberName";
 import { getThisWeekByLastSunday, formatDateYmd } from "@/lib/weekUtils";
 
 export type DispatchMonitorAbsent = { memberId: string; name: string; dispatched: boolean };
@@ -73,7 +74,10 @@ export async function getDispatchMonitorData(localityId: string | null = null): 
     groupRegularQuery.eq("group_id", "__none__");
   }
 
-  const membersQuery = supabase.from("members").select("id, name, locality_id");
+  const membersQuery = supabase
+    .from("members")
+    .select("id, last_name, first_name, locality_id")
+    .neq("status", "tobedeleted");
   if (localityId != null) {
     membersQuery.eq("locality_id", localityId);
   }
@@ -140,8 +144,8 @@ export async function getDispatchMonitorData(localityId: string | null = null): 
     groupRegularRows.filter((r) => groupIdsThisWeek.has(r.group_id)).map((r) => r.member_id)
   );
 
-  const membersList = (membersRes.data ?? []) as { id: string; name: string; locality_id?: string | null }[];
-  const memberMap = new Map(membersList.map((m) => [m.id, m.name]));
+  const membersList = (membersRes.data ?? []) as { id: string; last_name: string | null; first_name: string | null; locality_id?: string | null }[];
+  const memberMap = new Map(membersList.map((m) => [m.id, formatMemberName(m)]));
   const localMemberIds = new Set(
     localityId != null
       ? membersList.map((m) => m.id)

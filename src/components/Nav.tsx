@@ -6,9 +6,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { formatMemberName, formatMemberFurigana } from "@/lib/memberName";
 import { QUERY_KEYS } from "@/lib/queryClient";
 import type { MembersApiResponse } from "@/app/api/members/route";
 import { AccountSignOut } from "@/app/(dashboard)/settings/account/AccountSignOut";
+import { useRoleOverride } from "@/contexts/RoleOverrideContext";
+import { useLocalAdmin } from "@/contexts/LocalAdminContext";
+import { GLOBAL_ROLE_LABELS, ROLE_LABELS } from "@/types/database";
+import type { GlobalRole, Role } from "@/types/database";
 
 const baseLinks: { href: string; label: string }[] = [
   { href: "/charts", label: "チャート" },
@@ -26,16 +31,23 @@ const footerMainItems = [
 ] as const;
 
 const settingsModalItems = [
+  { href: "/settings/local-admin/incomplete-names", label: "氏名不完全" },
+  { href: "/settings/local-admin/users", label: "ユーザ・ロール管理（地方）" },
   { href: "/settings/organization", label: "枠組設定" },
-  { href: "/settings", label: "システム設定" },
+  { href: "/settings", label: "表示設定" },
+  { href: "/settings/local-admin/inactive", label: "非表示リスト" },
+  { href: "/settings/local-admin/to-be-deleted", label: "削除予定" },
 ] as const;
 const settingsModalRolesItem = { href: "/settings/roles", label: "ユーザ・ロール管理" } as const;
-const settingsModalDebugItems = [
-  { href: "/debug/numbers", label: "各種数値" },
+const settingsModalDatabaseMaintenanceItems = [
+  { href: "/settings/backup", label: "バックアップ・リストア" },
   { href: "/debug/tables", label: "全テーブル" },
   { href: "/debug/meetings-list", label: "集会一覧" },
-  { href: "/debug/enrollment-uncertain", label: "在籍期間不確定" },
   { href: "/debug/meeting-duplicates", label: "集会重複検知" },
+] as const;
+const settingsModalDebugItems = [
+  { href: "/debug/numbers", label: "各種数値" },
+  { href: "/debug/enrollment-uncertain", label: "在籍期間不確定" },
   { href: "/weekly/duplicates", label: "重複出席" },
 ] as const;
 
@@ -47,9 +59,6 @@ type NavProps = {
   /** グローバル権限がある場合のみ渡す */
   globalRoleLabel?: string | null;
   localityName?: string | null;
-  showDebug?: boolean;
-  /** グローバル管理者のとき true（設定モーダルでユーザ・ロール管理を表示） */
-  showRolesManagement?: boolean;
 };
 
 /** 設定画面（サイドバー付き）のパスか */
@@ -88,10 +97,16 @@ function SearchIcon({ className }: { className?: string }) {
   );
 }
 
-export function Nav({ displayName, email, roleLabel, globalRoleLabel, localityName: _localityName, showDebug = false, showRolesManagement = false }: NavProps) {
+export function Nav({ displayName, email, roleLabel, globalRoleLabel, localityName: _localityName }: NavProps) {
   const pathname = usePathname();
   const { fullWidth } = useDisplaySettings();
   const { currentLocalityName, currentLocalityId, localitiesByArea, accessibleLocalities, setCurrentLocalityId } = useLocality();
+  const { actual, effective, override, setOverrideGlobalRole, setOverrideRole, clearOverrides, isSystemAdmin } = useRoleOverride();
+  const { isLocalAdmin, localRole } = useLocalAdmin();
+  const showDebug = effective.globalRole === "admin";
+  const showRolesManagement = effective.globalRole === "admin";
+  // profile.role が viewer でも、local_roles による地方ロールがあればローカル設定は使える
+  const canUseLocalAdmin = effective.role !== "viewer" || effective.globalRole === "admin" || localRole != null;
   const hasOneLocality = accessibleLocalities.length === 1;
   const hasMultipleLocalities = accessibleLocalities.length > 1;
   const showLocalitySwitcher = hasMultipleLocalities;
@@ -150,10 +165,10 @@ export function Nav({ displayName, email, roleLabel, globalRoleLabel, localityNa
     const qNorm = normalizeKanaForSearch(q);
     return members
       .filter((m) => {
-        const nameNorm = normalizeKanaForSearch(m.name.toLowerCase());
-        const furiganaNorm = m.furigana
-          ? normalizeKanaForSearch(m.furigana.toLowerCase())
-          : "";
+        const name = formatMemberName(m);
+        const furigana = formatMemberFurigana(m);
+        const nameNorm = normalizeKanaForSearch(name.toLowerCase());
+        const furiganaNorm = furigana ? normalizeKanaForSearch(furigana.toLowerCase()) : "";
         return nameNorm.includes(qNorm) || furiganaNorm.includes(qNorm);
       })
       .slice(0, 20);
@@ -289,7 +304,7 @@ export function Nav({ displayName, email, roleLabel, globalRoleLabel, localityNa
             召会生活統計
           </Link>
           <span className="ml-1.5 inline-flex items-baseline shrink-0">
-            <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.25.0</span>
+            <span className="relative -top-0.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white">0.26.0</span>
           </span>
         </div>
         {showLocalityNameOnly && (
@@ -333,7 +348,7 @@ export function Nav({ displayName, email, roleLabel, globalRoleLabel, localityNa
             <Link href="/" className="text-white text-sm font-semibold whitespace-nowrap hover:text-white/90">
               召会生活統計
             </Link>
-            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.25.0</span>
+            <span className="ml-1.5 text-[10px] font-medium leading-none px-1.5 py-0.5 rounded bg-primary-600 text-white relative -top-0.5">0.26.0</span>
             {showLocalityNameOnly && !searchOpen && (
               <span className="flex items-center gap-1 px-2 py-1 text-slate-300 text-xs min-w-0 max-w-[16rem]" aria-label="表示中の地方とログイン中ユーザ">
                 <span className="truncate">{currentLocalityName ?? "—"}</span>
@@ -399,9 +414,9 @@ export function Nav({ displayName, email, roleLabel, globalRoleLabel, localityNa
                         }}
                         className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 focus:bg-slate-700 focus:outline-none flex flex-col"
                       >
-                        <span className="font-medium">{m.name}</span>
-                        {m.furigana && (
-                          <span className="text-xs text-slate-400">{m.furigana}</span>
+                        <span className="font-medium">{formatMemberName(m)}</span>
+                        {formatMemberFurigana(m) && (
+                          <span className="text-xs text-slate-400">{formatMemberFurigana(m)}</span>
                         )}
                       </button>
                     ))}
@@ -626,6 +641,62 @@ export function Nav({ displayName, email, roleLabel, globalRoleLabel, localityNa
                     <span className="ml-2 text-slate-800">{_localityName && _localityName !== "" ? _localityName : "—"}</span>
                   </p>
                 </div>
+
+                {/* システム管理者のみ: 表示確認のための疑似ロール切替（モーダル自体は制限を受けない） */}
+                {isSystemAdmin && (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-slate-700">表示確認（疑似ロール）</p>
+                    <div className="space-y-2">
+                      <label className="block">
+                        <span className="text-[11px] font-medium text-slate-600">グローバルロール</span>
+                        <select
+                          className="mt-1 w-full h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-800"
+                          value={override.globalRole ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value as GlobalRole | "";
+                            setOverrideGlobalRole(v === "" ? null : v);
+                          }}
+                        >
+                          <option value="">
+                            （実ユーザー: {actual.globalRole ? (GLOBAL_ROLE_LABELS[actual.globalRole] ?? "—") : "（なし）"}）
+                          </option>
+                          <option value="admin">{GLOBAL_ROLE_LABELS.admin}</option>
+                          <option value="national_viewer">{GLOBAL_ROLE_LABELS.national_viewer}</option>
+                          <option value="regional_viewer">{GLOBAL_ROLE_LABELS.regional_viewer}</option>
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="text-[11px] font-medium text-slate-600">ローカルロール</span>
+                        <select
+                          className="mt-1 w-full h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-800"
+                          value={override.role ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value as Role | "";
+                            setOverrideRole(v === "" ? null : v);
+                          }}
+                        >
+                          <option value="">（実ユーザー: {ROLE_LABELS[actual.role]}）</option>
+                          <option value="admin">{ROLE_LABELS.admin}</option>
+                          <option value="co_admin">{ROLE_LABELS.co_admin}</option>
+                          <option value="reporter">{ROLE_LABELS.reporter}</option>
+                          <option value="viewer">{ROLE_LABELS.viewer}</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <p className="text-[11px] text-slate-600">
+                        実効: {effective.globalRole ? GLOBAL_ROLE_LABELS[effective.globalRole] : "（なし）"} / {ROLE_LABELS[effective.role]}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={clearOverrides}
+                        className="text-xs font-medium text-slate-600 hover:text-slate-800 underline underline-offset-2"
+                      >
+                        リセット
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <AccountSignOut />
               </div>
             </div>
@@ -718,7 +789,12 @@ export function Nav({ displayName, email, roleLabel, globalRoleLabel, localityNa
             </div>
             <nav className="overflow-y-auto overscroll-contain flex-1 min-h-0" aria-label="設定サブメニュー">
               <ul className="py-1">
-                {settingsModalItems.map(({ href, label }) => {
+                {settingsModalItems
+                  .filter((item) => {
+                    if (item.href === "/settings/local-admin/users") return isLocalAdmin;
+                    return canUseLocalAdmin || item.href === "/settings";
+                  })
+                  .map(({ href, label }) => {
                   const active = isSettingsSectionPath(pathname, !!showDebug) && pathname.startsWith(href) && (href !== "/settings" || pathname === "/settings");
                   return (
                     <li key={href}>
@@ -752,11 +828,36 @@ export function Nav({ displayName, email, roleLabel, globalRoleLabel, localityNa
               </ul>
               {showDebug && (
                 <div className="border-t border-slate-200 mt-1 pt-1">
+                  {showRolesManagement && (
+                    <>
+                      <p
+                        className="px-4 py-1.5 text-[11px] font-semibold text-amber-700 uppercase tracking-wider"
+                        role="presentation"
+                      >
+                        グローバル管理
+                      </p>
+                      <ul className="py-1">
+                        <li>
+                          <Link
+                            href={settingsModalRolesItem.href}
+                            onClick={() => setSettingsModalOpen(false)}
+                            className={`block px-4 py-2.5 text-[15px] min-h-[44px] flex items-center ${
+                              pathname.startsWith(settingsModalRolesItem.href)
+                                ? "bg-amber-50 text-amber-900 font-medium"
+                                : "text-amber-800 active:bg-amber-50"
+                            }`}
+                          >
+                            {settingsModalRolesItem.label}
+                          </Link>
+                        </li>
+                      </ul>
+                    </>
+                  )}
                   <p className="px-4 py-1.5 text-[11px] font-semibold text-amber-700 uppercase tracking-wider" role="presentation">
-                    デバッグ
+                    データベース整理
                   </p>
                   <ul className="py-1">
-                    {settingsModalDebugItems.map(({ href, label }) => (
+                    {[...settingsModalDatabaseMaintenanceItems, ...settingsModalDebugItems].map(({ href, label }) => (
                       <li key={href}>
                         <Link
                           href={href}
@@ -847,9 +948,9 @@ export function Nav({ displayName, email, roleLabel, globalRoleLabel, localityNa
                         }}
                         className="w-full text-left px-3 py-2.5 min-h-[44px] flex flex-col justify-center text-slate-800 active:bg-slate-100 touch-target border-b border-slate-50 last:border-b-0 text-sm"
                       >
-                        <span className="font-medium">{m.name}</span>
-                        {m.furigana && (
-                          <span className="text-xs text-slate-500">{m.furigana}</span>
+                        <span className="font-medium">{formatMemberName(m)}</span>
+                        {formatMemberFurigana(m) && (
+                          <span className="text-xs text-slate-500">{formatMemberFurigana(m)}</span>
                         )}
                       </button>
                     </li>

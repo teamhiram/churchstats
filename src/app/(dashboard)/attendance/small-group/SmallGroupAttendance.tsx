@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Toggle } from "@/components/Toggle";
 import { PencilButton } from "@/components/PencilButton";
 import { formatDateYmd, getDaysInWeek } from "@/lib/weekUtils";
+import { formatMemberName, formatMemberFurigana } from "@/lib/memberName";
 import { getGojuonRowLabel, GOJUON_ROW_LABELS, hiraganaToKatakana, escapeForIlike } from "@/lib/furigana";
 import { CATEGORY_LABELS, CATEGORY_ORDER } from "@/types/database";
 import type { Category } from "@/types/database";
@@ -50,6 +51,26 @@ type MemberRow = {
   district_name?: string;
   group_name?: string;
 };
+
+const MEMBERS_SELECT =
+  "id, last_name, first_name, last_furigana, first_furigana, district_id, group_id, age_group, is_baptized, local_member_join_date, local_member_leave_date, status";
+
+function toMemberRow(row: Record<string, unknown> & { last_name?: string | null; first_name?: string | null; last_furigana?: string | null; first_furigana?: string | null }): MemberRow {
+  return {
+    id: row.id as string,
+    name: formatMemberName(row),
+    furigana: formatMemberFurigana(row) || null,
+    district_id: (row.district_id as string) ?? null,
+    group_id: (row.group_id as string) ?? null,
+    age_group: (row.age_group as Category) ?? null,
+    is_baptized: Boolean(row.is_baptized),
+    local_member_join_date: (row.local_member_join_date as string) ?? null,
+    local_member_leave_date: (row.local_member_leave_date as string) ?? null,
+    locality_name: (row as { locality_name?: string }).locality_name,
+    district_name: (row as { district_name?: string }).district_name,
+    group_name: (row as { group_name?: string }).group_name,
+  };
+}
 
 type AttendanceRow = {
   id: string;
@@ -128,7 +149,7 @@ export function SmallGroupAttendance({
     const query = supabase
       .from("groups")
       .select("id, name, district_id")
-      .order("name");
+      .order("last_furigana");
     (isAllDistricts ? query : query.eq("district_id", districtId)).then(({ data }) => {
       const list = data ?? [];
       setGroups(list);
@@ -260,12 +281,14 @@ export function SmallGroupAttendance({
 
         const { data: membersData } = await supabase
           .from("members")
-          .select("id, name, furigana, district_id, group_id, age_group, is_baptized, local_member_join_date, local_member_leave_date")
+          .select(MEMBERS_SELECT)
+          .neq("status", "inactive")
+          .neq("status", "tobedeleted")
           .in("group_id", groupIds)
-          .order("name");
+          .order("last_furigana");
         if (cancelled) return;
         const refDate = weekStartIso;
-        const districtMembers = ((membersData ?? []) as MemberRow[]).filter((m) =>
+        const districtMembers = ((membersData ?? []) as Record<string, unknown>[]).map(toMemberRow).filter((m) =>
           isInEnrollmentPeriod(m, refDate)
         );
 
@@ -301,9 +324,11 @@ export function SmallGroupAttendance({
         if (guestIds.length > 0) {
           const { data: guestData } = await supabase
             .from("members")
-            .select("id, name, furigana, district_id, group_id, age_group, is_baptized, local_member_join_date, local_member_leave_date")
+            .select(MEMBERS_SELECT)
+            .neq("status", "inactive")
+            .neq("status", "tobedeleted")
             .in("id", guestIds);
-          guests = (guestData ?? []) as MemberRow[];
+          guests = ((guestData ?? []) as Record<string, unknown>[]).map(toMemberRow);
         }
         const tierMap = await buildGroupMemberTierMap(supabase, groupIds, districtMembers);
         if (cancelled) return;
@@ -335,14 +360,16 @@ export function SmallGroupAttendance({
         setEventDate(evDate ?? "");
         return supabase
           .from("members")
-          .select("id, name, furigana, district_id, group_id, age_group, is_baptized, local_member_join_date, local_member_leave_date")
+          .select(MEMBERS_SELECT)
+          .neq("status", "inactive")
+          .neq("status", "tobedeleted")
           .eq("group_id", groupId)
-          .order("name")
+          .order("last_furigana")
           .then(async (membersRes) => {
             if (cancelled) return;
             const evDate = (existingRecord as { id: string; event_date?: string | null } | null)?.event_date ?? "";
             const refDate = evDate || weekStartIso;
-            const districtMembers = ((membersRes.data ?? []) as MemberRow[]).filter((m) =>
+            const districtMembers = ((membersRes.data ?? []) as Record<string, unknown>[]).map(toMemberRow).filter((m) =>
               isInEnrollmentPeriod(m, refDate)
             );
             if (!rid) {
@@ -376,9 +403,11 @@ export function SmallGroupAttendance({
                 if (guestIds.length > 0) {
                   const { data: guestData } = await supabase
                     .from("members")
-                    .select("id, name, furigana, district_id, group_id, age_group, is_baptized, local_member_join_date, local_member_leave_date")
+                    .select(MEMBERS_SELECT)
+                    .neq("status", "inactive")
+                    .neq("status", "tobedeleted")
                     .in("id", guestIds);
-                  guests = (guestData ?? []) as MemberRow[];
+                  guests = ((guestData ?? []) as Record<string, unknown>[]).map(toMemberRow);
                 }
                 const tierMap = await buildGroupMemberTierMap(supabase, [groupId], districtMembers);
                 if (cancelled) return;
@@ -409,27 +438,20 @@ export function SmallGroupAttendance({
     supabase
       .from("members")
       .select(
-        "id, name, furigana, district_id, group_id, age_group, is_baptized, local_member_join_date, local_member_leave_date, districts(name, localities(name)), groups(name)"
+        `${MEMBERS_SELECT}, districts(name, localities(name)), groups(name)`
       )
-      .or(`furigana.ilike.${patFurigana},name.ilike.${patName}`)
+      .neq("status", "inactive")
+      .neq("status", "tobedeleted")
+      .or(`last_furigana.ilike.${patFurigana},first_furigana.ilike.${patFurigana},last_name.ilike.${patName},first_name.ilike.${patName}`)
       .limit(15)
       .then(({ data }) => {
         const rows = (data ?? []).map((row: Record<string, unknown>) => {
           const dist = row.districts as { name?: string; localities?: { name: string }; locality?: { name: string } } | null;
-          return {
-            id: row.id as string,
-            name: row.name as string,
-            furigana: (row.furigana as string | null) ?? null,
-            district_id: row.district_id as string | null,
-            group_id: row.group_id as string | null,
-            age_group: row.age_group as Category | null,
-            is_baptized: Boolean(row.is_baptized),
-            local_member_join_date: (row.local_member_join_date as string | null) ?? null,
-            local_member_leave_date: (row.local_member_leave_date as string | null) ?? null,
-            district_name: dist?.name,
-            locality_name: dist?.localities?.name ?? dist?.locality?.name,
-            group_name: (row.groups as { name: string } | null)?.name,
-          };
+          const r = toMemberRow(row);
+          r.district_name = dist?.name;
+          r.locality_name = dist?.localities?.name ?? dist?.locality?.name;
+          r.group_name = (row.groups as { name: string } | null)?.name;
+          return r;
         });
         setSearchResults(rows);
       });

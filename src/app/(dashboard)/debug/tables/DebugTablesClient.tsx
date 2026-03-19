@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { DEBUG_TABLE_NAMES } from "./constants";
-import { getDebugTableData } from "./actions";
+import { getDebugTableData, getLocalitiesForDebug } from "./actions";
 
 export function DebugTablesClient() {
   const [tableName, setTableName] = useState<string>(DEBUG_TABLE_NAMES[0]);
@@ -12,6 +12,7 @@ export function DebugTablesClient() {
   const [columns, setColumns] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [localities, setLocalities] = useState<{ id: string; name: string }[]>([]);
 
   const visibleColumns = columns.filter((col) => columnVisible[col] !== false);
 
@@ -31,12 +32,18 @@ export function DebugTablesClient() {
   }, [tableName]);
 
   useEffect(() => {
+    getLocalitiesForDebug().then((rows) => setLocalities(rows ?? []));
+  }, []);
+
+  useEffect(() => {
     if (!tableName) return;
     setColumnFilters((prev) => {
       const next = { ...prev };
       columns.forEach((col) => {
         if (!(col in next)) next[col] = "";
       });
+      // locality フィルターは columns に locality があるときだけ出す
+      if (!columns.includes("locality") && "locality" in next) delete next.locality;
       return next;
     });
     setColumnVisible((prev) => {
@@ -100,14 +107,29 @@ export function DebugTablesClient() {
                   />
                   {col}
                 </label>
-                <input
-                  type="text"
-                  value={columnFilters[col] ?? ""}
-                  onChange={(e) => setFilter(col, e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && load()}
-                  placeholder="絞り込み"
-                  className="mt-0.5 w-full rounded border border-slate-300 px-2 py-1 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                />
+                {col === "locality" ? (
+                  <select
+                    value={columnFilters[col] ?? ""}
+                    onChange={(e) => setFilter(col, e.target.value)}
+                    className="mt-0.5 w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  >
+                    <option value="">（地方で絞り込み）</option>
+                    {localities.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={columnFilters[col] ?? ""}
+                    onChange={(e) => setFilter(col, e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && load()}
+                    placeholder="絞り込み"
+                    className="mt-0.5 w-full rounded border border-slate-300 px-2 py-1 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  />
+                )}
               </div>
             ))}
           </div>

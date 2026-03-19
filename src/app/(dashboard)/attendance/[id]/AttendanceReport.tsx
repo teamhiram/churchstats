@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { useState, useEffect } from "react";
+import { formatMemberName } from "@/lib/memberName";
 import { CATEGORY_LABELS } from "@/types/database";
 import type { Category } from "@/types/database";
 
@@ -44,12 +45,35 @@ export function AttendanceReport({
       return;
     }
     const supabase = createClient();
+    const q = search.trim();
     supabase
       .from("members")
-      .select("id, name, age_group, is_baptized, district_id, group_id, locality_id")
-      .ilike("name", `%${search.trim()}%`)
+      .select("id, last_name, first_name, age_group, is_baptized, district_id, group_id, locality_id")
+      .or(`last_name.ilike.%${q}%,first_name.ilike.%${q}%`)
       .limit(10)
-      .then(({ data }) => setCandidates((data ?? []) as Member[]));
+      .then(({ data }) => {
+        const rows = (data ?? []) as {
+          id: string;
+          last_name: string | null;
+          first_name: string | null;
+          age_group: string | null;
+          is_baptized: boolean;
+          district_id: string | null;
+          group_id: string | null;
+          locality_id: string | null;
+        }[];
+        setCandidates(
+          rows.map((m) => ({
+            id: m.id,
+            name: formatMemberName(m),
+            age_group: m.age_group as Category | null,
+            is_baptized: m.is_baptized,
+            district_id: m.district_id,
+            group_id: m.group_id,
+            locality_id: m.locality_id,
+          }))
+        );
+      });
   }, [search]);
 
   const addAttendance = async (member: Member) => {

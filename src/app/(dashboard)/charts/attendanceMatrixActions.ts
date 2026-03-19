@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { addDays, format, getDay } from "date-fns";
+import { formatMemberName, formatMemberFurigana } from "@/lib/memberName";
 import { getSundayWeeksInYear, formatDateYmd } from "@/lib/weekUtils";
 import type { DispatchType } from "@/types/database";
 
@@ -118,7 +119,10 @@ export async function getAttendanceMatrixData(
     prayerRecordsQuery.eq("district_id", "__none__");
   }
 
-  const membersQuery = supabase.from("members").select("id, name, furigana, district_id, is_local");
+  const membersQuery = supabase
+    .from("members")
+    .select("id, last_name, first_name, last_furigana, first_furigana, district_id, is_local")
+    .neq("status", "tobedeleted");
   if (localityId != null) {
     membersQuery.eq("locality_id", localityId);
   }
@@ -159,8 +163,10 @@ export async function getAttendanceMatrixData(
   }[];
   const membersList = (membersRes.data ?? []) as {
     id: string;
-    name: string;
-    furigana: string | null;
+    last_name: string | null;
+    first_name: string | null;
+    last_furigana: string | null;
+    first_furigana: string | null;
     district_id: string | null;
     is_local: boolean | null;
   }[];
@@ -333,14 +339,14 @@ export async function getAttendanceMatrixData(
     weekStart: formatDateYmd(w.weekStart),
   }));
 
-  const furiganaMap = new Map(membersList.map((m) => [m.id, (m.furigana ?? m.name).trim() || m.name]));
+  const furiganaMap = new Map(membersList.map((m) => [m.id, formatMemberFurigana(m).trim() || formatMemberName(m)]));
 
   const members: AttendanceMatrixMember[] = membersList
     .filter((m) => memberIdsWithAttendance.has(m.id))
     .map((m) => ({
       memberId: m.id,
-      name: m.name,
-      furigana: furiganaMap.get(m.id) ?? m.name,
+      name: formatMemberName(m),
+      furigana: furiganaMap.get(m.id) ?? formatMemberName(m),
       districtId: m.district_id,
       districtName: m.district_id ? districtMap.get(m.district_id) ?? null : null,
       isLocal: m.is_local === true,
