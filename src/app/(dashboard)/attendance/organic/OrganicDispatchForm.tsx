@@ -1024,7 +1024,6 @@ export function OrganicDispatchForm({
                   max={getDaysInWeek(weekStartIso)[6]?.value ?? weekStartIso}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm touch-target bg-white"
                 />
-                <p className="text-xs text-slate-500 mt-0.5">選択した週の範囲内の日付を選べます</p>
               </div>
 
               <div>

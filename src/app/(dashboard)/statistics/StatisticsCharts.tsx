@@ -67,79 +67,69 @@ function isSaint(recorded: unknown): boolean {
 const FAITH_KEYS = { saint: "聖徒", friend: "友人" } as const;
 const FAITH_COLORS = { saint: "#0284c7", friend: "#0ea5e9" };
 
-/** 週別棒グラフ用：週のラベルと人数＋名前を表示（信仰別 or 年代別 or 地区別で出し分け） */
+/** 週別棒グラフ用：週のラベルとセクション別人数を表示（信仰別 or 年代別 or 地区別で出し分け）。積み上げ順（グラフ上=年長→下=未就学児）。凡例非表示のセクションはツールチップにも出さない */
 function WeeklyBarTooltip({
   active,
   payload,
   colorGroupBy,
   districtKeys,
   districtNameMap,
+  hiddenSeries = new Set(),
 }: {
   active?: boolean;
   payload?: { payload?: Record<string, string | number | string[]> }[];
   colorGroupBy?: ColorGroupBy;
   districtKeys?: string[];
   districtNameMap?: Map<string, string>;
+  hiddenSeries?: Set<string>;
 }) {
   if (!active || !payload?.length || !payload[0].payload) return null;
   const data = payload[0].payload as Record<string, string | number | string[]>;
   const isCategory = colorGroupBy === "category";
   const isDistrict = colorGroupBy === "district";
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 max-w-[320px] text-left max-h-[70vh] overflow-y-auto">
+    <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 max-w-[320px] text-left">
       <p className="font-semibold text-slate-800 mb-2">
         {data.week}（週の開始日）
       </p>
       {isCategory ? (
-        CATEGORY_KEYS.map((k) => {
-          const label = CATEGORY_LABELS[k];
-          const count = (data[label] as number) ?? 0;
-          const names = (data[`${label}_names`] as string[] | undefined) ?? [];
-          return (
-            <div key={k} className="mb-2 last:mb-0">
-              <p className="text-xs text-slate-600 mb-0.5">
-                {label}: {count}名
+        // 積み上げグラフは下→上の順なので、表示は上→下（年長→未就学児）に逆順
+        [...CATEGORY_KEYS]
+          .reverse()
+          .filter((k) => !hiddenSeries.has(k))
+          .map((k) => {
+            const label = CATEGORY_LABELS[k];
+            const count = (data[label] as number) ?? 0;
+            return (
+              <p key={k} className="text-xs text-slate-600 py-0.5">
+                {label}：{count}
               </p>
-              <ul className="text-xs text-slate-700 list-disc list-inside pl-0.5">
-                {names.length ? names.map((n) => <li key={n}>{n}</li>) : <li>—</li>}
-              </ul>
-            </div>
-          );
-        })
+            );
+          })
       ) : isDistrict && districtKeys && districtNameMap ? (
-        districtKeys.map((districtId) => {
-          const label = districtId === "__none__" ? "未設定" : (districtNameMap.get(districtId) ?? districtId);
-          const count = (data[`district_${districtId}`] as number) ?? 0;
-          const names = (data[`district_${districtId}_names`] as string[] | undefined) ?? [];
-          return (
-            <div key={districtId} className="mb-2 last:mb-0">
-              <p className="text-xs text-slate-600 mb-0.5">
-                {label}: {count}名
+        districtKeys
+          .filter((districtId) => !hiddenSeries.has(districtId))
+          .map((districtId) => {
+            const label = districtId === "__none__" ? "未設定" : (districtNameMap.get(districtId) ?? districtId);
+            const count = (data[`district_${districtId}`] as number) ?? 0;
+            return (
+              <p key={districtId} className="text-xs text-slate-600 py-0.5">
+                {label}：{count}
               </p>
-              <ul className="text-xs text-slate-700 list-disc list-inside pl-0.5">
-                {names.length ? names.map((n) => <li key={n}>{n}</li>) : <li>—</li>}
-              </ul>
-            </div>
-          );
-        })
+            );
+          })
       ) : (
         <>
-          <p className="text-xs text-slate-600 mb-1">
-            {FAITH_KEYS.saint}: {data.saint}名
-          </p>
-          <ul className="text-xs text-slate-700 list-disc list-inside mb-2 pl-0.5">
-            {((data.saintNames ?? []) as string[]).length
-              ? ((data.saintNames ?? []) as string[]).map((n) => <li key={n}>{n}</li>)
-              : <li>—</li>}
-          </ul>
-          <p className="text-xs text-slate-600 mb-1">
-            {FAITH_KEYS.friend}: {data.friend}名
-          </p>
-          <ul className="text-xs text-slate-700 list-disc list-inside pl-0.5">
-            {((data.friendNames ?? []) as string[]).length
-              ? ((data.friendNames ?? []) as string[]).map((n) => <li key={n}>{n}</li>)
-              : <li>—</li>}
-          </ul>
+          {!hiddenSeries.has("saint") && (
+            <p className="text-xs text-slate-600 py-0.5">
+              {FAITH_KEYS.saint}：{data.saint ?? 0}
+            </p>
+          )}
+          {!hiddenSeries.has("friend") && (
+            <p className="text-xs text-slate-600 py-0.5">
+              {FAITH_KEYS.friend}：{data.friend ?? 0}
+            </p>
+          )}
         </>
       )}
     </div>
@@ -370,12 +360,15 @@ export function StatisticsCharts({
   const legendAverages = useMemo(() => {
     const map = new Map<string, number>();
     if (weeklyData.length === 0) return map;
+    // 集会記録がある週のみを母数とする（記録なしの週は分母から除外）
+    const weeksWithRecords = weeklyData.filter((row) => (row.count as number) > 0).length;
+    const divisor = weeksWithRecords > 0 ? weeksWithRecords : 1;
     legendItems.forEach((item) => {
       const sum = weeklyData.reduce((acc, row) => {
         const v = row[item.dataKey];
         return acc + (typeof v === "number" ? v : 0);
       }, 0);
-      map.set(item.key, Math.round((sum / weeklyData.length) * 10) / 10);
+      map.set(item.key, Math.round((sum / divisor) * 10) / 10);
     });
     return map;
   }, [weeklyData, legendItems]);
@@ -516,6 +509,7 @@ export function StatisticsCharts({
                       colorGroupBy={colorGroupBy}
                       districtKeys={districtKeys}
                       districtNameMap={districtNameMap}
+                      hiddenSeries={hiddenSeries}
                     />
                   )}
                 />
@@ -535,6 +529,7 @@ export function StatisticsCharts({
                       colorGroupBy={colorGroupBy}
                       districtKeys={districtKeys}
                       districtNameMap={districtNameMap}
+                      hiddenSeries={hiddenSeries}
                     />
                   )}
                 />
@@ -560,6 +555,7 @@ export function StatisticsCharts({
                       colorGroupBy={colorGroupBy}
                       districtKeys={districtKeys}
                       districtNameMap={districtNameMap}
+                      hiddenSeries={hiddenSeries}
                     />
                   )}
                 />
@@ -592,6 +588,7 @@ export function StatisticsCharts({
                       colorGroupBy="none"
                       districtKeys={districtKeys}
                       districtNameMap={districtNameMap}
+                      hiddenSeries={hiddenSeries}
                     />
                   )}
                 />
@@ -611,6 +608,7 @@ export function StatisticsCharts({
                       colorGroupBy={colorGroupBy}
                       districtKeys={districtKeys}
                       districtNameMap={districtNameMap}
+                      hiddenSeries={hiddenSeries}
                     />
                   )}
                 />

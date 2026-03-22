@@ -138,7 +138,8 @@ export function MemberAttendanceMatrix({ memberId, initialYear }: Props) {
     );
   }
 
-  const columns: ColKey[] = ["prayer", "main", "group", "dispatch"];
+  /** 表示順: 主日・祈り・小組・派遣 */
+  const columns: ColKey[] = ["main", "prayer", "group", "dispatch"];
   const squareStyle = {
     width: SQUARE_SIZE,
     height: SQUARE_SIZE,
@@ -151,19 +152,19 @@ export function MemberAttendanceMatrix({ memberId, initialYear }: Props) {
       <p className="text-xs text-slate-500 mb-3">集計期間: {overview.periodLabel}</p>
       <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
         <div>
-          <dt className="text-slate-500">祈り出席率</dt>
-          <dd className="font-medium text-slate-800">
-            {overview.weeksInScopeCount === 0
-              ? "—"
-              : `${overview.prayerAttended}/${overview.weeksInScopeCount} (${Math.round((overview.prayerAttended / overview.weeksInScopeCount) * 100)}%)`}
-          </dd>
-        </div>
-        <div>
           <dt className="text-slate-500">主日出席率</dt>
           <dd className="font-medium text-slate-800">
             {overview.weeksInScopeCount === 0
               ? "—"
               : `${overview.mainAttended}/${overview.weeksInScopeCount} (${Math.round((overview.mainAttended / overview.weeksInScopeCount) * 100)}%)`}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-slate-500">祈り出席率</dt>
+          <dd className="font-medium text-slate-800">
+            {overview.weeksInScopeCount === 0
+              ? "—"
+              : `${overview.prayerAttended}/${overview.weeksInScopeCount} (${Math.round((overview.prayerAttended / overview.weeksInScopeCount) * 100)}%)`}
           </dd>
         </div>
         <div>
@@ -296,12 +297,12 @@ export function MemberAttendanceMatrix({ memberId, initialYear }: Props) {
 
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
         <span className="inline-flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded-sm bg-primary-500" aria-hidden />
-          祈り
-        </span>
-        <span className="inline-flex items-center gap-1">
           <span className="inline-block w-3 h-3 rounded-sm bg-blue-500" aria-hidden />
           主日
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-primary-500" aria-hidden />
+          祈り
         </span>
         <span className="inline-flex items-center gap-1">
           <span className="inline-block w-3 h-3 rounded-sm bg-amber-500" aria-hidden />

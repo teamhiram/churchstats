@@ -79,10 +79,11 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear, local
     });
   };
 
+  /** 表示順: 主日・祈り・小組・派遣 */
   const visibleRows = useMemo((): RowKey[] => {
     const arr: RowKey[] = [];
-    if (showPrayer) arr.push("prayer");
     if (showMain) arr.push("main");
+    if (showPrayer) arr.push("prayer");
     if (showGroup) arr.push("group");
     if (showDispatch) arr.push("dispatch");
     return arr;
@@ -160,7 +161,7 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear, local
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2 sm:gap-4 mb-4">
         <div className="flex items-center gap-1 sm:gap-2">
           <span className="text-sm text-slate-600 shrink-0">表示行:</span>
-          {(["prayer", "main", "group", "dispatch"] as const).map((key) => {
+          {(["main", "prayer", "group", "dispatch"] as const).map((key) => {
             const checked = key === "prayer" ? showPrayer : key === "main" ? showMain : key === "group" ? showGroup : showDispatch;
             const setChecked = key === "prayer" ? setShowPrayer : key === "main" ? setShowMain : key === "group" ? setShowGroup : setShowDispatch;
             const label = key === "prayer" ? "祈り" : key === "main" ? "主日" : key === "group" ? "小組" : "派遣";
@@ -416,12 +417,12 @@ export function AttendanceMatrix({ weeks, members, districts, initialYear, local
 
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
         <span className="inline-flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded-sm bg-primary-500" aria-hidden />
-          祈り
-        </span>
-        <span className="inline-flex items-center gap-1">
           <span className="inline-block w-3 h-3 rounded-sm bg-blue-500" aria-hidden />
           主日
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded-sm bg-primary-500" aria-hidden />
+          祈り
         </span>
         <span className="inline-flex items-center gap-1">
           <span className="inline-block w-3 h-3 rounded-sm bg-amber-500" aria-hidden />
