@@ -38,7 +38,7 @@ export async function createClient() {
 /**
  * サービスロールキーを使う管理者用クライアント。
  * 招待メール送信（auth.admin.inviteUserByEmail）など、RLS を超えた操作にのみ使用する。
- * 呼び出し元で「現在のユーザーが global_role = admin であること」を必ず確認してから使用すること。
+ * 呼び出し元で、対象操作に対する権限確認を必ず行ってから使用すること。
  */
 export function createAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

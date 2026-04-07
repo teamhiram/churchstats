@@ -1,9 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedLocalities, getCurrentUserWithProfile, getEffectiveCurrentLocalityId } from "@/lib/cachedData";
-import { formatMemberName, formatMemberFurigana } from "@/lib/memberName";
 import type { LocalRole } from "@/types/database";
+import { ToBeDeletedMembersClient } from "./ToBeDeletedMembersClient";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +14,7 @@ export default async function ToBeDeletedMembersPage() {
   if (!currentLocalityId) redirect("/settings");
 
   // profile.role が viewer でも、local_roles による地方ロールがあればローカル設定は使える
-  const canUseLocalAdmin: boolean = await (async () => {
-    if ((profile?.role ?? "viewer") !== "viewer") return true;
-    if (profile?.global_role === "admin") return true;
+  const localRole: LocalRole | null = await (async () => {
     try {
       const supabase = await createClient();
       const { data } = await supabase
@@ -27,13 +24,20 @@ export default async function ToBeDeletedMembersPage() {
         .eq("locality_id", currentLocalityId)
         .maybeSingle();
       const v = (data as { role?: string } | null)?.role ?? null;
-      const localRole = v === "local_admin" || v === "local_reporter" || v === "local_viewer" ? (v as LocalRole) : null;
-      return localRole != null;
+      return v === "local_admin" || v === "local_reporter" || v === "local_viewer" ? (v as LocalRole) : null;
     } catch {
-      return false;
+      return null;
     }
   })();
+
+  const canUseLocalAdmin = (profile?.role ?? "viewer") !== "viewer" || profile?.global_role === "admin" || localRole != null;
   if (!canUseLocalAdmin) redirect("/settings/local-admin");
+
+  const canDeleteMembers =
+    profile?.global_role === "admin" ||
+    profile?.role === "admin" ||
+    profile?.role === "co_admin" ||
+    localRole === "local_admin";
 
   const localities = await getCachedLocalities();
   const localityName = currentLocalityId ? (localities.find((l) => l.id === currentLocalityId)?.name ?? null) : null;
@@ -63,35 +67,13 @@ export default async function ToBeDeletedMembersPage() {
         <p className="text-sm text-slate-600">
           統計・集計から除外されるメンバーの一覧です。
         </p>
-        <p className="text-sm text-slate-700">
-          対象地方: <span className="font-medium">{localityName ?? "—"}</span>
-        </p>
       </div>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
-        {members.length === 0 ? (
-          <p className="text-sm text-slate-500">該当なし</p>
-        ) : (
-          <ul className="divide-y divide-slate-100">
-            {members.map((m) => (
-              <li key={m.id} className="py-2 flex items-center justify-between gap-4">
-                <span className="min-w-0">
-                  <span className="text-sm text-slate-900 font-medium">{formatMemberName(m) || "—"}</span>
-                  {formatMemberFurigana(m) && (
-                    <span className="text-xs text-slate-500 ml-2">({formatMemberFurigana(m)})</span>
-                  )}
-                </span>
-                <span className="shrink-0 text-sm">
-                  <Link href={`/members/${m.id}/edit`} className="text-primary-600 hover:underline touch-target">
-                    編集
-                  </Link>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <ToBeDeletedMembersClient
+        initialMembers={members}
+        localityName={localityName}
+        canDeleteMembers={canDeleteMembers}
+      />
     </div>
   );
 }
-

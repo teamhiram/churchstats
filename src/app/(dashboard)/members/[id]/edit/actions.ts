@@ -40,6 +40,7 @@ export async function updateMemberAction(
     group_id: string | null;
     locality_id: string | null;
     age_group: Category | null;
+    memo: string | null;
     is_baptized: boolean;
     language_main: string | null;
     language_sub: string | null;
@@ -72,6 +73,7 @@ export async function updateMemberAction(
     group_id: data.is_local ? data.group_id : null,
     locality_id: data.is_local ? data.locality_id : null,
     age_group: data.age_group,
+    memo: data.memo?.trim() || null,
     is_baptized: data.is_baptized,
     language_main: data.language_main?.trim() || null,
     language_sub: data.language_sub?.trim() || null,

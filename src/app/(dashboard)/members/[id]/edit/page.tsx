@@ -111,6 +111,7 @@ export default async function EditMemberPage({
           group_tier: groupTier,
           locality_id: String((member as { locality_id?: string | null }).locality_id ?? ""),
           age_group: (member.age_group ?? (member as { current_category?: Category | null }).current_category ?? null) as Category | null,
+          memo: String((member as { memo?: string | null }).memo ?? ""),
           is_baptized: Boolean(member.is_baptized),
           language_main,
           language_sub,

@@ -7,6 +7,14 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:install": "playwright install --with-deps chromium",
+    "test:all": "npm run test && npm run test:e2e",
     "split-members-name": "node scripts/split-members-name.mjs"
   },
   "dependencies": {
@@ -26,15 +34,23 @@
     "uuid": "^11.0.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/dompurify": "^3.0.5",
     "@types/node": "^22.10.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/uuid": "^10.0.0",
+    "@vitest/coverage-v8": "^4.1.2",
     "eslint": "^9.16.0",
     "eslint-config-next": "^16.1.6",
+    "jsdom": "^29.0.2",
     "postcss": "^8.4.49",
+    "start-server-and-test": "^3.0.0",
     "tailwindcss": "^3.4.15",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.2"
   }
 }

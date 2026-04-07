@@ -80,6 +80,7 @@ type Props = {
     group_tier: Tier;
     locality_id: string;
     age_group: Category | null;
+    memo: string;
     is_baptized: boolean;
     language_main: string;
     language_sub: string;
@@ -113,6 +114,7 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
   const [districtTier, setDistrictTier] = useState<Tier>(initial.district_tier);
   const [groupTier, setGroupTier] = useState<Tier>(initial.group_tier);
   const [ageGroup, setAgeGroup] = useState<Category | null>(initial.age_group);
+  const [memo, setMemo] = useState(initial.memo);
   const [isBaptized, setIsBaptized] = useState(initial.is_baptized);
   const [languageMain, setLanguageMain] = useState(initial.language_main);
   const [languageSub, setLanguageSub] = useState(initial.language_sub);
@@ -185,6 +187,7 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
         group_id: isLocal ? groupId : null,
         locality_id: isLocal ? (currentLocalityId ?? null) : null,
         age_group: ageGroup,
+        memo: memo.trim() || null,
         is_baptized: isBaptized,
         language_main: languageMain || null,
         language_sub: languageSub || null,
@@ -260,6 +263,7 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
         group_id: isLocal ? groupId : null,
         locality_id: isLocal ? (currentLocalityId ?? null) : null,
         age_group: ageGroup,
+        memo: memo.trim() || null,
         is_baptized: isBaptized,
         language_main: languageMain || null,
         language_sub: languageSub || null,
@@ -497,6 +501,16 @@ export function EditMemberForm({ memberId, initialUpdatedAt, initial, districts,
             </button>
           ))}
         </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">メモ</label>
+        <textarea
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+          placeholder="名簿の補足など（長文OK）"
+          className="w-full px-2 py-1.5 border border-slate-300 rounded-lg touch-target text-sm min-h-24 resize-y"
+        />
+        <p className="mt-1 text-xs text-slate-500">在籍期間のメモとは別に保存されます。</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
