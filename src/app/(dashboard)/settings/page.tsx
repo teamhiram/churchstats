@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { CacheSection } from "./CacheSection";
 import { DisplaySettingsSection } from "./DisplaySettingsSection";
+import { UpdateSection } from "./UpdateSection";
 import { getCurrentUserWithProfile } from "@/lib/cachedData";
 
 export default async function SettingsPage() {
@@ -12,6 +13,7 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-8">
       <DisplaySettingsSection />
+      <UpdateSection />
       <CacheSection />
       {!canManageSettings && (
         <p className="text-slate-500 text-sm">システム設定の変更権限がありません。</p>

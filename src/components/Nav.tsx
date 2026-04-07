@@ -38,6 +38,7 @@ const settingsModalItems = [
   { href: "/settings/local-admin/inactive", label: "非表示リスト" },
   { href: "/settings/local-admin/to-be-deleted", label: "削除予定" },
 ] as const;
+const settingsModalUpdateItems = [{ href: "/settings/updates/beta", label: "ベータ版" }] as const;
 const settingsModalRolesItem = { href: "/settings/roles", label: "ユーザ・ロール管理" } as const;
 const settingsModalDatabaseMaintenanceItems = [
   { href: "/settings/backup", label: "バックアップ・リストア" },
@@ -796,6 +797,27 @@ export function Nav({ displayName, email, roleLabel, globalRoleLabel, localityNa
                   })
                   .map(({ href, label }) => {
                   const active = isSettingsSectionPath(pathname, !!showDebug) && pathname.startsWith(href) && (href !== "/settings" || pathname === "/settings");
+                  return (
+                    <li key={href}>
+                      <Link
+                        href={href}
+                        onClick={() => setSettingsModalOpen(false)}
+                        className={`block px-4 py-2.5 text-[15px] min-h-[44px] flex items-center ${
+                          active ? "bg-primary-50 text-primary-800 font-medium" : "text-slate-800 active:bg-slate-100"
+                        }`}
+                      >
+                        {label}
+                      </Link>
+                    </li>
+                  );
+                })}
+                <li className="mt-1 border-t border-slate-200">
+                  <p className="px-4 pt-2 pb-1 text-[11px] font-semibold text-slate-600 uppercase tracking-wider" role="presentation">
+                    アップデート
+                  </p>
+                </li>
+                {settingsModalUpdateItems.map(({ href, label }) => {
+                  const active = pathname.startsWith(href);
                   return (
                     <li key={href}>
                       <Link

@@ -17,6 +17,8 @@ const localAdminOnlySidebarItems = [
   { href: "/settings/local-admin/users", label: "ユーザ・ロール管理（地方）" },
 ] as const;
 
+const updateSidebarItems = [{ href: "/settings/updates/beta", label: "ベータ版" }] as const;
+
 const rolesSidebarItem = { href: "/settings/roles", label: "ユーザ・ロール管理" } as const;
 
 /** セクション見出し（ヘッダーと同じ黒背景・白文字） */
@@ -122,6 +124,25 @@ export function SettingsSidebar({
                     {badgeCount}
                   </span>
                 )}
+              </Link>
+            );
+          })}
+        </div>
+        <div className="space-y-0.5">
+          <p className={sectionTitleClass} role="presentation">
+            アップデート
+          </p>
+          {updateSidebarItems.map((item) => {
+            const active = isItemActive(item.href, pathname);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`block px-3 py-2.5 text-sm rounded-lg touch-target min-w-0 ${
+                  active ? "bg-primary-100 text-primary-800 font-medium" : "text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                {item.label}
               </Link>
             );
           })}
