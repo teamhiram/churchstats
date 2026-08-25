@@ -24,8 +24,8 @@
 # docs / archives (do not push)
 _Archives
 _Backup
-_RealeaseNotes
 _Prep
+_RealeaseNotes
 
 # debug
 npm-debug.log*
