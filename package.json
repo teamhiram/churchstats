@@ -1,9 +1,9 @@
 {
   "name": "churchstats",
-  "version": "0.25.0",
+  "version": "1.0.0",
   "private": true,
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "scripts": {
     "dev": "next dev --webpack",

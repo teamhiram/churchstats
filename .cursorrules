@@ -1,34 +1,28 @@
-# Role: Senior Full-stack Engineer (Pragmatic & Clean Code)
+# Cursor Rules for ChurchStats
 
-## Context
+## Source Of Truth
+
+- Project-wide AI coding instructions live in `AGENTS.md`. Follow `AGENTS.md` first.
+- Role details live in `docs/ai-coding-roles.md`.
+- Security checks live in `docs/security-checklist.md`.
+
+## Cursor-Specific Context
+
 - ユーザーはノンエンジニアですが、バイブスで高速開発を行っています。
-- AI（あなた）は、ユーザーの指示に盲従するだけでなく、エンジニアとしての良心を持って「正しい設計」を維持してください。
-
-## Core Principles
-1. **No Silent Failures**: 修正を行う際、影響範囲を必ず自己診断してください。「一箇所直して他が崩れる」兆候があれば、実行前に警告すること。
-2. **Context-Aware Refactoring**: 新機能を追加する際、既存コードがスパゲッティ化しているなら、まず「リファクタリングが必要」だと提案し、整理してから実装してください。
-3. **Best Practices Over Obedience**: ユーザーの指示がアンチパターン（悪い書き方）な場合、より保守性が高くモダンな代替案を提示し、その理由を簡潔に説明してください。
-4. **Complete Implementation**: コードを省略（// ... rest of the code 等）せず、常にファイル全体、または実行可能な完全なブロックを出力してください。
-5. Push前にサイトタイトル横のバージョンバッジを更新し、リリースノートを作成すること。
-6. joshthemuscat で push すること。
-
-## Technical Rules
-- **DRY (Don't Repeat Yourself)**: 同じロジックが2回出てきたら共通化を提案すること。
-- **Type Safety**: TypeScriptを使用している場合、`any` を禁止し、型定義を厳格に行うこと。
-- **Error Handling**: ユーザーが忘れていても、必ずtry-catchやエラー境界を設定し、アプリが落ちないようにすること。
-- **Directory Structure**: フォルダ構成が乱れてきたら、整理を提案すること。
-- **SQL ファイル**: 新規作成する SQL ファイルの 1 行目に、ファイル名をコメントで記載すること。例: `-- 041_locality_rls_use_profile_locality_id.sql`
-
-## Response Style
+- 指示に盲従せず、エンジニアとして保守性・安全性・既存設計を守ってください。
 - 実装前に「何を、なぜ、どう変えるか」を3行以内で宣言してから着手してください。
-- 修正完了後、他にテストや確認が必要な箇所を箇条書きで提示してください。
+- コード例を出す場合は、`// ... rest of the code` のような省略を避け、実行可能な完全なブロックにしてください。
 
-## 専門用語
-- Sunday（日曜日）言わず、Lordsday（主日）と言います。
-- 日曜日に行われる礼拝の集会を「主日集会(Lordsday Meeting)」と呼びます。
-- Prayer Meetingの日本語は「祈祷会」ではなく「祈りの集会(Prayer Meeting)」といいます。
-- 小組集会を「小組集会(Group Meeting)」と呼びます。
-- 名簿にある名前の個別ページを「個人ページ」と呼びます。
+## Release And Push
 
-## 共通UI
-- **鉛筆ボタン**: 編集（メモ・プロフィール等）を開くためのボタン。`EditPencilIcon` と共通スタイル（個人ページのプロフィール編集ボタンと同じ見た目）を使った `PencilButton` をサイト共通資産とする。新規で「編集を開く」ボタンを置く場合はこのコンポーネントを使うこと。
+- 開発中も、ユーザー向け/リリース相当の変更は `_ReleaseNotes/` を都度更新してください（最後にまとめて書く前提にしない）。
+- リリースノートは `_ReleaseNotes/x.x.x.md` という形式で命名してください。
+- ユーザーがバージョン番号を指定した場合はそれに従い、指定がない場合はどのバージョンに書くか確認してください。
+- Push前にサイトタイトル横のバージョンバッジを更新し、リリースノートを作成してください。
+- `package.json`、UI表示バージョン、`_ReleaseNotes/` の整合性を確認してください。
+- push はユーザーが明示した場合のみ実行し、`joshthemuscat` で行ってください。
+
+## Local Reminders
+
+- 新規 SQL ファイルの 1 行目には、ファイル名をコメントで記載してください。例: `-- 041_locality_rls_use_profile_locality_id.sql`
+- 新規で「編集を開く」ボタンを置く場合は、共通の `PencilButton` / `EditPencilIcon` パターンを使ってください。
